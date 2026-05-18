@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 228 15% 6%;
+    --foreground: 0 0% 98%;
+    --card: 225 20% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 225 20% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 225 15% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 225 15% 12%;
+    --muted-foreground: 215 16% 62%;
+    --accent: 225 15% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 225 15% 14%;
+    --input: 225 15% 12%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 0 84% 60%;
+  }
+
+  .dark {
+    --background: 228 15% 6%;
+    --foreground: 0 0% 98%;
+    --card: 225 20% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 225 20% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 225 15% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 225 15% 12%;
+    --muted-foreground: 215 16% 62%;
+    --accent: 225 15% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 225 15% 14%;
+    --input: 225 15% 12%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply dark scroll-smooth;
+  }
+
+  body {
+    @apply bg-[#0A0B0F] text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+}
+
+@layer utilities {
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+
+  /* Glow effects */
+  .glow-blue {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+  }
+
+  .glow-blue-sm {
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+  }
+
+  /* Grid background */
+  .bg-grid {
+    background-image: linear-gradient(
+        rgba(59, 130, 246, 0.04) 1px,
+        transparent 1px
+      ),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* Radial glow for hero sections */
+  .bg-hero-glow {
+    background: radial-gradient(
+      ellipse 80% 60% at 50% -10%,
+      rgba(59, 130, 246, 0.25),
+      transparent 70%
+    );
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-200 to-blue-400;
+  }
+
+  /* Panel style */
+  .panel {
+    @apply bg-[#0F1424] border border-white/[0.06] rounded-2xl;
+  }
+}
+
+/* Sonner toast overrides for dark theme */
+[data-sonner-toaster] [data-sonner-toast] {
+  background: #0F1424 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
