@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations";
 
@@ -17,7 +18,6 @@ export async function POST(req: NextRequest) {
 
     const { name, email, password } = parsed.data;
 
-    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -46,9 +46,32 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("Register error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+
+    if (error instanceof Prisma.PrismaClientInitializationError) {
+      return NextResponse.json(
+        { error: "Database is not reachable. Check DATABASE_URL." },
+        { status: 500 }
+      );
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2021"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Database schema is not migrated. Run `npx prisma migrate deploy`.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const message =
+      process.env.NODE_ENV !== "production" && error instanceof Error
+        ? `Internal server error: ${error.message}`
+        : "Internal server error";
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

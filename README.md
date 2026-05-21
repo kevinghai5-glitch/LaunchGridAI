@@ -79,6 +79,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Troubleshooting auth
+
+If sign-in shows **"Internal server error"** or Google sign-in bounces you back to `/login`, check these four things — they're the most common causes:
+
+1. `.env` exists and `DATABASE_URL` points at a Postgres instance that is actually reachable.
+2. The schema has been applied: run `npx prisma migrate deploy` (production) or `npx prisma migrate dev` (local).
+3. `NEXTAUTH_SECRET` is set to a non-empty value (`openssl rand -base64 32`).
+4. For Google sign-in **only**: both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, **and** your Google Cloud OAuth client lists `${NEXTAUTH_URL}/api/auth/callback/google` as an authorized redirect URI.
+
+If `GOOGLE_CLIENT_ID`/`SECRET` are blank, the Google provider is intentionally not registered — clicking the button will surface a clear error rather than failing silently.
+
+The `/api/auth/register` endpoint returns a specific message for an unreachable DB or an unmigrated schema, and includes the underlying error message in non-production environments to make local debugging easier.
+
 ---
 
 ## API Keys
