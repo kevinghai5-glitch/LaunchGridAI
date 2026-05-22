@@ -1,62 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TopBar } from "@/components/dashboard/TopBar";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Plus,
-  Trash2,
-  DollarSign,
-  Building2,
-  Loader2,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DEAL_STAGES } from "@/lib/constants";
-import { formatCurrency } from "@/lib/utils";
-import type { Deal, SavedBusiness } from "@/types";
-
-const stageColorMap: Record<string, string> = {
-  SAVED: "bg-slate-500/10 border-slate-500/20 text-slate-400",
-  SYSTEMS_GENERATED: "bg-blue-500/10 border-blue-500/20 text-blue-400",
-  PROPOSAL_SENT: "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
-  FOLLOW_UP: "bg-orange-500/10 border-orange-500/20 text-orange-400",
-  WON: "bg-green-500/10 border-green-500/20 text-green-400",
-  LOST: "bg-red-500/10 border-red-500/20 text-red-400",
-};
+import { Plus } from "lucide-react";
+import { TopBar } from "@/components/dashboard/TopBar";
+import { LgButton } from "@/components/ui/lg-button";
+import { LgBadge } from "@/components/ui/lg-badge";
+import { PIPELINE_STAGES, type DealStage } from "@/lib/stages";
+import type { Deal } from "@/types";
 
 export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [newBusinessId, setNewBusinessId] = useState("");
-  const [newMonthlyValue, setNewMonthlyValue] = useState<number>(497);
-  const [adding, setAdding] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<DealStage | null>(null);
 
   useEffect(() => {
     loadDeals();
-    fetch("/api/businesses").then((r) => r.json()).then((d) => {
-      setBusinesses(d.businesses ?? []);
-    });
   }, []);
 
   const loadDeals = async () => {
@@ -70,292 +30,473 @@ export default function DealsPage() {
     }
   };
 
-  const handleAddDeal = async () => {
-    if (!newBusinessId) return toast.error("Select a business");
-    setAdding(true);
+  const moveDeal = async (id: string, toStage: DealStage) => {
+    const before = deals;
+    setDeals((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, stage: toStage } : d))
+    );
+    setDragId(null);
+    setOverStage(null);
     try {
-      const res = await fetch("/api/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessId: newBusinessId,
-          stage: "SAVED",
-          monthlyValue: newMonthlyValue,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) return toast.error(data.error || "Failed to add deal");
-      setDeals((prev) => [data.deal, ...prev]);
-      setAddDialogOpen(false);
-      setNewBusinessId("");
-      toast.success("Deal added to pipeline");
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const handleStageChange = async (dealId: string, stage: string) => {
-    try {
-      const res = await fetch(`/api/deals/${dealId}`, {
+      const res = await fetch(`/api/deals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({ stage: toStage }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setDeals((prev) => prev.map((d) => (d.id === dealId ? data.deal : d)));
-        toast.success("Stage updated");
+      if (!res.ok) {
+        setDeals(before);
+        toast.error("Failed to update stage");
       }
     } catch {
+      setDeals(before);
       toast.error("Failed to update stage");
     }
   };
 
-  const handleValueChange = async (dealId: string, value: number) => {
-    try {
-      const res = await fetch(`/api/deals/${dealId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthlyValue: value }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDeals((prev) => prev.map((d) => (d.id === dealId ? data.deal : d)));
-      }
-    } catch {
-      toast.error("Failed to update value");
-    }
-  };
-
-  const handleDelete = async (dealId: string) => {
-    try {
-      await fetch(`/api/deals/${dealId}`, { method: "DELETE" });
-      setDeals((prev) => prev.filter((d) => d.id !== dealId));
-      toast.success("Deal removed");
-    } catch {
-      toast.error("Failed to delete");
-    }
-  };
-
-  const mrr = deals
-    .filter((d) => d.stage === "WON")
-    .reduce((sum, d) => sum + d.monthlyValue, 0);
-
-  const dealsByStage = DEAL_STAGES.reduce<Record<string, Deal[]>>(
-    (acc, stage) => {
-      acc[stage.key] = deals.filter((d) => d.stage === stage.key);
-      return acc;
-    },
-    {}
+  const wonDeals = deals.filter((d) => d.stage === "WON");
+  const inMotion = deals.filter(
+    (d) =>
+      d.stage !== "WON" && d.stage !== "SAVED" && d.stage !== "LOST"
   );
+  const totalMRR = wonDeals.reduce((s, d) => s + d.monthlyValue, 0);
+  const pipelineMRR = inMotion.reduce((s, d) => s + d.monthlyValue, 0);
+  const annual = totalMRR * 12;
 
   return (
-    <div className="flex flex-col min-h-full">
-      <TopBar title="Deals Pipeline" subtitle="Track your clients through the sales process" />
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="panel px-4 py-2 flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4 text-green-400" />
-              <span className="text-green-400 font-semibold">{formatCurrency(mrr)}/mo MRR</span>
-            </div>
-            <span className="text-sm text-gray-500">{deals.length} total deals</span>
+    <>
+      <TopBar title="Pipeline" />
+      <div
+        style={{
+          padding: "32px 40px 24px",
+          maxWidth: 1600,
+          margin: "0 auto",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <header
+          className="flex justify-between items-end"
+          style={{ marginBottom: 20 }}
+        >
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-sans), sans-serif",
+                fontSize: 30,
+                fontWeight: 700,
+                letterSpacing: "-0.025em",
+                color: "var(--text)",
+              }}
+            >
+              Pipeline
+            </h1>
+            <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14.5 }}>
+              Drag deals across stages. Won deals add to MRR automatically.
+            </p>
           </div>
-          <Button variant="blue" size="sm" onClick={() => setAddDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Deal
-          </Button>
+          <div className="flex" style={{ gap: 8 }}>
+            <LgButton variant="secondary" icon="filter">
+              Filter
+            </LgButton>
+            <LgButton variant="primary" icon="plus">
+              Add deal
+            </LgButton>
+          </div>
+        </header>
+
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <MRRStat
+            label="Current MRR"
+            value={totalMRR}
+            sub={`${wonDeals.length} active clients`}
+            accent
+          />
+          <MRRStat
+            label="Pipeline MRR"
+            value={pipelineMRR}
+            sub={`${inMotion.length} deals in motion`}
+          />
+          <MRRStat
+            label="Annual run rate"
+            value={annual}
+            sub="If pipeline closes"
+          />
         </div>
 
-        {/* Kanban columns */}
-        {loading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-64" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {DEAL_STAGES.map((stageConfig) => {
-              const stageName = stageConfig.key;
-              const stageDeals = dealsByStage[stageName] ?? [];
-              return (
-                <div key={stageName} className="flex flex-col gap-3">
-                  {/* Column header */}
-                  <div className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center justify-between ${stageColorMap[stageName]}`}>
-                    <span>{stageConfig.label}</span>
-                    <span className="opacity-70">{stageDeals.length}</span>
-                  </div>
+        <div
+          className="grid"
+          style={{
+            flex: 1,
+            gridTemplateColumns: `repeat(${PIPELINE_STAGES.length}, minmax(220px, 1fr))`,
+            gap: 12,
+            minHeight: 480,
+          }}
+        >
+          {PIPELINE_STAGES.map((s) => {
+            const stageDeals = deals.filter((d) => d.stage === s.id);
+            return (
+              <KanbanColumn
+                key={s.id}
+                stage={s}
+                deals={stageDeals}
+                isDropTarget={overStage === s.id}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setOverStage(s.id);
+                }}
+                onDragLeave={() =>
+                  setOverStage((cur) => (cur === s.id ? null : cur))
+                }
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragId) moveDeal(dragId, s.id);
+                }}
+                renderCard={(d) => (
+                  <DealCard
+                    key={d.id}
+                    deal={d}
+                    dragging={dragId === d.id}
+                    onDragStart={() => setDragId(d.id)}
+                    onDragEnd={() => setDragId(null)}
+                  />
+                )}
+              />
+            );
+          })}
+        </div>
 
-                  {/* Deal cards */}
-                  <div className="space-y-2 min-h-[100px]">
-                    {stageDeals.map((deal) => (
-                      <DealCard
-                        key={deal.id}
-                        deal={deal}
-                        onStageChange={handleStageChange}
-                        onValueChange={handleValueChange}
-                        onDelete={handleDelete}
-                      />
-                    ))}
-                    {stageDeals.length === 0 && (
-                      <div className="text-xs text-gray-700 text-center py-4">Empty</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {deals.length === 0 && !loading && (
-          <div className="text-center py-20">
-            <Building2 className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-gray-400 font-medium mb-2">No deals in your pipeline</h3>
-            <p className="text-sm text-gray-500 mb-6">Add deals to track your sales progress and estimate MRR.</p>
-            <Button variant="blue" onClick={() => setAddDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add First Deal
-            </Button>
+        {!loading && deals.length === 0 && (
+          <div
+            className="text-center"
+            style={{ padding: 40, color: "var(--text-muted)" }}
+          >
+            No deals yet. Send a proposal to start building your pipeline.
           </div>
         )}
       </div>
+    </>
+  );
+}
 
-      {/* Add deal dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Deal to Pipeline</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Business</Label>
-              <Select value={newBusinessId} onValueChange={setNewBusinessId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a business…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {businesses.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name} — {b.city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Monthly Value ($)</Label>
-              <Input
-                type="number"
-                value={newMonthlyValue}
-                onChange={(e) => setNewMonthlyValue(parseInt(e.target.value) || 0)}
-                placeholder="497"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-            <Button variant="blue" onClick={handleAddDeal} disabled={adding}>
-              {adding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Add Deal
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+function MRRStat({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: number;
+  sub: string;
+  accent?: boolean;
+}) {
+  const display = useAnimatedNumber(value);
+  return (
+    <div
+      className="relative overflow-hidden flex items-center justify-between"
+      style={{
+        background: "var(--surface)",
+        border: accent ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        padding: "16px 20px",
+      }}
+    >
+      {accent && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "radial-gradient(circle at right, var(--accent-soft), transparent 60%)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+      <div className="relative" style={{ zIndex: 1 }}>
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: accent ? "var(--accent)" : "var(--text-subtle)",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-sans), sans-serif",
+            fontSize: 30,
+            fontWeight: 800,
+            letterSpacing: "-0.028em",
+            marginTop: 4,
+            color: "var(--text)",
+          }}
+        >
+          ${display.toLocaleString()}
+          <span
+            style={{
+              fontSize: 14,
+              color: "var(--text-muted)",
+              fontWeight: 500,
+              marginLeft: 4,
+            }}
+          >
+            /mo
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+          {sub}
+        </div>
+      </div>
     </div>
   );
 }
 
-interface DealCardProps {
-  deal: Deal;
-  onStageChange: (id: string, stage: string) => void;
-  onValueChange: (id: string, value: number) => void;
-  onDelete: (id: string) => void;
+function useAnimatedNumber(target: number) {
+  const [val, setVal] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return;
+    const dur = 600;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(from + (target - from) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return val;
 }
 
-function DealCard({ deal, onStageChange, onValueChange, onDelete }: DealCardProps) {
-  const [notes, setNotes] = useState(deal.notes ?? "");
-  const [editingNotes, setEditingNotes] = useState(false);
-  const [value, setValue] = useState(deal.monthlyValue);
-
-  const saveNotes = async () => {
-    try {
-      await fetch(`/api/deals/${deal.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes }),
-      });
-      setEditingNotes(false);
-    } catch {
-      toast.error("Failed to save notes");
-    }
-  };
-
+function KanbanColumn({
+  stage,
+  deals,
+  isDropTarget,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  renderCard,
+}: {
+  stage: { id: DealStage; label: string };
+  deals: Deal[];
+  isDropTarget: boolean;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  renderCard: (d: Deal) => React.ReactNode;
+}) {
+  const stageMRR = deals.reduce((s, d) => s + d.monthlyValue, 0);
   return (
-    <div className="glass-card p-3 space-y-3 text-xs">
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-medium text-white text-sm truncate">{deal.business.name}</div>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-5 w-5 text-gray-600 hover:text-red-400 shrink-0"
-          onClick={() => onDelete(deal.id)}
-          aria-label="Delete deal"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
-
-      {/* Monthly value */}
-      <div className="flex items-center gap-1">
-        <DollarSign className="h-3 w-3 text-gray-500" />
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => setValue(parseInt(e.target.value) || 0)}
-          onBlur={() => onValueChange(deal.id, value)}
-          className="w-full bg-transparent text-green-400 font-semibold text-xs outline-none"
-          aria-label="Monthly value"
-        />
-        <span className="text-gray-600">/mo</span>
-      </div>
-
-      {/* Stage selector */}
-      <Select value={deal.stage} onValueChange={(v) => onStageChange(deal.id, v)}>
-        <SelectTrigger className="h-7 text-xs py-0 px-2">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {DEAL_STAGES.map((s) => (
-            <SelectItem key={s.key} value={s.key} className="text-xs">
-              {s.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Notes */}
-      {editingNotes ? (
-        <div className="space-y-1">
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="h-16 text-xs"
-            placeholder="Add notes…"
-          />
-          <Button size="sm" variant="blue" className="h-6 text-xs w-full" onClick={saveNotes}>
-            Save
-          </Button>
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className="flex flex-col"
+      style={{
+        background: isDropTarget ? "var(--accent-soft)" : "var(--sidebar)",
+        border: isDropTarget
+          ? "1.5px dashed var(--accent)"
+          : "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        padding: 12,
+        transition: "background 0.15s, border-color 0.15s",
+      }}
+    >
+      <div
+        className="flex justify-between items-center"
+        style={{ marginBottom: 12, padding: "0 4px" }}
+      >
+        <div>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 99,
+                background:
+                  stage.id === "WON"
+                    ? "var(--success)"
+                    : stage.id === "SAVED"
+                    ? "var(--text-subtle)"
+                    : "var(--accent)",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                letterSpacing: "-0.005em",
+                color: "var(--text)",
+              }}
+            >
+              {stage.label}
+            </span>
+            <span
+              style={{
+                fontSize: 11.5,
+                color: "var(--text-subtle)",
+                fontFamily: "var(--font-mono), monospace",
+              }}
+            >
+              {deals.length}
+            </span>
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-muted)",
+              marginTop: 2,
+              marginLeft: 16,
+              fontFamily: "var(--font-mono), monospace",
+            }}
+          >
+            ${stageMRR.toLocaleString()}/mo
+          </div>
         </div>
-      ) : (
         <button
-          onClick={() => setEditingNotes(true)}
-          className="text-gray-600 hover:text-gray-400 transition-colors text-left w-full truncate"
+          aria-label="Add deal to stage"
+          style={{
+            width: 24,
+            height: 24,
+            padding: 0,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-subtle)",
+            cursor: "pointer",
+            borderRadius: 5,
+          }}
         >
-          {notes || "Add notes…"}
+          <Plus size={14} strokeWidth={1.75} />
         </button>
-      )}
+      </div>
+      <div
+        className="flex flex-col"
+        style={{ gap: 8, flex: 1 }}
+      >
+        {deals.map(renderCard)}
+        {deals.length === 0 && (
+          <div
+            className="grid place-items-center"
+            style={{
+              flex: 1,
+              minHeight: 80,
+              border: "1.5px dashed var(--border)",
+              borderRadius: "var(--radius)",
+              color: "var(--text-subtle)",
+              fontSize: 12,
+              fontStyle: "italic",
+            }}
+          >
+            Drop deals here
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DealCard({
+  deal,
+  dragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  deal: Deal;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="relative"
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: 12,
+        boxShadow: dragging ? "var(--shadow-lg)" : "var(--shadow-sm)",
+        cursor: "grab",
+        opacity: dragging ? 0.85 : 1,
+        transform: dragging ? "rotate(-2deg) scale(1.02)" : "none",
+        transition:
+          "box-shadow 0.18s, transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1), border-color 0.18s",
+      }}
+      onMouseEnter={(e) => {
+        if (!dragging) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow)";
+          (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+          (e.currentTarget as HTMLElement).style.borderColor =
+            "color-mix(in oklch, var(--accent) 25%, var(--border))";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!dragging) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)";
+          (e.currentTarget as HTMLElement).style.transform = "none";
+          (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+        }
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13.5,
+          fontWeight: 600,
+          letterSpacing: "-0.005em",
+          lineHeight: 1.3,
+          marginBottom: 6,
+          color: "var(--text)",
+        }}
+      >
+        {deal.business?.name ?? "—"}
+      </div>
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "var(--text-muted)",
+          marginBottom: 10,
+        }}
+      >
+        {deal.business?.city ?? "—"}
+      </div>
+      <div className="flex justify-between items-center">
+        <LgBadge tone={deal.stage === "WON" ? "success" : "accent"}>
+          ${deal.monthlyValue}/mo
+        </LgBadge>
+        {deal.notes && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-subtle)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: 100,
+            }}
+          >
+            {deal.notes}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,99 +1,176 @@
-"use client";
-
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Check, Zap } from "lucide-react";
-import { PLANS } from "@/lib/constants";
+import { Check } from "lucide-react";
+import { LgButton } from "@/components/ui/lg-button";
+
+const PLANS = [
+  {
+    name: "Free",
+    price: "$0",
+    sub: "Forever free",
+    popular: false,
+    features: [
+      "Up to 10 saved businesses",
+      "5 AI system generations",
+      "3 proposals",
+      "Business finder",
+      "Public proposal links",
+    ],
+  },
+  {
+    name: "Pro",
+    price: "$49",
+    sub: "Billed monthly · cancel any time",
+    popular: true,
+    features: [
+      "Unlimited saved businesses",
+      "Unlimited AI generations",
+      "Unlimited proposals",
+      "Priority AI model",
+      "Email proposal delivery",
+      "Deals pipeline (Kanban)",
+      "Custom pricing presets",
+      "Priority support",
+    ],
+  },
+];
 
 export function Pricing() {
   return (
-    <section id="pricing" className="py-32">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-20"
+    <section
+      id="pricing"
+      className="mx-auto"
+      style={{ padding: "96px 32px", maxWidth: 1200 }}
+    >
+      <div className="text-center mx-auto" style={{ maxWidth: 600, marginBottom: 48 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--accent)",
+            marginBottom: 10,
+          }}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium mb-4">
-            Simple Pricing
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-            Start free.{" "}
-            <span className="text-gradient">Scale when it works.</span>
-          </h2>
-          <p className="text-gray-400 text-lg">
-            No contracts. Cancel any time. One Pro plan, that&apos;s it.
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-          {/* Free */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="glass-card p-8"
-          >
-            <div className="mb-6">
-              <h3 className="text-xl font-semibold text-white mb-1">{PLANS.free.name}</h3>
-              <div className="text-4xl font-bold text-white mt-2">$0</div>
-              <div className="text-gray-500 text-sm">forever free</div>
-            </div>
-            <ul className="space-y-3 mb-8">
-              {PLANS.free.features.map((f) => (
-                <li key={f} className="flex items-center gap-3 text-sm text-gray-300">
-                  <Check className="h-4 w-4 text-gray-500 shrink-0" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/signup">Get started free</Link>
-            </Button>
-          </motion.div>
-
-          {/* Pro — highlighted */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="relative glass-card p-8 border-blue-500/40 glow-blue"
-          >
-            {/* Pro badge */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-semibold shadow-lg">
-                <Zap className="h-3 w-3" />
-                Most Popular
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-xl font-semibold text-white mb-1">{PLANS.pro.name}</h3>
-              <div className="flex items-end gap-1 mt-2">
-                <span className="text-4xl font-bold text-white">${PLANS.pro.price}</span>
-                <span className="text-gray-400 mb-1">/month</span>
-              </div>
-              <div className="text-gray-500 text-sm">billed monthly · cancel any time</div>
-            </div>
-            <ul className="space-y-3 mb-8">
-              {PLANS.pro.features.map((f) => (
-                <li key={f} className="flex items-center gap-3 text-sm text-gray-200">
-                  <Check className="h-4 w-4 text-blue-400 shrink-0" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Button variant="blue" className="w-full" asChild>
-              <Link href="/signup">Start with Pro</Link>
-            </Button>
-            <p className="text-center text-xs text-gray-500 mt-3">
-              One Pro client covers 6+ months of LaunchGrid
-            </p>
-          </motion.div>
+          Simple pricing
         </div>
+        <h2
+          style={{
+            margin: "0 0 16px",
+            fontFamily: "var(--font-sans), sans-serif",
+            fontSize: 44,
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
+            lineHeight: 1.05,
+            color: "var(--text)",
+          }}
+        >
+          Start free. Scale when it works.
+        </h2>
+        <p style={{ margin: 0, fontSize: 17, color: "var(--text-muted)" }}>
+          No contracts. Cancel any time. One Pro plan, that&apos;s it.
+        </p>
       </div>
+      <div
+        className="grid mx-auto"
+        style={{ gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 880 }}
+      >
+        {PLANS.map((p) => (
+          <div
+            key={p.name}
+            className="relative"
+            style={{
+              background: "var(--surface)",
+              border: p.popular ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+              borderRadius: "var(--radius-xl)",
+              padding: 32,
+              boxShadow: p.popular ? "var(--shadow-lg)" : "var(--shadow-sm)",
+            }}
+          >
+            {p.popular && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: -12,
+                  left: 32,
+                  padding: "4px 12px",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  background: "var(--accent)",
+                  color: "var(--accent-text)",
+                  borderRadius: 999,
+                }}
+              >
+                Most popular
+              </div>
+            )}
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text)" }}>
+              {p.name}
+            </h3>
+            <div className="flex items-baseline" style={{ marginTop: 18, gap: 8 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-sans), sans-serif",
+                  fontSize: 48,
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                  color: "var(--text)",
+                }}
+              >
+                {p.price}
+              </span>
+              {p.name === "Pro" && (
+                <span style={{ color: "var(--text-muted)", fontSize: 15 }}>/month</span>
+              )}
+            </div>
+            <p
+              style={{
+                margin: "6px 0 24px",
+                fontSize: 13.5,
+                color: "var(--text-muted)",
+              }}
+            >
+              {p.sub}
+            </p>
+            <ul
+              className="flex flex-col"
+              style={{ margin: "0 0 28px", padding: 0, listStyle: "none", gap: 10 }}
+            >
+              {p.features.map((f) => (
+                <li
+                  key={f}
+                  className="flex"
+                  style={{ gap: 10, fontSize: 13.5, color: "var(--text)" }}
+                >
+                  <Check
+                    size={16}
+                    strokeWidth={2.5}
+                    style={{ color: "var(--accent)", marginTop: 1, flex: "none" }}
+                  />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <Link href="/signup" style={{ display: "block" }}>
+              <LgButton
+                variant={p.popular ? "primary" : "secondary"}
+                size="lg"
+                style={{ width: "100%" }}
+              >
+                {p.popular ? "Start with Pro" : "Get started free"}
+              </LgButton>
+            </Link>
+          </div>
+        ))}
+      </div>
+      <p
+        className="text-center"
+        style={{ marginTop: 32, color: "var(--text-subtle)", fontSize: 14 }}
+      >
+        One Pro client covers 6+ months of LaunchGrid.
+      </p>
     </section>
   );
 }

@@ -8,58 +8,46 @@ interface LogoProps {
 
 export function Logo({ className, iconOnly = false, size = "md" }: LogoProps) {
   const sizes = {
-    sm: { icon: 24, text: "text-base" },
-    md: { icon: 32, text: "text-xl" },
-    lg: { icon: 40, text: "text-2xl" },
+    sm: { icon: 20, text: "text-[15px]" },
+    md: { icon: 22, text: "text-[15px]" },
+    lg: { icon: 28, text: "text-lg" },
   };
-
   const { icon, text } = sizes[size];
 
   return (
-    <div className={cn("flex items-center gap-2.5", className)}>
-      {/* Geometric LG mark */}
-      <svg
-        width={icon}
-        height={icon}
-        viewBox="0 0 32 32"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+    <div className={cn("flex items-center gap-[9px]", className)}>
+      <div
         aria-label="LaunchGrid AI logo"
-        className="shrink-0"
+        className="relative grid place-items-center rounded-[6px]"
+        style={{
+          width: icon,
+          height: icon,
+          background:
+            "linear-gradient(135deg, var(--accent) 0%, color-mix(in oklch, var(--accent) 70%, black) 100%)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)",
+        }}
       >
-        {/* Background square with rounded corners */}
-        <rect width="32" height="32" rx="8" fill="#1D4ED8" />
-        {/* Grid dots pattern */}
-        <circle cx="8" cy="8" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="16" cy="8" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="24" cy="8" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="8" cy="16" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="16" cy="16" r="1.5" fill="white" opacity="0.8" />
-        <circle cx="24" cy="16" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="8" cy="24" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="16" cy="24" r="1.5" fill="white" opacity="0.4" />
-        <circle cx="24" cy="24" r="1.5" fill="white" opacity="0.4" />
-        {/* L shape */}
-        <path
-          d="M10 10V22H18"
-          stroke="white"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <div
+          style={{
+            width: icon * 0.45,
+            height: icon * 0.45,
+            borderRadius: 2,
+            background: "var(--accent-text)",
+            opacity: 0.92,
+            clipPath:
+              "polygon(0 0, 100% 0, 100% 45%, 45% 45%, 45% 100%, 0 100%)",
+          }}
         />
-        {/* G shape */}
-        <path
-          d="M22 14C22 12.3 20.8 11 19.5 11C18 11 17 12.2 17 14V18C17 19.8 18 21 19.5 21C21 21 22 19.8 22 18V17H20"
-          stroke="#93C5FD"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      </div>
       {!iconOnly && (
-        <span className={cn("font-bold tracking-tight text-white", text)}>
-          LaunchGrid{" "}
-          <span className="text-blue-400">AI</span>
+        <span
+          className={cn("font-bold whitespace-nowrap text-[var(--text)]", text)}
+          style={{
+            fontFamily: "var(--font-sans), sans-serif",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          LaunchGrid<span className="text-[var(--accent)]"> AI</span>
         </span>
       )}
     </div>

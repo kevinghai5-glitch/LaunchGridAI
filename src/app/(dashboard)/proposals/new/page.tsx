@@ -1,114 +1,103 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { Trash2, GripVertical, Check } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import {
-  Loader2,
-  Sparkles,
-  Plus,
-  X,
-  ArrowLeft,
-  DollarSign,
-  CheckCircle2,
-} from "lucide-react";
-import Link from "next/link";
+import { LgButton } from "@/components/ui/lg-button";
+import { LgCard } from "@/components/ui/lg-card";
+import { PublicProposal, BrowserFrame, MobileFrame } from "@/components/proposals/PublicProposal";
 import type { SavedBusiness } from "@/types";
 import { PRICING_PRESETS } from "@/lib/constants";
 
+const editorInputStyle: React.CSSProperties = {
+  width: "100%",
+  height: 36,
+  padding: "0 12px",
+  fontSize: 13.5,
+  background: "var(--surface)",
+  border: "1px solid var(--border-strong)",
+  borderRadius: "var(--radius-sm)",
+  color: "var(--text)",
+  outline: "none",
+  fontFamily: "inherit",
+};
+
 export default function NewProposalPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const prefillBusinessId = searchParams.get("businessId");
+  const params = useSearchParams();
+  const prefillId = params.get("businessId");
 
   const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
-  const [selectedBusinessId, setSelectedBusinessId] = useState(prefillBusinessId ?? "");
+  const [businessId, setBusinessId] = useState(prefillId ?? "");
   const [title, setTitle] = useState("");
-  const [packageOverview, setPackageOverview] = useState("");
-  const [deliverables, setDeliverables] = useState<string[]>(["", "", "", ""]);
-  const [monthlyPrice, setMonthlyPrice] = useState<number>(497);
-  const [benefits, setBenefits] = useState<string[]>(["", "", ""]);
-  const [nextSteps, setNextSteps] = useState("");
-  const [emailMessage, setEmailMessage] = useState("");
-  const [systemsIncluded, setSystemsIncluded] = useState<string[]>([]);
-  const [generating, setGenerating] = useState(false);
+  const [overview, setOverview] = useState("");
+  const [price, setPrice] = useState<number>(497);
+  const [deliverables, setDeliverables] = useState<string[]>([
+    "Custom-written lead capture funnel",
+    "Qualification questions for higher-intent leads",
+    "5-day automated SMS + email follow-up",
+    "Monthly performance review & optimization",
+    "Dedicated Slack/text channel for support",
+  ]);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/businesses").then((r) => r.json()).then((d) => {
-      setBusinesses(d.businesses ?? []);
-    });
+    fetch("/api/businesses")
+      .then((r) => r.json())
+      .then((d) => {
+        const list: SavedBusiness[] = d.businesses ?? [];
+        setBusinesses(list);
+        if (!businessId && list.length > 0) setBusinessId(list[0].id);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedBusiness = businesses.find((b) => b.id === selectedBusinessId);
+  const business = businesses.find((b) => b.id === businessId);
 
-  const handleAIGenerate = async () => {
-    if (!selectedBusinessId) {
-      toast.error("Please select a business first");
-      return;
-    }
-    setGenerating(true);
-    try {
-      const res = await fetch("/api/generate/proposal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessId: selectedBusinessId,
-          monthlyPrice,
-          systemsIncluded,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate");
-        return;
-      }
-      const p = data.proposalData;
-      setTitle(p.title);
-      setPackageOverview(p.packageOverview);
-      setDeliverables(p.deliverables ?? deliverables);
-      setBenefits(p.benefits ?? benefits);
-      setNextSteps(p.nextSteps ?? "");
-      setEmailMessage(p.emailMessage ?? "");
-      toast.success("Proposal generated with AI!");
-    } catch {
-      toast.error("Failed to generate proposal");
-    } finally {
-      setGenerating(false);
-    }
+  useEffect(() => {
+    if (!business) return;
+    if (!title)
+      setTitle(`Monthly AI Lead System — ${business.name}`);
+    if (!overview)
+      setOverview(
+        `A complete, done-for-you Lead Capture System custom-built for ${business.name}. Designed to bring in qualified ${(business.industry ?? "business").toLowerCase()} inquiries every month from ${business.city?.split(",")[0] ?? "your city"} — without you lifting a finger.`
+      );
+    if (!contactEmail && business.website)
+      setContactEmail(`owner@${business.website}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business]);
+
+  const updateDel = (i: number, v: string) => {
+    const next = [...deliverables];
+    next[i] = v;
+    setDeliverables(next);
   };
+  const addDel = () => setDeliverables([...deliverables, "New deliverable"]);
+  const removeDel = (i: number) => setDeliverables(deliverables.filter((_, j) => j !== i));
 
   const handleSave = async () => {
-    if (!selectedBusinessId) return toast.error("Select a business");
-    if (!title) return toast.error("Title is required");
+    if (!business) return toast.error("Pick a business first");
     setSaving(true);
     try {
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          businessId: selectedBusinessId,
+          businessId,
           title,
-          packageOverview,
+          packageOverview: overview,
           deliverables: deliverables.filter(Boolean),
-          monthlyPrice,
-          benefits: benefits.filter(Boolean),
-          nextSteps,
-          emailMessage,
-          systemsIncluded,
+          monthlyPrice: price,
+          benefits: [],
+          nextSteps: "Accept this proposal · Book a 20-min kickoff · Delivery in 5 days",
+          emailMessage: "",
+          systemsIncluded: [],
         }),
       });
       const data = await res.json();
@@ -116,8 +105,11 @@ export default function NewProposalPage() {
         toast.error(data.error || "Failed to save");
         return;
       }
-      toast.success("Proposal saved!");
-      router.push(`/proposals/${data.proposal.id}`);
+      setSent(true);
+      toast.success("Proposal saved");
+      setTimeout(() => {
+        router.push(`/proposals/${data.proposal.id}`);
+      }, 1800);
     } catch {
       toast.error("Failed to save proposal");
     } finally {
@@ -125,273 +117,277 @@ export default function NewProposalPage() {
     }
   };
 
-  const toggleSystem = (s: string) => {
-    setSystemsIncluded((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
-  };
-
-  const updateListItem = (
-    list: string[],
-    setList: (l: string[]) => void,
-    idx: number,
-    val: string
-  ) => {
-    const updated = [...list];
-    updated[idx] = val;
-    setList(updated);
-  };
-
-  const removeListItem = (
-    list: string[],
-    setList: (l: string[]) => void,
-    idx: number
-  ) => setList(list.filter((_, i) => i !== idx));
-
-  const addListItem = (list: string[], setList: (l: string[]) => void) =>
-    setList([...list, ""]);
-
   return (
-    <div className="flex flex-col min-h-full">
-      <TopBar title="New Proposal" subtitle="Build a professional client proposal" />
-      <div className="p-6 max-w-5xl">
-        <Button variant="ghost" size="sm" asChild className="mb-4 text-gray-400">
-          <Link href="/proposals">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Link>
-        </Button>
+    <>
+      <TopBar title="Proposals" />
+      <div style={{ padding: "32px 40px 48px", maxWidth: 1440, margin: "0 auto" }}>
+        <header
+          className="flex justify-between items-end"
+          style={{ marginBottom: 24 }}
+        >
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-sans), sans-serif",
+                fontSize: 30,
+                fontWeight: 700,
+                letterSpacing: "-0.025em",
+                color: "var(--text)",
+              }}
+            >
+              Proposal Builder
+            </h1>
+            <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14.5 }}>
+              Edit on the left. Live preview on the right — exactly what the business owner will
+              see.
+            </p>
+          </div>
+          <div className="flex" style={{ gap: 8 }}>
+            <LgButton variant="secondary" icon="link">
+              Copy public link
+            </LgButton>
+            <LgButton
+              variant="primary"
+              icon="mail"
+              onClick={handleSave}
+              disabled={saving || sent || !business}
+            >
+              {sent ? "Sent!" : saving ? "Saving…" : "Send to client"}
+            </LgButton>
+          </div>
+        </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left: Form */}
-          <div className="space-y-6">
-            {/* Business selector */}
-            <div className="glass-card p-5 space-y-4">
-              <h2 className="text-sm font-semibold text-white">Business</h2>
-              <div className="space-y-2">
-                <Label>Select Business</Label>
-                <Select value={selectedBusinessId} onValueChange={setSelectedBusinessId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a saved business…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {businesses.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name} — {b.city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {sent && (
+          <div
+            className="flex items-center lg-fade-in"
+            style={{
+              marginBottom: 20,
+              padding: "12px 16px",
+              gap: 12,
+              background: "var(--success-soft)",
+              borderRadius: "var(--radius)",
+              border: "1px solid color-mix(in oklch, var(--success) 25%, transparent)",
+            }}
+          >
+            <Check size={16} strokeWidth={2.5} style={{ color: "var(--success)" }} />
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+              Proposal saved · Deal added to pipeline
+            </span>
+          </div>
+        )}
 
-              {/* Systems included */}
-              <div className="space-y-2">
-                <Label>Systems Included</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {["Lead System", "Content System"].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => toggleSystem(s)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${
-                        systemsIncluded.includes(s)
-                          ? "border-blue-500/50 bg-blue-500/15 text-blue-400"
-                          : "border-white/10 text-gray-400 hover:border-blue-500/30"
-                      }`}
-                    >
-                      {systemsIncluded.includes(s) && (
-                        <CheckCircle2 className="inline h-3 w-3 mr-1" />
-                      )}
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI generate button */}
-              <Button
-                variant="blue"
-                size="sm"
-                onClick={handleAIGenerate}
-                disabled={generating || !selectedBusinessId}
-                className="w-full"
-              >
-                {generating ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
-                Generate with AI
-              </Button>
+        {!business ? (
+          <LgCard>
+            <div style={{ fontSize: 14, color: "var(--text-muted)" }}>
+              Save a business first to draft a proposal.
             </div>
+          </LgCard>
+        ) : (
+          <div className="grid" style={{ gridTemplateColumns: "360px 1fr", gap: 24 }}>
+            <div className="flex flex-col" style={{ gap: 16 }}>
+              <EditorCard label="Business">
+                <select
+                  value={businessId}
+                  onChange={(e) => {
+                    setBusinessId(e.target.value);
+                    setTitle("");
+                    setOverview("");
+                    setContactEmail("");
+                  }}
+                  style={editorInputStyle}
+                >
+                  {businesses.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} — {b.city ?? "—"}
+                    </option>
+                  ))}
+                </select>
+              </EditorCard>
 
-            {/* Title & overview */}
-            <div className="glass-card p-5 space-y-4">
-              <div className="space-y-2">
-                <Label>Proposal Title</Label>
-                <Input
+              <EditorCard label="Title">
+                <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="AI-Powered Growth System for XYZ Business"
+                  style={editorInputStyle}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Package Overview</Label>
-                <Textarea
-                  value={packageOverview}
-                  onChange={(e) => setPackageOverview(e.target.value)}
-                  placeholder="Describe what you're offering and why it matters…"
-                  className="h-20"
-                />
-              </div>
-            </div>
+              </EditorCard>
 
-            {/* Pricing */}
-            <div className="glass-card p-5">
-              <Label className="mb-3 block">Monthly Price</Label>
-              <div className="flex gap-2 mb-3">
-                {PRICING_PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setMonthlyPrice(p)}
-                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all duration-200 ${
-                      monthlyPrice === p
-                        ? "border-blue-500 bg-blue-500/15 text-blue-400"
-                        : "border-white/10 text-gray-400 hover:border-blue-500/30"
-                    }`}
+              <EditorCard label="Pricing">
+                <div className="flex" style={{ gap: 6 }}>
+                  {PRICING_PRESETS.map((p) => {
+                    const active = price === p;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPrice(p)}
+                        style={{
+                          flex: 1,
+                          padding: "10px 0",
+                          fontSize: 14,
+                          fontWeight: 700,
+                          fontFamily: "inherit",
+                          background: active ? "var(--accent)" : "var(--surface)",
+                          color: active ? "var(--accent-text)" : "var(--text)",
+                          border: `1px solid ${active ? "var(--accent)" : "var(--border-strong)"}`,
+                          borderRadius: "var(--radius)",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        ${p}
+                        <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.75 }}>/mo</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </EditorCard>
+
+              <EditorCard label="Overview">
+                <textarea
+                  value={overview}
+                  onChange={(e) => setOverview(e.target.value)}
+                  rows={5}
+                  style={{
+                    ...editorInputStyle,
+                    height: "auto",
+                    padding: 12,
+                    resize: "vertical",
+                    lineHeight: 1.5,
+                  }}
+                />
+              </EditorCard>
+
+              <EditorCard label={`Deliverables (${deliverables.length})`}>
+                <div className="flex flex-col" style={{ gap: 6 }}>
+                  {deliverables.map((d, i) => (
+                    <div key={i} className="flex items-center" style={{ gap: 6 }}>
+                      <GripVertical
+                        size={14}
+                        strokeWidth={1.75}
+                        style={{ color: "var(--text-subtle)", cursor: "grab" }}
+                      />
+                      <input
+                        value={d}
+                        onChange={(e) => updateDel(i, e.target.value)}
+                        style={{ ...editorInputStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => removeDel(i)}
+                        title="Remove"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          padding: 0,
+                          background: "transparent",
+                          border: "none",
+                          color: "var(--text-subtle)",
+                          cursor: "pointer",
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Trash2 size={13} strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  ))}
+                  <LgButton
+                    variant="ghost"
+                    size="sm"
+                    icon="plus"
+                    onClick={addDel}
+                    style={{ marginTop: 2, justifyContent: "flex-start" }}
                   >
-                    ${p}/mo
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-gray-500" />
-                <Input
-                  type="number"
-                  value={monthlyPrice}
-                  onChange={(e) => setMonthlyPrice(parseInt(e.target.value) || 0)}
-                  className="flex-1"
-                />
-                <span className="text-sm text-gray-400">/mo</span>
-              </div>
-            </div>
+                    Add deliverable
+                  </LgButton>
+                </div>
+              </EditorCard>
 
-            {/* Deliverables */}
-            <div className="glass-card p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Deliverables</Label>
-                <Button size="sm" variant="ghost" onClick={() => addListItem(deliverables, setDeliverables)}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />Add
-                </Button>
-              </div>
-              {deliverables.map((d, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    value={d}
-                    onChange={(e) => updateListItem(deliverables, setDeliverables, i, e.target.value)}
-                    placeholder={`Deliverable ${i + 1}`}
+              <EditorCard label="Send to">
+                <div className="flex flex-col" style={{ gap: 8 }}>
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="Recipient name"
+                    style={editorInputStyle}
                   />
-                  <Button size="icon" variant="ghost" className="shrink-0 h-9 w-9 text-gray-500" onClick={() => removeListItem(deliverables, setDeliverables, i)}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            {/* Benefits */}
-            <div className="glass-card p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Benefits</Label>
-                <Button size="sm" variant="ghost" onClick={() => addListItem(benefits, setBenefits)}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />Add
-                </Button>
-              </div>
-              {benefits.map((b, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    value={b}
-                    onChange={(e) => updateListItem(benefits, setBenefits, i, e.target.value)}
-                    placeholder={`Benefit ${i + 1}`}
+                  <input
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="Recipient email"
+                    style={editorInputStyle}
                   />
-                  <Button size="icon" variant="ghost" className="shrink-0 h-9 w-9 text-gray-500" onClick={() => removeListItem(benefits, setBenefits, i)}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
-              ))}
+              </EditorCard>
             </div>
 
-            <div className="glass-card p-5 space-y-4">
-              <div className="space-y-2">
-                <Label>Next Steps</Label>
-                <Textarea value={nextSteps} onChange={(e) => setNextSteps(e.target.value)} placeholder="What should the client do next?" className="h-16" />
-              </div>
-              <div className="space-y-2">
-                <Label>Email Message</Label>
-                <Textarea value={emailMessage} onChange={(e) => setEmailMessage(e.target.value)} placeholder="Message to include when sending the proposal via email…" className="h-20" />
-              </div>
-            </div>
-
-            <Button variant="blue" size="lg" className="w-full" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Proposal
-            </Button>
-          </div>
-
-          {/* Right: Preview */}
-          <div className="hidden lg:block">
-            <div className="sticky top-6">
-              <div className="panel p-6 space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="blue">Preview</Badge>
-                  <span className="text-xs text-gray-500">Live preview</span>
+            <div className="relative">
+              <div
+                className="flex items-start justify-center"
+                style={{ gap: 24 }}
+              >
+                <div style={{ flex: "0 1 760px", minWidth: 0 }}>
+                  <BrowserFrame
+                    url={`launchgrid.ai/p/${business.name.toLowerCase().split(" ")[0]}-${business.id.slice(0, 6)}`}
+                  >
+                    <PublicProposal
+                      business={business}
+                      title={title}
+                      overview={overview}
+                      price={price}
+                      deliverables={deliverables.filter(Boolean)}
+                    />
+                  </BrowserFrame>
                 </div>
-                <h2 className="text-xl font-bold text-white">{title || "Proposal Title"}</h2>
-                {selectedBusiness && (
-                  <p className="text-sm text-gray-400">For {selectedBusiness.name}</p>
-                )}
-                {packageOverview && (
-                  <p className="text-sm text-gray-300 leading-relaxed">{packageOverview}</p>
-                )}
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                  <p className="text-xs text-gray-400 mb-1">Monthly Investment</p>
-                  <p className="text-3xl font-bold text-blue-400">${monthlyPrice}/mo</p>
+                <div style={{ flex: "0 0 280px" }}>
+                  <MobileFrame>
+                    <PublicProposal
+                      business={business}
+                      title={title}
+                      overview={overview}
+                      price={price}
+                      deliverables={deliverables.filter(Boolean)}
+                      mobile
+                    />
+                  </MobileFrame>
                 </div>
-                {deliverables.some(Boolean) && (
-                  <div>
-                    <p className="text-xs font-medium text-gray-400 mb-2">DELIVERABLES</p>
-                    <ul className="space-y-1.5">
-                      {deliverables.filter(Boolean).map((d, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                          <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-                          {d}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {benefits.some(Boolean) && (
-                  <div>
-                    <p className="text-xs font-medium text-gray-400 mb-2">BENEFITS</p>
-                    <ul className="space-y-1.5">
-                      {benefits.filter(Boolean).map((b, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {nextSteps && (
-                  <div>
-                    <p className="text-xs font-medium text-gray-400 mb-1">NEXT STEPS</p>
-                    <p className="text-sm text-gray-300">{nextSteps}</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
+    </>
+  );
+}
+
+function EditorCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: "var(--text-subtle)",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      {children}
     </div>
   );
 }

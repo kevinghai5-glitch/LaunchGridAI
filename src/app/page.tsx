@@ -9,7 +9,10 @@ import { Footer } from "@/components/landing/Footer";
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-[#0A0B0F] overflow-x-hidden">
+    <main
+      className="min-h-screen"
+      style={{ background: "var(--bg)", color: "var(--text)", overflowX: "hidden" }}
+    >
       <Nav />
       <Hero />
       <HowItWorks />

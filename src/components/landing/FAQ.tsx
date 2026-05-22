@@ -1,73 +1,116 @@
 "use client";
 
-import { motion } from "framer-motion";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
-const faqs = [
+const ITEMS = [
   {
     q: "Do I need any technical skills to use LaunchGrid?",
-    a: "No. LaunchGrid handles all the AI generation. You just enter a business name, industry, and city, click Generate, and get a complete system. No coding, no prompting, no experience required.",
+    a: "No. If you can search a business name and click a button, you can run LaunchGrid. Everything generates on click — no prompts to write, no integrations to set up.",
   },
   {
     q: "Do the businesses I find need to sign up for anything?",
-    a: "No. You generate the systems, build the proposal, and deliver the output to the business owner. They pay you monthly for the service. LaunchGrid is your back-office tool.",
+    a: "No. LaunchGrid pulls public Google Places data. The business owner only interacts with the proposal you send them — a clean, branded link.",
   },
   {
     q: "How do I actually get paid by the businesses?",
-    a: "You handle payments directly with your clients — Stripe, PayPal, bank transfer, whatever you prefer. LaunchGrid is your lead generation and system delivery tool, not a payment processor between you and clients.",
+    a: "You set up your own payment link (Stripe, Square, ACH — whatever you use). LaunchGrid tracks deal status and MRR; payments live in your stack.",
   },
   {
     q: "What is a Lead System vs a Content System?",
-    a: "A Lead System includes a headline, qualification questions, booking CTA, and a 5-day follow-up sequence. A Content System is a 30-day social media plan with hooks, captions, and hashtags. Both are custom-generated for each specific business.",
+    a: "Lead Systems generate inquiries: a hook, a funnel, follow-up sequences. Content Systems build authority: 30 days of social posts, hooks, and a hashtag strategy.",
   },
   {
     q: "Can I really charge $297–$797/month for this?",
-    a: "Yes. These are standard SMMA/agency rates for ongoing AI-powered systems. Most local businesses have zero digital infrastructure. A working lead capture system or content calendar that runs on autopilot is genuinely worth $300–$800/month to them.",
+    a: "Yes — agencies have charged these prices for years. The pricing presets are based on what works for one-person agencies serving local businesses.",
   },
   {
     q: "What happens to my data if I cancel?",
-    a: "Your saved businesses, generated systems, proposals, and deals are yours. If you cancel Pro and downgrade to Free, you keep read access to existing data but creation is limited. We don't delete your data.",
+    a: "You keep access to everything for 30 days after canceling. Export any saved businesses, proposals, or systems as CSV/PDF before that.",
   },
 ];
 
 export function FAQ() {
+  const [open, setOpen] = useState(0);
   return (
-    <section id="faq" className="py-32">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-16"
+    <section
+      id="faq"
+      className="mx-auto"
+      style={{ padding: "96px 32px", maxWidth: 880 }}
+    >
+      <div style={{ marginBottom: 40 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--accent)",
+            marginBottom: 10,
+          }}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium mb-4">
-            FAQ
+          FAQ
+        </div>
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-sans), sans-serif",
+            fontSize: 44,
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
+            lineHeight: 1.05,
+            color: "var(--text)",
+          }}
+        >
+          Common questions.
+        </h2>
+      </div>
+      <div
+        className="flex flex-col"
+        style={{ gap: 0, borderTop: "1px solid var(--border)" }}
+      >
+        {ITEMS.map((it, i) => (
+          <div key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+            <button
+              onClick={() => setOpen(open === i ? -1 : i)}
+              className="w-full flex justify-between items-center text-left cursor-pointer"
+              style={{
+                padding: "20px 4px",
+                background: "transparent",
+                border: "none",
+                fontSize: 16.5,
+                fontWeight: 600,
+                letterSpacing: "-0.01em",
+                color: "var(--text)",
+                fontFamily: "inherit",
+              }}
+            >
+              {it.q}
+              <ChevronDown
+                size={18}
+                strokeWidth={1.75}
+                style={{
+                  transition: "transform 0.2s",
+                  transform: open === i ? "rotate(180deg)" : "none",
+                  color: "var(--text-muted)",
+                }}
+              />
+            </button>
+            {open === i && (
+              <div
+                className="lg-fade-in"
+                style={{
+                  padding: "0 4px 24px",
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                  color: "var(--text-muted)",
+                }}
+              >
+                {it.a}
+              </div>
+            )}
           </div>
-          <h2 className="text-4xl font-bold text-white">Common questions</h2>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="glass-card p-2"
-        >
-          <Accordion type="single" collapsible className="w-full">
-            {faqs.map((faq, i) => (
-              <AccordionItem key={i} value={`item-${i}`}>
-                <AccordionTrigger className="px-4 text-left hover:no-underline hover:text-blue-300 transition-colors">
-                  {faq.q}
-                </AccordionTrigger>
-                <AccordionContent className="px-4">{faq.a}</AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </motion.div>
+        ))}
       </div>
     </section>
   );
