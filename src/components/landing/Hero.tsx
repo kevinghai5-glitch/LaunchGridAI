@@ -1,117 +1,179 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles, Star } from "lucide-react";
+import { LgButton } from "@/components/ui/lg-button";
+import { LgBadge } from "@/components/ui/lg-badge";
+
+const STATS = [
+  { stat: "$297–$797", label: "avg. monthly deal" },
+  { stat: "4 steps", label: "to close a client" },
+  { stat: "∞", label: "recurring potential" },
+];
+
+const grainSvg =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>\")";
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-grid opacity-50" />
-      <div className="absolute inset-0 bg-hero-glow" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
-
-      {/* Animated orb */}
-      <motion.div
-        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-blue-500/20 blur-[80px] pointer-events-none"
-        animate={{
-          scale: [1, 1.2, 1],
-          opacity: [0.3, 0.5, 0.3],
+    <section className="relative overflow-hidden">
+      {/* Drifting gradient mesh — full bleed */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: -300,
+          pointerEvents: "none",
+          zIndex: 0,
+          opacity: 0.7,
+          background: `
+            radial-gradient(closest-side at 22% 38%, color-mix(in oklch, var(--accent) 38%, transparent), transparent 100%),
+            radial-gradient(closest-side at 80% 22%, color-mix(in oklch, var(--accent) 22%, transparent), transparent 100%),
+            radial-gradient(closest-side at 60% 95%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 100%)
+          `,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "70% 70%, 60% 60%, 80% 80%",
+          animation: "lg-mesh-drift 24s ease-in-out infinite",
+          filter: "blur(120px) saturate(115%)",
+          willChange: "transform",
         }}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut",
+      />
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 0,
+          opacity: 0.4,
+          mixBlendMode: "overlay",
+          backgroundImage: grainSvg,
         }}
       />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-sm font-medium mb-8"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          AI-powered client acquisition for agencies
-        </motion.div>
-
-        {/* Main headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.05] text-white mb-6"
-        >
-          Build AI systems local businesses{" "}
-          <span className="text-gradient">will pay monthly for.</span>
-        </motion.h1>
-
-        {/* Subhead */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed"
-        >
-          Find real local businesses with Google Places. Generate custom Lead & Content systems with AI.
-          Send professional proposals. Close recurring clients — all in one streamlined platform.
-        </motion.p>
-
-        {/* CTAs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4"
-        >
-          <Button variant="blue" size="xl" asChild className="glow-blue-sm">
+      <div
+        className="relative mx-auto"
+        style={{
+          padding: "96px 32px 80px",
+          maxWidth: 1200,
+          zIndex: 1,
+        }}
+      >
+        <div style={{ maxWidth: 820, position: "relative", zIndex: 1 }}>
+          <LgBadge
+            tone="accent"
+            style={{ marginBottom: 22, animation: "lg-rise-in 0.55s 0.05s both" }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 99,
+                background: "var(--accent)",
+                boxShadow: "0 0 8px var(--accent)",
+                animation: "lg-pulse 2.4s ease-in-out infinite",
+              }}
+            />
+            AI-powered client acquisition for agencies
+          </LgBadge>
+          <h1
+            style={{
+              margin: "0 0 24px",
+              fontFamily: "var(--font-sans), sans-serif",
+              fontSize: "clamp(44px, 6vw, 76px)",
+              lineHeight: 1.0,
+              letterSpacing: "-0.04em",
+              fontWeight: 800,
+              color: "var(--text)",
+            }}
+          >
+            <span className="lg-line-mask">
+              <span style={{ animationDelay: "0.18s" }}>Build AI systems</span>
+            </span>
+            <br />
+            <span className="lg-line-mask">
+              <span style={{ animationDelay: "0.30s" }}>local businesses</span>
+            </span>
+            <br />
+            <span className="lg-line-mask">
+              <span style={{ animationDelay: "0.42s" }}>
+                will pay&nbsp;
+                <span
+                  style={{
+                    fontStyle: "italic",
+                    fontWeight: 600,
+                    color: "var(--accent)",
+                  }}
+                >
+                  monthly
+                </span>
+                &nbsp;for.
+              </span>
+            </span>
+          </h1>
+          <p
+            style={{
+              margin: "0 0 40px",
+              fontSize: 19,
+              lineHeight: 1.55,
+              color: "var(--text-muted)",
+              maxWidth: 620,
+              animation: "lg-rise-in 0.65s 0.55s both",
+            }}
+          >
+            Find real local businesses with Google Places. Generate custom Lead &amp; Content
+            systems with AI. Send polished proposals. Close recurring clients — all in one
+            platform.
+          </p>
+          <div
+            className="flex items-center flex-wrap"
+            style={{ gap: 12, animation: "lg-rise-in 0.65s 0.7s both" }}
+          >
             <Link href="/signup">
-              Start Building Free
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <LgButton variant="primary" size="lg" iconRight="arrow">
+                Start building free
+              </LgButton>
             </Link>
-          </Button>
-          <Button variant="outline" size="xl" asChild>
-            <Link href="#how-it-works">See how it works</Link>
-          </Button>
-        </motion.div>
+            <Link href="#how-it-works">
+              <LgButton variant="secondary" size="lg" icon="eye">
+                See how it works
+              </LgButton>
+            </Link>
+            <span style={{ fontSize: 13, color: "var(--text-subtle)", marginLeft: 8 }}>
+              No credit card · Cancel any time
+            </span>
+          </div>
+        </div>
 
-        {/* Trust line */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-          className="mt-8 text-sm text-gray-500 flex items-center justify-center gap-2"
+        <div
+          className="lg-rise relative grid"
+          style={{
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 24,
+            marginTop: 72,
+            paddingTop: 40,
+            borderTop: "1px solid var(--border)",
+            zIndex: 1,
+          }}
         >
-          <Star className="h-3.5 w-3.5 text-blue-400 fill-blue-400" />
-          Backed by simple offers · No fluff · No cold calling
-          <Star className="h-3.5 w-3.5 text-blue-400 fill-blue-400" />
-        </motion.p>
-
-        {/* Floating stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="mt-16 grid grid-cols-3 gap-4 max-w-lg mx-auto"
-        >
-          {[
-            { value: "$297–$797", label: "avg. monthly deal" },
-            { value: "4 steps", label: "to close a client" },
-            { value: "∞", label: "recurring potential" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="glass-card p-4 text-center"
-            >
-              <div className="text-xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-gray-500 mt-1">{stat.label}</div>
+          {STATS.map((s) => (
+            <div key={s.label}>
+              <div
+                style={{
+                  fontFamily: "var(--font-sans), sans-serif",
+                  fontSize: 36,
+                  fontWeight: 700,
+                  letterSpacing: "-0.025em",
+                  color: "var(--text)",
+                }}
+              >
+                {s.stat}
+              </div>
+              <div style={{ marginTop: 4, color: "var(--text-muted)", fontSize: 14 }}>
+                {s.label}
+              </div>
             </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

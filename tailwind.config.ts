@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: ["class"],
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -10,69 +10,84 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        background: "var(--bg)",
+        foreground: "var(--text)",
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--surface)",
+          foreground: "var(--text)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "var(--surface)",
+          foreground: "var(--text)",
         },
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "var(--accent)",
+          foreground: "var(--accent-text)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "var(--surface-active)",
+          foreground: "var(--text)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--surface-active)",
+          foreground: "var(--text-muted)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "var(--accent)",
+          foreground: "var(--accent-text)",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "var(--danger)",
+          foreground: "#ffffff",
         },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        chart: {
-          "1": "hsl(var(--chart-1))",
-          "2": "hsl(var(--chart-2))",
-          "3": "hsl(var(--chart-3))",
-          "4": "hsl(var(--chart-4))",
-          "5": "hsl(var(--chart-5))",
-        },
-        // LaunchGrid custom colors
+        border: "var(--border)",
+        input: "var(--border-strong)",
+        ring: "var(--accent)",
+        // LaunchGrid semantic tokens (use via lg-bg, lg-surface, lg-accent, etc.)
         lg: {
-          bg: "#0A0B0F",
-          panel: "#0F1424",
-          blue: "#3B82F6",
-          "blue-deep": "#2563EB",
-          muted: "#9CA3AF",
+          bg: "var(--bg)",
+          "bg-elevated": "var(--bg-elevated)",
+          surface: "var(--surface)",
+          "surface-hover": "var(--surface-hover)",
+          "surface-active": "var(--surface-active)",
+          sidebar: "var(--sidebar)",
+          text: "var(--text)",
+          "text-muted": "var(--text-muted)",
+          "text-subtle": "var(--text-subtle)",
+          border: "var(--border)",
+          "border-strong": "var(--border-strong)",
+          accent: "var(--accent)",
+          "accent-soft": "var(--accent-soft)",
+          "accent-text": "var(--accent-text)",
+          success: "var(--success)",
+          "success-soft": "var(--success-soft)",
+          warning: "var(--warning)",
+          "warning-soft": "var(--warning-soft)",
+          danger: "var(--danger)",
+          "danger-soft": "var(--danger-soft)",
         },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "var(--radius-sm)",
+        DEFAULT: "var(--radius)",
+        md: "var(--radius)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
+      },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        DEFAULT: "var(--shadow)",
+        lg: "var(--shadow-lg)",
+        xl: "var(--shadow-xl)",
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "Inter", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SF Mono", "monospace"],
+        display: ["var(--font-sans)", "-apple-system", "sans-serif"],
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "float": "float 6s ease-in-out infinite",
-        "glow": "glow 2s ease-in-out infinite alternate",
       },
       keyframes: {
         "accordion-down": {
@@ -83,20 +98,6 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        float: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-20px)" },
-        },
-        glow: {
-          from: { boxShadow: "0 0 20px rgba(59, 130, 246, 0.3)" },
-          to: { boxShadow: "0 0 40px rgba(59, 130, 246, 0.6)" },
-        },
-      },
-      backgroundImage: {
-        "grid-pattern":
-          "linear-gradient(rgba(59,130,246,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.05) 1px, transparent 1px)",
-        "radial-glow":
-          "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,0.3), transparent)",
       },
     },
   },
