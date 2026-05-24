@@ -84,6 +84,9 @@ model Business {
   mapsUrl       String?
   industry      String?
   city          String?
+  category      String?
+  description   String?
+  photoUrl      String?
   favorited     Boolean  @default(false)
   // AI-suggested fields (all nullable)
   painPoint     String?
@@ -101,7 +104,7 @@ model GeneratedSystem {
   id         String   @id @default(cuid())
   businessId String
   userId     String
-  type       String   // 'LEAD' | 'CONTENT'
+  type       String   // 'LEAD' | 'CONTENT' | 'ASSETS'
   content    Json
   createdAt  DateTime @default(now())
 
