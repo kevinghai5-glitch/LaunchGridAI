@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AssetPackView } from "@/components/businesses/AssetPackView";
+import type { AssetPack } from "@/types";
 import {
-  Building2,
   MapPin,
   Phone,
   Globe,
@@ -24,6 +25,7 @@ import {
   Zap,
   Target,
   Lightbulb,
+  Rocket,
 } from "lucide-react";
 
 interface BusinessWithSystems {
@@ -37,6 +39,9 @@ interface BusinessWithSystems {
   mapsUrl: string | null;
   industry: string | null;
   city: string | null;
+  category: string | null;
+  description: string | null;
+  photoUrl: string | null;
   favorited: boolean;
   painPoint: string | null;
   outreachAngle: string | null;
@@ -48,6 +53,7 @@ interface BusinessWithSystems {
 export default function BusinessDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
 
   const [business, setBusiness] = useState<BusinessWithSystems | null>(null);
@@ -55,12 +61,29 @@ export default function BusinessDetailPage() {
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
   const [generatingLead, setGeneratingLead] = useState(false);
   const [generatingContent, setGeneratingContent] = useState(false);
+  const [generatingAssets, setGeneratingAssets] = useState(false);
   const [favoriting, setFavoriting] = useState(false);
+  const autoGenTriggered = useRef(false);
 
   useEffect(() => {
     loadBusiness();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Auto-trigger asset generation when arriving via "Generate Assets" (?generate=assets).
+  useEffect(() => {
+    if (
+      !loading &&
+      business &&
+      !autoGenTriggered.current &&
+      searchParams.get("generate") === "assets"
+    ) {
+      autoGenTriggered.current = true;
+      router.replace(`/businesses/${id}`);
+      handleGenerateAssets();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, business]);
 
   const loadBusiness = async () => {
     try {
@@ -144,6 +167,28 @@ export default function BusinessDetailPage() {
     }
   };
 
+  const handleGenerateAssets = async () => {
+    setGeneratingAssets(true);
+    try {
+      const res = await fetch("/api/generate/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to generate assets");
+        return;
+      }
+      toast.success("Asset pack generated!");
+      await loadBusiness();
+    } catch {
+      toast.error("Failed to generate assets");
+    } finally {
+      setGeneratingAssets(false);
+    }
+  };
+
   const handleGenerateContent = async () => {
     setGeneratingContent(true);
     try {
@@ -183,6 +228,8 @@ export default function BusinessDetailPage() {
 
   const leadSystems = business.generatedSystems.filter((s) => s.type === "LEAD");
   const contentSystems = business.generatedSystems.filter((s) => s.type === "CONTENT");
+  const assetSystems = business.generatedSystems.filter((s) => s.type === "ASSETS");
+  const latestAssetPack = assetSystems[0]?.content as AssetPack | undefined;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -269,6 +316,22 @@ export default function BusinessDetailPage() {
               <h3 className="text-sm font-semibold text-white mb-2">Actions</h3>
               <Button
                 variant="blue"
+                className="w-full"
+                onClick={handleGenerateAssets}
+                disabled={generatingAssets}
+              >
+                {generatingAssets ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Rocket className="h-4 w-4 mr-2" />
+                )}
+                {assetSystems.length > 0 ? "Regenerate Assets" : "Generate Assets"}
+              </Button>
+              <p className="text-xs text-gray-500 -mt-1 mb-1">
+                Full growth pack: landing page, lead capture, 7-day emails, SMS &amp; booking copy.
+              </p>
+              <Button
+                variant="outline"
                 size="sm"
                 className="w-full"
                 onClick={handleGenerateLead}
@@ -285,7 +348,7 @@ export default function BusinessDetailPage() {
                 )}
               </Button>
               <Button
-                variant="blue"
+                variant="outline"
                 size="sm"
                 className="w-full"
                 onClick={handleGenerateContent}
@@ -367,6 +430,32 @@ export default function BusinessDetailPage() {
               )}
             </div>
 
+            {/* Generated Asset Pack */}
+            {(generatingAssets || latestAssetPack) && (
+              <div className="glass-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Rocket className="h-4 w-4 text-blue-400" />
+                  <h3 className="text-sm font-semibold text-white">Generated Asset Pack</h3>
+                  {latestAssetPack && !generatingAssets && (
+                    <span className="text-xs text-gray-500">
+                      · {new Date(assetSystems[0].createdAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                {generatingAssets ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-400 mb-4" />
+                    <p className="text-sm text-white">Analyzing {business.name}…</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Reading their website, services &amp; positioning, then writing custom assets.
+                    </p>
+                  </div>
+                ) : latestAssetPack ? (
+                  <AssetPackView pack={latestAssetPack} />
+                ) : null}
+              </div>
+            )}
+
             {/* Generated Systems */}
             {business.generatedSystems.length > 0 && (
               <div className="glass-card p-5">
@@ -377,12 +466,18 @@ export default function BusinessDetailPage() {
                       <div className="flex items-center gap-3">
                         {system.type === "LEAD" ? (
                           <Target className="h-4 w-4 text-blue-400" />
+                        ) : system.type === "ASSETS" ? (
+                          <Rocket className="h-4 w-4 text-blue-400" />
                         ) : (
                           <Zap className="h-4 w-4 text-blue-400" />
                         )}
                         <div>
                           <div className="text-sm font-medium text-white">
-                            {system.type === "LEAD" ? "Lead Capture System" : "Content Calendar System"}
+                            {system.type === "LEAD"
+                              ? "Lead Capture System"
+                              : system.type === "ASSETS"
+                              ? "Growth Asset Pack"
+                              : "Content Calendar System"}
                           </div>
                           <div className="text-xs text-gray-500">
                             Generated {new Date(system.createdAt).toLocaleDateString()}

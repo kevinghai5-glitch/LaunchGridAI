@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Star, MapPin, Phone, Globe, Trash2 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
@@ -50,6 +51,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 export default function BusinessesPage() {
+  const router = useRouter();
   const [industry, setIndustry] = useState("Day Spa");
   const [city, setCity] = useState("Charleston, SC");
   const [results, setResults] = useState<BusinessResult[]>([]);
@@ -107,7 +109,7 @@ export default function BusinessesPage() {
     }
   };
 
-  const saveBusiness = async (r: BusinessResult) => {
+  const saveBusiness = async (r: BusinessResult): Promise<string | null> => {
     try {
       const res = await fetch("/api/businesses", {
         method: "POST",
@@ -123,19 +125,33 @@ export default function BusinessesPage() {
           latitude: r.location?.lat,
           longitude: r.location?.lng,
           mapsUrl: r.mapsUrl,
+          category: r.category,
+          description: r.description,
+          photoUrl: r.photoUrl,
           industry,
           city,
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         toast.success("Saved");
         loadSaved();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Failed to save");
+        return data.business?.id ?? null;
       }
+      toast.error(data.error || "Failed to save");
+      return null;
     } catch {
       toast.error("Failed to save");
+      return null;
+    }
+  };
+
+  // Save the business if needed, then jump to its detail page and auto-generate assets.
+  const generateForResult = async (r: BusinessResult) => {
+    const existing = saved.find((b) => b.name === r.name);
+    const targetId = existing?.id ?? (await saveBusiness(r));
+    if (targetId) {
+      router.push(`/businesses/${targetId}?generate=assets`);
     }
   };
 
@@ -322,6 +338,7 @@ export default function BusinessesPage() {
                     first={i === 0}
                     saved={savedNames.has(r.name)}
                     onSave={() => saveBusiness(r)}
+                    onGenerate={() => generateForResult(r)}
                   />
                 ))}
               </LgCard>
@@ -455,12 +472,23 @@ function ResultRow({
   first,
   saved,
   onSave,
+  onGenerate,
 }: {
   r: BusinessResult;
   first: boolean;
   saved: boolean;
   onSave: () => void;
+  onGenerate: () => void;
 }) {
+  const [generating, setGenerating] = useState(false);
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await onGenerate();
+    } finally {
+      setGenerating(false);
+    }
+  };
   return (
     <div
       className="lg-fade-in flex items-center"
@@ -471,7 +499,7 @@ function ResultRow({
       }}
     >
       <div
-        className="grid place-items-center flex-none"
+        className="grid place-items-center flex-none overflow-hidden"
         style={{
           width: 44,
           height: 44,
@@ -483,7 +511,16 @@ function ResultRow({
           fontWeight: 700,
         }}
       >
-        {r.name[0]}
+        {r.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={r.photoUrl}
+            alt={r.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          r.name[0]
+        )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -500,6 +537,7 @@ function ResultRow({
           >
             {r.name}
           </span>
+          {r.category && <LgBadge tone="neutral">{r.category}</LgBadge>}
           {r.rating > 0 && <StarsRating rating={r.rating} />}
           {r.userRatingsTotal > 0 && (
             <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>
@@ -507,6 +545,20 @@ function ResultRow({
             </span>
           )}
         </div>
+        {r.description && (
+          <div
+            style={{
+              fontSize: 12.5,
+              color: "var(--text-muted)",
+              marginBottom: 4,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {r.description}
+          </div>
+        )}
         <div
           className="flex"
           style={{ gap: 16, fontSize: 12.5, color: "var(--text-muted)" }}
@@ -541,11 +593,15 @@ function ResultRow({
             Save
           </LgButton>
         )}
-        <Link href="/studio">
-          <LgButton variant="primary" size="sm" icon="sparkles">
-            Generate
-          </LgButton>
-        </Link>
+        <LgButton
+          variant="primary"
+          size="sm"
+          icon="sparkles"
+          onClick={handleGenerate}
+          disabled={generating}
+        >
+          {generating ? "Opening…" : "Generate Assets"}
+        </LgButton>
       </div>
     </div>
   );
@@ -623,9 +679,9 @@ function SavedRow({
             Proposal
           </LgButton>
         </Link>
-        <Link href={`/studio?businessId=${b.id}`}>
+        <Link href={`/businesses/${b.id}?generate=assets`}>
           <LgButton variant="primary" size="sm" icon="sparkles">
-            Generate
+            Generate Assets
           </LgButton>
         </Link>
         <button

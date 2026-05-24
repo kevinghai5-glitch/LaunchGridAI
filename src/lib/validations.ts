@@ -31,6 +31,9 @@ export const saveBusinessSchema = z.object({
   mapsUrl: z.string().optional(),
   industry: z.string().optional(),
   city: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+  photoUrl: z.string().optional(),
 });
 
 export const updateBusinessSchema = z.object({
@@ -46,6 +49,10 @@ export const generateLeadSchema = z.object({
 });
 
 export const generateContentSchema = z.object({
+  businessId: z.string().cuid(),
+});
+
+export const generateAssetsSchema = z.object({
   businessId: z.string().cuid(),
 });
 

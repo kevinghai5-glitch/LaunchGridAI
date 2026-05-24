@@ -7,6 +7,9 @@ export interface BusinessResult {
   rating: number;
   userRatingsTotal: number;
   mapsUrl: string;
+  category: string;
+  description: string;
+  photoUrl: string;
   location: {
     lat: number;
     lng: number;
@@ -28,6 +31,9 @@ export interface SavedBusiness {
   mapsUrl: string | null;
   industry: string | null;
   city: string | null;
+  category: string | null;
+  description: string | null;
+  photoUrl: string | null;
   favorited: boolean;
   painPoint: string | null;
   outreachAngle: string | null;
@@ -60,6 +66,47 @@ export interface ContentSystem {
   }[];
   shortFormHooks: string[];
   localAngles: string[];
+}
+
+export interface AssetPack {
+  businessSummary: {
+    positioning: string;
+    services: string[];
+    strengths: string[];
+    opportunities: string[];
+    localAngle: string;
+  };
+  landingPage: {
+    heroHeadline: string;
+    heroSubheadline: string;
+    offer: string;
+    ctaPrimary: string;
+    ctaUrgency: string;
+    trustSignals: string[];
+  };
+  leadCapture: {
+    qualificationQuestions: string[];
+    intakeFlow: string[];
+    leadScoring: string;
+    thankYouPage: string;
+  };
+  emailSequence: {
+    day: number;
+    subject: string;
+    body: string;
+    purpose: string;
+  }[];
+  smsSequence: {
+    label: string;
+    timing: string;
+    message: string;
+  }[];
+  bookingPage: {
+    whatToExpect: string[];
+    socialProofStructure: string;
+    objectionHandling: { objection: string; response: string }[];
+    appointmentFraming: string;
+  };
 }
 
 export interface ProposalData {
