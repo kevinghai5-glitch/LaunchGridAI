@@ -1,10 +1,8 @@
-import { getServerSession } from "@/lib/internal-session";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-
-// Resolves the internal owner + reads live data on every request.
-export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({
   children,
@@ -12,6 +10,10 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
+
+  if (!session) {
+    redirect("/login");
+  }
 
   const wonDeals = await prisma.deal.findMany({
     where: { userId: session.user.id, stage: "WON" },

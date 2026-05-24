@@ -1,6 +1,7 @@
-import { getServerSession } from "@/lib/internal-session";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ const statusColors: Record<string, string> = {
 
 export default async function ProposalsPage() {
   const session = await getServerSession(authOptions);
+  if (!session) redirect("/login");
+
   const proposals = await prisma.proposal.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },

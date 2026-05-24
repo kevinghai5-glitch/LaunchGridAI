@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/internal-session";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { searchBusinesses } from "@/lib/google-places";
 import { businessSearchSchema } from "@/lib/validations";
