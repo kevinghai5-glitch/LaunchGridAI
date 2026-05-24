@@ -2,37 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Sparkles, Check, ChevronDown } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
-import {
-  buildLeadSystemTokens,
-  buildContentSystemTokens,
-  type StreamToken,
-} from "@/lib/system-tokens";
-import type { SavedBusiness } from "@/types";
-
-const SYSTEM_TYPES = [
-  {
-    id: "lead" as const,
-    label: "Lead Capture System",
-    desc: "Complete lead funnel: hook, qualifying questions, follow-up sequence.",
-  },
-  {
-    id: "content" as const,
-    label: "30-Day Content System",
-    desc: "Posting plan, content pillars, hooks, and local angles.",
-  },
-];
+import type { AssetPack, SavedBusiness } from "@/types";
 
 const THINKING_STEPS = [
-  "Looking up business in Google Places",
-  "Reading reviews & local context",
-  "Drafting offer positioning",
-  "Generating components",
-  "Polishing copy & formatting",
+  "Loading business profile",
+  "Reading their website copy",
+  "Analyzing positioning & gaps",
+  "Writing landing page + lead capture",
+  "Drafting emails, SMS & booking page",
 ];
 
 export default function StudioPage() {
@@ -42,12 +25,11 @@ export default function StudioPage() {
 
   const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
   const [selected, setSelected] = useState<SavedBusiness | null>(null);
-  const [systemType, setSystemType] = useState<"lead" | "content">("lead");
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
-  const [tokens, setTokens] = useState<StreamToken[]>([]);
+  const [pack, setPack] = useState<AssetPack | null>(null);
   const [activeStep, setActiveStep] = useState(-1);
-  const outRef = useRef<HTMLDivElement>(null);
+  const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetch("/api/businesses")
@@ -64,56 +46,49 @@ export default function StudioPage() {
   }, [businessId]);
 
   useEffect(() => {
-    if (outRef.current && running) {
-      outRef.current.scrollTop = outRef.current.scrollHeight;
-    }
-  }, [tokens, running]);
+    return () => {
+      if (stepTimer.current) clearInterval(stepTimer.current);
+    };
+  }, []);
 
-  const start = () => {
+  const start = async () => {
     if (!selected || running) return;
     setRunning(true);
     setDone(false);
-    setTokens([]);
+    setPack(null);
     setActiveStep(0);
 
-    const blocks =
-      systemType === "lead"
-        ? buildLeadSystemTokens({
-            name: selected.name,
-            industry: selected.industry ?? "business",
-            city: selected.city ?? "your city",
-            reviewCount: selected.reviewCount,
-          })
-        : buildContentSystemTokens({
-            name: selected.name,
-            industry: selected.industry ?? "business",
-            city: selected.city ?? "your city",
-            reviewCount: selected.reviewCount,
-          });
-
+    // Animate the "thinking" steps while the real request is in flight.
     let s = 0;
-    const stepTimer = setInterval(() => {
+    stepTimer.current = setInterval(() => {
       s++;
-      if (s >= THINKING_STEPS.length) clearInterval(stepTimer);
-      else setActiveStep(s);
-    }, 700);
+      if (s < THINKING_STEPS.length - 1) setActiveStep(s);
+    }, 1600);
 
-    let i = 0;
-    const tick = () => {
-      if (i >= blocks.length) {
+    try {
+      const res = await fetch("/api/generate/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: selected.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to generate assets");
         setRunning(false);
-        setDone(true);
-        setActiveStep(THINKING_STEPS.length);
+        setActiveStep(-1);
         return;
       }
-      const b = blocks[i];
-      setTokens((prev) => [...prev, b]);
-      i++;
-      const delay =
-        b.kind === "h1" || b.kind === "section" ? 240 : b.kind === "li" ? 160 : 200;
-      setTimeout(tick, delay);
-    };
-    setTimeout(tick, 600);
+      setPack(data.assetPack as AssetPack);
+      setActiveStep(THINKING_STEPS.length);
+      setDone(true);
+      toast.success("Asset pack generated");
+    } catch {
+      toast.error("Failed to generate assets");
+      setActiveStep(-1);
+    } finally {
+      if (stepTimer.current) clearInterval(stepTimer.current);
+      setRunning(false);
+    }
   };
 
   return (
@@ -138,25 +113,15 @@ export default function StudioPage() {
               AI Studio
             </h1>
             <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14.5 }}>
-              One click generates a complete system, custom-written for the business.
+              One click generates a complete growth asset pack, custom-written for the business.
             </p>
           </div>
-          {done && (
+          {done && selected && (
             <div className="flex" style={{ gap: 8 }}>
-              <LgButton variant="secondary" icon="copy">
-                Copy
-              </LgButton>
-              <LgButton variant="secondary" icon="download">
-                Export PDF
-              </LgButton>
               <LgButton
                 variant="primary"
                 icon="file"
-                onClick={() =>
-                  router.push(
-                    selected ? `/proposals/new?businessId=${selected.id}` : "/proposals/new"
-                  )
-                }
+                onClick={() => router.push(`/proposals/new?businessId=${selected.id}`)}
               >
                 Use in proposal
               </LgButton>
@@ -193,73 +158,44 @@ export default function StudioPage() {
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <Eyebrow>System type</Eyebrow>
+                <Eyebrow>What you get</Eyebrow>
               </div>
-              <div
-                className="flex flex-col"
-                style={{ padding: 12, gap: 6 }}
-              >
-                {SYSTEM_TYPES.map((t) => {
-                  const active = systemType === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => setSystemType(t.id)}
-                      disabled={running}
-                      className="flex text-left"
+              <div className="flex flex-col" style={{ padding: 16, gap: 10 }}>
+                {[
+                  "Landing page copy (hero, offer, CTAs, trust signals)",
+                  "Lead capture + qualification + scoring",
+                  "7-day email nurture sequence",
+                  "SMS follow-up system",
+                  "Booking page + objection handling",
+                ].map((line) => (
+                  <div
+                    key={line}
+                    className="flex items-start"
+                    style={{ gap: 9, fontSize: 13, color: "var(--text-muted)" }}
+                  >
+                    <span
+                      className="grid place-items-center flex-none"
                       style={{
-                        gap: 12,
-                        padding: 12,
-                        alignItems: "flex-start",
-                        background: active ? "var(--accent-soft)" : "transparent",
-                        border: active
-                          ? "1.5px solid var(--accent)"
-                          : "1.5px solid transparent",
-                        borderRadius: "var(--radius)",
-                        cursor: running ? "not-allowed" : "pointer",
-                        color: "inherit",
-                        fontFamily: "inherit",
-                        opacity: running ? 0.6 : 1,
-                        transition: "all 0.15s",
+                        width: 16,
+                        height: 16,
+                        borderRadius: 99,
+                        background: "var(--accent-soft)",
+                        color: "var(--accent)",
+                        marginTop: 1,
                       }}
                     >
-                      <div
-                        style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: 99,
-                          marginTop: 2,
-                          flex: "none",
-                          border: `2px solid ${active ? "var(--accent)" : "var(--border-strong)"}`,
-                          background: active ? "var(--accent)" : "var(--surface)",
-                          boxShadow: active ? "inset 0 0 0 3px var(--surface)" : "none",
-                        }}
-                      />
-                      <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                          {t.label}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "var(--text-muted)",
-                            marginTop: 2,
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {t.desc}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                      <Check size={10} strokeWidth={3} />
+                    </span>
+                    {line}
+                  </div>
+                ))}
               </div>
             </LgCard>
 
             <LgCard padded={false}>
               <div style={{ padding: 16 }}>
                 <div className="relative">
-                  {!running && !done && (
+                  {!running && (
                     <div
                       aria-hidden
                       style={{
@@ -288,23 +224,13 @@ export default function StudioPage() {
                       overflow: "hidden",
                     }}
                   >
-                    {!running && !done && (
-                      <span
-                        aria-hidden
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.28) 50%, transparent 70%)",
-                          backgroundSize: "200% 100%",
-                          animation: "lg-shimmer-x 2.6s ease-in-out infinite",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    )}
                     {running ? <Spinner /> : null}
                     <span style={{ position: "relative" }}>
-                      {running ? "Generating…" : done ? "Regenerate" : "Generate system"}
+                      {running
+                        ? "Generating…"
+                        : done
+                        ? "Regenerate asset pack"
+                        : "Generate asset pack"}
                     </span>
                   </LgButton>
                 </div>
@@ -316,7 +242,7 @@ export default function StudioPage() {
                     color: "var(--text-subtle)",
                   }}
                 >
-                  ~50 seconds · 4o · grounded with Places data
+                  Grounded in their live website + Google Places data
                 </div>
               </div>
             </LgCard>
@@ -333,10 +259,7 @@ export default function StudioPage() {
                   <Eyebrow>Thinking</Eyebrow>
                   {done && <LgBadge tone="success">complete</LgBadge>}
                 </div>
-                <div
-                  className="flex flex-col"
-                  style={{ padding: 16, gap: 10 }}
-                >
+                <div className="flex flex-col" style={{ padding: 16, gap: 10 }}>
                   {THINKING_STEPS.map((s, i) => {
                     const isDone = i < activeStep || done;
                     const isActive = i === activeStep && !done;
@@ -392,7 +315,7 @@ export default function StudioPage() {
             )}
           </div>
 
-          {/* RIGHT: streaming output */}
+          {/* RIGHT: output */}
           <LgCard
             padded={false}
             style={{
@@ -412,12 +335,10 @@ export default function StudioPage() {
               <div className="flex items-center" style={{ gap: 10 }}>
                 <Sparkles size={14} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                  {systemType === "lead"
-                    ? "Lead Capture System"
-                    : "30-Day Content System"}{" "}
+                  Growth Asset Pack
                   {selected && (
                     <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
-                      · {selected.name}
+                      {" "}· {selected.name}
                     </span>
                   )}
                 </div>
@@ -435,7 +356,7 @@ export default function StudioPage() {
                       }}
                     />
                     <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>
-                      Streaming
+                      Generating
                     </span>
                   </>
                 )}
@@ -445,15 +366,12 @@ export default function StudioPage() {
                   </LgBadge>
                 )}
                 {!running && !done && (
-                  <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>
-                    Ready
-                  </span>
+                  <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
                 )}
               </div>
             </div>
 
             <div
-              ref={outRef}
               style={{
                 flex: 1,
                 padding: "32px 40px",
@@ -461,37 +379,17 @@ export default function StudioPage() {
                 background: "var(--surface)",
               }}
             >
-              {!running && !done && selected && (
-                <EmptyState business={selected} systemType={systemType} />
-              )}
               {!selected && (
                 <div
                   className="text-center"
-                  style={{
-                    padding: "64px 20px",
-                    color: "var(--text-muted)",
-                    fontSize: 14,
-                  }}
+                  style={{ padding: "64px 20px", color: "var(--text-muted)", fontSize: 14 }}
                 >
                   Save a business first to use AI Studio.
                 </div>
               )}
-              {tokens.map((b, i) => (
-                <StreamBlock key={i} b={b} />
-              ))}
-              {running && (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 9,
-                    height: 18,
-                    marginLeft: 2,
-                    background: "var(--accent)",
-                    verticalAlign: "text-bottom",
-                    animation: "lg-blink 0.9s steps(1, end) infinite",
-                  }}
-                />
-              )}
+              {selected && !running && !done && <EmptyState business={selected} />}
+              {running && <GeneratingState business={selected} />}
+              {done && pack && <AssetPackOutput pack={pack} />}
             </div>
           </LgCard>
         </div>
@@ -499,6 +397,239 @@ export default function StudioPage() {
     </>
   );
 }
+
+/* ---------- Asset pack renderer (theme-aware via CSS vars) ---------- */
+
+function AssetPackOutput({ pack }: { pack: AssetPack }) {
+  return (
+    <div className="lg-fade-in">
+      <Section title="Analysis">
+        <Para>{pack.businessSummary?.positioning}</Para>
+        <Label>Services</Label>
+        <Bullets items={pack.businessSummary?.services} />
+        <Label>Strengths</Label>
+        <Bullets items={pack.businessSummary?.strengths} />
+        <Label>Opportunities to fix</Label>
+        <Bullets items={pack.businessSummary?.opportunities} />
+        <Label>Local angle</Label>
+        <Para>{pack.businessSummary?.localAngle}</Para>
+      </Section>
+
+      <Section title="Landing Page Copy">
+        <Quote>{pack.landingPage?.heroHeadline}</Quote>
+        <Para>{pack.landingPage?.heroSubheadline}</Para>
+        <Label>Offer & positioning</Label>
+        <Para>{pack.landingPage?.offer}</Para>
+        <Label>Primary CTA</Label>
+        <Para>{pack.landingPage?.ctaPrimary}</Para>
+        <Label>Urgency framing</Label>
+        <Para>{pack.landingPage?.ctaUrgency}</Para>
+        <Label>Trust signals</Label>
+        <Bullets items={pack.landingPage?.trustSignals} />
+      </Section>
+
+      <Section title="Lead Capture & Qualification">
+        <Label>Qualification questions</Label>
+        <Bullets items={pack.leadCapture?.qualificationQuestions} />
+        <Label>Intake flow</Label>
+        <Numbered items={pack.leadCapture?.intakeFlow} />
+        <Label>Lead scoring</Label>
+        <Para>{pack.leadCapture?.leadScoring}</Para>
+        <Label>Thank-you page</Label>
+        <Para>{pack.leadCapture?.thankYouPage}</Para>
+      </Section>
+
+      <Section title="7-Day Email Sequence">
+        {pack.emailSequence?.map((e, i) => (
+          <div key={i} style={{ marginBottom: 18 }}>
+            <div
+              className="flex items-center"
+              style={{ gap: 8, marginBottom: 4 }}
+            >
+              <LgBadge tone="accent">Day {e.day}</LgBadge>
+              <span style={{ fontSize: 12, color: "var(--text-subtle)", textTransform: "capitalize" }}>
+                {e.purpose}
+              </span>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+              {e.subject}
+            </div>
+            <Para>{e.body}</Para>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="SMS Follow-Up System">
+        {pack.smsSequence?.map((m, i) => (
+          <div key={i} style={{ marginBottom: 14 }}>
+            <div className="flex items-center" style={{ gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                {m.label}
+              </span>
+              <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>· {m.timing}</span>
+            </div>
+            <Para>{m.message}</Para>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="Booking Page & Offer Positioning">
+        <Label>What to expect</Label>
+        <Bullets items={pack.bookingPage?.whatToExpect} />
+        <Label>Social proof structure</Label>
+        <Para>{pack.bookingPage?.socialProofStructure}</Para>
+        <Label>Objection handling</Label>
+        {pack.bookingPage?.objectionHandling?.map((o, i) => (
+          <div
+            key={i}
+            style={{
+              borderLeft: "2px solid var(--accent)",
+              paddingLeft: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+              {o.objection}
+            </div>
+            <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.55 }}>
+              {o.response}
+            </div>
+          </div>
+        ))}
+        <Label>Appointment framing</Label>
+        <Para>{pack.bookingPage?.appointmentFraming}</Para>
+      </Section>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ marginBottom: 36 }}>
+      <h2
+        style={{
+          margin: "0 0 14px",
+          fontSize: 12,
+          fontWeight: 700,
+          color: "var(--accent)",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11.5,
+        fontWeight: 600,
+        color: "var(--text-subtle)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        margin: "16px 0 6px",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Para({ children }: { children?: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <p
+      style={{
+        margin: "0 0 4px",
+        fontSize: 14.5,
+        lineHeight: 1.65,
+        color: "var(--text)",
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function Quote({ children }: { children?: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <blockquote
+      style={{
+        margin: "0 0 12px",
+        padding: "16px 20px",
+        borderLeft: "3px solid var(--accent)",
+        background: "var(--accent-soft)",
+        borderRadius: "0 var(--radius) var(--radius) 0",
+        fontSize: 19,
+        fontWeight: 600,
+        lineHeight: 1.4,
+        color: "var(--text)",
+      }}
+    >
+      {children}
+    </blockquote>
+  );
+}
+
+function Bullets({ items }: { items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start" style={{ gap: 12, padding: "6px 0" }}>
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 99,
+              background: "var(--accent)",
+              marginTop: 8,
+              flex: "none",
+            }}
+          />
+          <span style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--text)" }}>{item}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Numbered({ items }: { items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start" style={{ gap: 12, padding: "6px 0" }}>
+          <span
+            className="grid place-items-center flex-none"
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: 99,
+              background: "var(--accent-soft)",
+              color: "var(--accent)",
+              fontSize: 11,
+              fontWeight: 700,
+              marginTop: 1,
+            }}
+          >
+            {i + 1}
+          </span>
+          <span style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--text)" }}>{item}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- shared UI ---------- */
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -685,13 +816,7 @@ function BusinessPicker({
   );
 }
 
-function EmptyState({
-  business,
-  systemType,
-}: {
-  business: SavedBusiness;
-  systemType: "lead" | "content";
-}) {
+function EmptyState({ business }: { business: SavedBusiness }) {
   return (
     <div className="text-center" style={{ padding: "64px 20px", color: "var(--text-muted)" }}>
       <div
@@ -718,130 +843,27 @@ function EmptyState({
       >
         Ready to generate
       </h3>
-      <p style={{ margin: "0 auto", maxWidth: 420, fontSize: 14, lineHeight: 1.55 }}>
-        A complete{" "}
-        <strong style={{ color: "var(--text)" }}>
-          {systemType === "lead" ? "Lead Capture System" : "30-Day Content System"}
-        </strong>{" "}
-        for {business.name}. The output streams in real time, grounded in their actual reviews
-        and Places data.
+      <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, lineHeight: 1.55 }}>
+        A complete growth asset pack for <strong style={{ color: "var(--text)" }}>{business.name}</strong> —
+        landing page copy, lead capture, a 7-day email sequence, SMS follow-ups, and booking page
+        positioning, written from their real website and Places data.
       </p>
     </div>
   );
 }
 
-function StreamBlock({ b }: { b: StreamToken }) {
-  if (b.kind === "h1") {
-    return (
-      <h1
-        className="lg-fade-in"
-        style={{
-          margin: "0 0 8px",
-          fontFamily: "var(--font-sans), sans-serif",
-          fontSize: 32,
-          fontWeight: 800,
-          letterSpacing: "-0.025em",
-          color: "var(--text)",
-        }}
-      >
-        {b.text}
-      </h1>
-    );
-  }
-  if (b.kind === "subtitle") {
-    return (
-      <p
-        className="lg-fade-in"
-        style={{
-          margin: "0 0 28px",
-          fontSize: 15,
-          color: "var(--text-muted)",
-        }}
-      >
-        {b.text}
-      </p>
-    );
-  }
-  if (b.kind === "section") {
-    return (
-      <h2
-        className="lg-fade-in"
-        style={{
-          margin: "32px 0 12px",
-          fontSize: 12,
-          fontWeight: 700,
-          color: "var(--accent)",
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}
-      >
-        {b.text}
-      </h2>
-    );
-  }
-  if (b.kind === "p") {
-    return (
-      <p
-        className="lg-fade-in"
-        style={{
-          margin: "0 0 16px",
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: "var(--text)",
-        }}
-      >
-        {b.text}
-      </p>
-    );
-  }
-  if (b.kind === "quote") {
-    return (
-      <blockquote
-        className="lg-fade-in"
-        style={{
-          margin: "0 0 16px",
-          padding: "16px 20px",
-          borderLeft: "3px solid var(--accent)",
-          background: "var(--accent-soft)",
-          borderRadius: "0 var(--radius) var(--radius) 0",
-          fontSize: 18,
-          fontStyle: "italic",
-          lineHeight: 1.45,
-          color: "var(--text)",
-          fontWeight: 500,
-        }}
-      >
-        &quot;{b.text}&quot;
-      </blockquote>
-    );
-  }
-  if (b.kind === "li") {
-    return (
-      <div
-        className="lg-fade-in flex items-start"
-        style={{ gap: 12, padding: "8px 0" }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: 99,
-            background: "var(--accent)",
-            marginTop: 9,
-            flex: "none",
-          }}
-        />
-        <span
-          style={{
-            fontSize: 14.5,
-            lineHeight: 1.55,
-            color: "var(--text)",
-          }}
-        >
-          {b.text}
-        </span>
+function GeneratingState({ business }: { business: SavedBusiness | null }) {
+  return (
+    <div className="text-center" style={{ padding: "72px 20px", color: "var(--text-muted)" }}>
+      <div className="mx-auto" style={{ width: 22, marginBottom: 20 }}>
+        <Spinner />
       </div>
-    );
-  }
-  return null;
+      <p style={{ fontSize: 14 }}>
+        Analyzing {business?.name ?? "the business"} and writing custom assets…
+      </p>
+      <p style={{ fontSize: 12.5, color: "var(--text-subtle)", marginTop: 6 }}>
+        This usually takes 15–40 seconds.
+      </p>
+    </div>
+  );
 }
