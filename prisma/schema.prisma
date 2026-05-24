@@ -6,8 +6,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection (Neon -pooler host) used for runtime queries.
+  url       = env("DATABASE_URL")
+  // Direct, non-pooled connection used for migrations. Prisma Migrate needs a
+  // session it can hold an advisory lock on, which the PgBouncer pooler can't do.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
