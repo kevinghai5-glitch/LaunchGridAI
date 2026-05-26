@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Sparkles, Check, FileText, Plus, ArrowRight, Star } from "lucide-react";
-import { StatCard } from "@/components/dashboard/StatCard";
+import { Eye, Sparkles, Check, FileText, TriangleAlert, Radar, ArrowUpRight } from "lucide-react";
 import { LgButton } from "@/components/ui/lg-button";
-import { LgBadge } from "@/components/ui/lg-badge";
-import { LgCard } from "@/components/ui/lg-card";
+import { Surface, PanelHeader, Spark, useCountUp } from "@/components/dashboard/os";
 import { PIPELINE_STAGES } from "@/lib/stages";
 
 interface BusinessRow {
@@ -28,404 +26,331 @@ interface Props {
   recentBusinesses: BusinessRow[];
 }
 
+const SPARK_MRR = [3, 4, 3, 5, 6, 5, 7, 8, 7, 9, 11, 10, 12, 14, 13, 15, 17, 16, 18];
+const SPARK_PIPE = [12, 14, 13, 15, 14, 17, 18, 17, 20, 22, 21, 24, 26, 25, 28, 27, 30, 32, 31];
+
 const ACTIVITY = [
-  { Icon: Eye, tone: "accent" as const, txt: "Maya Holcomb opened the Cedar & Sage proposal", time: "2h ago" },
-  { Icon: Sparkles, tone: "accent" as const, txt: "Generated Content System for Bluebird HVAC", time: "5h ago" },
-  { Icon: Check, tone: "success" as const, txt: "Dr. Lena Park signed — Northgate Family Dental → Won ($497/mo)", time: "yesterday" },
-  { Icon: FileText, tone: "neutral" as const, txt: "Drafted proposal for Iron Forge Strength Co.", time: "2 days ago" },
-  { Icon: Plus, tone: "neutral" as const, txt: "Added 4 new businesses in Tampa, FL", time: "3 days ago" },
+  { Icon: Eye, tone: "accent", actor: "Maya Holcomb", what: "opened the Cedar & Sage proposal · 3rd view", when: "just now" },
+  { Icon: Sparkles, tone: "accent", actor: "Studio", what: "shipped Growth Asset Pack for Bluebird HVAC", when: "2m" },
+  { Icon: Check, tone: "money", actor: "Dr. Lena Park", what: "signed Northgate Family Dental · $1,500/mo", when: "14m", highlight: true },
+  { Icon: TriangleAlert, tone: "warn", actor: "Radar", what: "flagged Tiger Lily Day Spa · 94 opportunity score", when: "38m" },
+  { Icon: FileText, tone: "neutral", actor: "You", what: "drafted proposal for Iron Forge Strength Co.", when: "1h" },
+  { Icon: Radar, tone: "neutral", actor: "Radar", what: "scanned 247 businesses across Tampa, FL", when: "2h" },
+] as const;
+
+const OPPORTUNITIES = [
+  { score: 94, name: "Tiger Lily Day Spa", city: "Charleston, SC", weakness: "No online booking, 4-day review gap" },
+  { score: 89, name: "Magnolia Wellness Retreat", city: "Charleston, SC", weakness: "Stale Instagram, weak lead capture" },
+  { score: 86, name: "Lowcountry Bodyworks", city: "Charleston, SC", weakness: "No follow-up sequence detected" },
 ];
 
-const QUICK = [
-  { num: "01", t: "Find 5 businesses", d: "Pick an industry and city you're targeting.", href: "/businesses" },
-  { num: "02", t: "Generate a system", d: "Lead funnel or 30-day content plan.", href: "/studio" },
-  { num: "03", t: "Send the proposal", d: "Pick a preset price and share a public link.", href: "/proposals/new" },
+const GENERATIONS = [
+  { title: "Growth Asset Pack", sub: "Cedar & Sage Wellness Spa · 5 docs", time: "14m", closed: false },
+  { title: "Growth Asset Pack", sub: "Bluebird HVAC · 5 docs", time: "2h", closed: false },
+  { title: "Proposal draft", sub: "Iron Forge Strength Co.", time: "yesterday", closed: false },
+  { title: "Growth Asset Pack", sub: "Northgate Family Dental", time: "2d", closed: true },
 ];
+
+const TONE_C: Record<string, string> = {
+  accent: "var(--accent)",
+  money: "var(--money)",
+  warn: "var(--warn)",
+  neutral: "var(--text-3)",
+};
 
 export function DashboardBody({
   firstName,
   totalMRR,
   pipelineMRR,
   wonCount,
-  businessCount,
-  proposalCount,
   stageCounts,
-  recentBusinesses,
 }: Props) {
-  const maxCount = Math.max(
-    1,
-    ...PIPELINE_STAGES.map((s) => stageCounts[s.id] || 0)
-  );
+  const animMRR = useCountUp(totalMRR, 1100);
+  const animPipe = useCountUp(pipelineMRR, 1100);
 
   return (
-    <div style={{ padding: "32px 40px 48px", maxWidth: 1280, margin: "0 auto" }}>
-      <header
-        className="flex justify-between items-end"
-        style={{ marginBottom: 28 }}
-      >
-        <div>
-          <div style={{ fontSize: 13, color: "var(--text-subtle)", marginBottom: 6 }}>
-            Welcome back, {firstName}
-          </div>
-          <h1
-            style={{
-              margin: 0,
-              fontFamily: "var(--font-sans), sans-serif",
-              fontSize: 30,
-              fontWeight: 700,
-              letterSpacing: "-0.025em",
-              color: "var(--text)",
-            }}
-          >
-            Your agency, in motion.
-          </h1>
+    <div style={{ padding: "40px 56px 80px", maxWidth: 1280, margin: "0 auto" }}>
+      {/* Editorial hero */}
+      <div className="rise" style={{ marginBottom: 48 }}>
+        <div style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 10 }}>
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </div>
-        <div className="flex" style={{ gap: 8 }}>
+        <h1
+          className="lg-display"
+          style={{
+            margin: 0,
+            fontSize: 38,
+            fontWeight: 500,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.15,
+            maxWidth: 640,
+            color: "var(--text)",
+          }}
+        >
+          Good morning, {firstName}.
+          <br />
+          <span style={{ color: "var(--text-3)" }}>
+            Your acquisition engine is running.
+          </span>
+        </h1>
+        <div className="flex" style={{ gap: 10, marginTop: 28 }}>
           <Link href="/businesses">
-            <LgButton variant="secondary" icon="search">
-              Find businesses
+            <LgButton variant="primary" icon="search">
+              Scan for opportunities
             </LgButton>
           </Link>
           <Link href="/studio">
-            <LgButton variant="primary" icon="sparkles">
-              New system
+            <LgButton variant="ghost" icon="sparkles">
+              Open Studio
             </LgButton>
           </Link>
         </div>
-      </header>
+      </div>
 
+      {/* Headline numbers */}
       <div
-        className="lg-rise grid"
-        style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}
+        className="rise grid"
+        style={{ gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 40 }}
       >
-        <StatCard
-          label="Monthly recurring"
-          value={totalMRR}
-          prefix="$"
-          sub={`${wonCount} active clients`}
-          trend={wonCount > 0 ? `+$${(totalMRR / Math.max(wonCount, 1)).toFixed(0)} avg` : "—"}
-          tone="accent"
+        <MetricCard
+          label="Active MRR"
+          value={`$${Math.round(animMRR).toLocaleString()}`}
+          unit="/mo"
+          delta={wonCount > 0 ? `${wonCount} retainers active` : "No retainers yet"}
+          spark={SPARK_MRR}
+          accent="money"
+          sub="Recurring · auto-renew"
         />
-        <StatCard
-          label="Pipeline value"
-          value={pipelineMRR}
-          prefix="$"
-          sub="Deals in motion"
-        />
-        <StatCard
-          label="Saved businesses"
-          value={businessCount}
-          sub="Across your cities"
-        />
-        <StatCard
-          label="Proposals sent"
-          value={proposalCount}
-          sub="Last 30 days"
+        <MetricCard
+          label="In pipeline"
+          value={`$${Math.round(animPipe).toLocaleString()}`}
+          unit="/mo"
+          delta="Deals warming"
+          spark={SPARK_PIPE}
+          accent="accent"
+          sub="Awaiting reply · negotiating"
         />
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 20 }}>
-        <LgCard padded={false}>
-          <div
-            className="flex justify-between items-center"
-            style={{
-              padding: "20px 24px 16px",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-                Recent activity
-              </h3>
-              <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
-                Last 7 days
-              </div>
-            </div>
-            <LgButton variant="ghost" size="sm" iconRight="arrow">
-              View all
-            </LgButton>
-          </div>
-          <div style={{ padding: "8px 8px 12px" }}>
+      {/* Activity + Opportunities */}
+      <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 20, marginBottom: 40 }}>
+        <Surface padded={0}>
+          <PanelHeader
+            title="Activity"
+            sub="Last 24 hours"
+            right={
+              <LgButton variant="ghost" size="sm" iconRight="arrow">
+                All events
+              </LgButton>
+            }
+          />
+          <div style={{ padding: "6px 0 14px" }}>
             {ACTIVITY.map((a, i) => (
               <div
                 key={i}
-                className="flex items-center"
-                style={{
-                  gap: 14,
-                  padding: "12px 16px",
-                  borderRadius: "var(--radius)",
-                }}
+                className="row-hover grid items-center"
+                style={{ gridTemplateColumns: "32px 1fr auto", gap: 14, padding: "12px 24px" }}
               >
                 <div
-                  className="grid place-items-center flex-none"
+                  className="grid place-items-center"
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background:
-                      a.tone === "success"
-                        ? "var(--success-soft)"
-                        : a.tone === "accent"
-                        ? "var(--accent-soft)"
-                        : "var(--surface-active)",
-                    color:
-                      a.tone === "success"
-                        ? "var(--success)"
-                        : a.tone === "accent"
-                        ? "var(--accent)"
-                        : "var(--text-muted)",
+                    width: 28,
+                    height: 28,
+                    borderRadius: 99,
+                    background: "rgba(255,255,255,0.03)",
+                    color: TONE_C[a.tone],
                   }}
                 >
-                  <a.Icon size={15} strokeWidth={1.75} />
+                  <a.Icon size={13} strokeWidth={1.75} />
                 </div>
-                <div style={{ flex: 1, fontSize: 14, color: "var(--text)" }}>{a.txt}</div>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--text-subtle)",
-                    fontFamily: "var(--font-mono), monospace",
-                  }}
-                >
-                  {a.time}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+                    <span style={{ color: "var(--text)", fontWeight: 500 }}>{a.actor}</span> {a.what}
+                  </div>
                 </div>
+                <span style={{ fontSize: 12, color: "var(--text-3)", whiteSpace: "nowrap" }}>
+                  {a.when}
+                </span>
               </div>
             ))}
           </div>
-        </LgCard>
+        </Surface>
 
-        <LgCard padded={false}>
-          <div
-            style={{
-              padding: "20px 24px 16px",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-              Quick start
-            </h3>
-            <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 2 }}>
-              Three clicks to your next deal
-            </div>
-          </div>
-          <div style={{ padding: 16 }}>
-            {QUICK.map((q) => (
+        <Surface padded={0}>
+          <PanelHeader title="Opportunities" sub="Auto-detected this week" />
+          <div style={{ padding: "6px 16px 16px" }}>
+            {OPPORTUNITIES.map((o) => (
               <Link
-                key={q.num}
-                href={q.href}
-                className="flex items-center w-full"
-                style={{
-                  gap: 14,
-                  padding: "14px 12px",
-                  background: "transparent",
-                  border: "none",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  borderRadius: "var(--radius)",
-                  color: "inherit",
-                  textDecoration: "none",
-                  transition: "background 0.15s",
-                }}
-                onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.background = "var(--surface-hover)")
-                }
-                onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.background = "transparent")
-                }
+                key={o.name}
+                href="/businesses"
+                className="row-hover flex items-center"
+                style={{ gap: 14, padding: "12px 10px", borderRadius: 10, textDecoration: "none", color: "inherit" }}
               >
                 <div
+                  className="grid place-items-center"
                   style={{
-                    fontFamily: "var(--font-mono), monospace",
-                    fontSize: 11,
-                    color: "var(--accent)",
-                    fontWeight: 600,
-                    width: 24,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid var(--line)",
                   }}
                 >
-                  {q.num}
+                  <span className="lg-mono tnum" style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                    {o.score}
+                  </span>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-                    {q.t}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{o.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                    {o.city} · {o.weakness}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{q.d}</div>
                 </div>
-                <ArrowRight
-                  size={14}
-                  strokeWidth={1.75}
-                  style={{ color: "var(--text-subtle)" }}
-                />
+                <ArrowUpRight size={13} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
               </Link>
             ))}
           </div>
-        </LgCard>
+        </Surface>
       </div>
 
-      <div
-        className="grid"
-        style={{ marginTop: 28, gridTemplateColumns: "1fr 1fr", gap: 20 }}
-      >
-        <LgCard padded={false}>
-          <div
-            className="flex justify-between items-center"
-            style={{
-              padding: "20px 24px 16px",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-              Top saved businesses
-            </h3>
-            <Link href="/businesses">
-              <LgButton variant="ghost" size="sm" iconRight="arrow">
-                Manage
-              </LgButton>
-            </Link>
-          </div>
-          <div>
-            {recentBusinesses.length === 0 && (
-              <div style={{ padding: 24, fontSize: 13.5, color: "var(--text-muted)" }}>
-                No businesses yet.{" "}
-                <Link href="/businesses" style={{ color: "var(--accent)" }}>
-                  Find some →
-                </Link>
-              </div>
-            )}
-            {recentBusinesses.map((b, i) => (
+      {/* Recent generations + Pipeline */}
+      <div className="grid" style={{ gridTemplateColumns: "1fr 1.2fr", gap: 20 }}>
+        <Surface padded={0}>
+          <PanelHeader
+            title="Recent generations"
+            sub="Studio output"
+            right={
+              <Link href="/studio">
+                <LgButton variant="ghost" size="sm" iconRight="arrow">
+                  Studio
+                </LgButton>
+              </Link>
+            }
+          />
+          <div style={{ padding: "6px 14px 16px", display: "flex", flexDirection: "column", gap: 4 }}>
+            {GENERATIONS.map((g, i) => (
               <div
-                key={b.id}
-                className="flex justify-between items-center"
-                style={{
-                  padding: "14px 24px",
-                  borderTop: i === 0 ? "none" : "1px solid var(--border)",
-                }}
+                key={i}
+                className="row-hover flex items-center"
+                style={{ gap: 12, padding: "11px 10px", borderRadius: 8 }}
               >
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      color: "var(--text)",
-                    }}
-                  >
-                    {b.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12.5,
-                      color: "var(--text-muted)",
-                      marginTop: 2,
-                    }}
-                  >
-                    {b.industry} · {b.city}
-                  </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{g.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{g.sub}</div>
                 </div>
-                <div className="flex items-center" style={{ gap: 16 }}>
-                  {b.rating > 0 && (
-                    <span
-                      className="inline-flex items-center"
-                      style={{
-                        gap: 3,
-                        color: "color-mix(in oklch, var(--warning) 70%, black)",
-                      }}
-                    >
-                      <Star size={12} fill="currentColor" stroke="none" />
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          fontSize: 12.5,
-                          color: "var(--text)",
-                        }}
-                      >
-                        {b.rating.toFixed(1)}
-                      </span>
-                    </span>
-                  )}
-                  <LgBadge tone="neutral">{b.status}</LgBadge>
-                </div>
+                {g.closed && (
+                  <span style={{ fontSize: 11.5, color: "var(--money)", fontWeight: 500 }}>Signed</span>
+                )}
+                <span style={{ fontSize: 11.5, color: "var(--text-3)", minWidth: 60, textAlign: "right" }}>
+                  {g.time}
+                </span>
               </div>
             ))}
           </div>
-        </LgCard>
+        </Surface>
 
-        <LgCard padded={false}>
-          <div
-            className="flex justify-between items-center"
+        <Surface padded={0}>
+          <PanelHeader
+            title="Pipeline"
+            sub="By stage"
+            right={
+              <Link href="/deals">
+                <LgButton variant="ghost" size="sm" iconRight="arrow">
+                  Open
+                </LgButton>
+              </Link>
+            }
+          />
+          <div style={{ padding: "12px 22px 22px" }}>
+            <PipelineFlow stageCounts={stageCounts} />
+          </div>
+        </Surface>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  unit,
+  delta,
+  spark,
+  accent,
+  sub,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  delta: string;
+  spark: number[];
+  accent: "money" | "accent";
+  sub: string;
+}) {
+  const c = accent === "money" ? "var(--money)" : "var(--accent)";
+  return (
+    <Surface padded={0} style={{ padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>{label}</div>
+      <div
+        className="lg-display tnum"
+        style={{ fontSize: 44, fontWeight: 500, letterSpacing: "-0.035em", lineHeight: 1, color: "var(--text)" }}
+      >
+        {value}
+        <span style={{ fontSize: 16, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>{unit}</span>
+      </div>
+      <div className="flex items-end justify-between" style={{ gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 12.5, color: c, fontWeight: 500 }}>{delta}</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 3 }}>{sub}</div>
+        </div>
+        <Spark data={spark} color={c} w={120} h={32} />
+      </div>
+    </Surface>
+  );
+}
+
+function PipelineFlow({ stageCounts }: { stageCounts: Record<string, number> }) {
+  const counts = PIPELINE_STAGES.map((s) => stageCounts[s.id] || 0);
+  const max = Math.max(...counts, 1);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {PIPELINE_STAGES.map((s, i) => (
+        <Link
+          key={s.id}
+          href="/deals"
+          className="row-hover grid items-center"
+          style={{
+            gridTemplateColumns: "120px 1fr 60px",
+            gap: 16,
+            padding: "10px 10px",
+            borderRadius: 8,
+            textDecoration: "none",
+            color: "inherit",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--text-2)" }}>{s.label}</span>
+          <div className="bar">
+            <span
+              style={{
+                transform: `scaleX(${counts[i] / max || 0.04})`,
+                animationDelay: `${i * 0.08}s`,
+                background: s.id === "WON" ? "var(--money)" : "var(--accent)",
+              }}
+            />
+          </div>
+          <span
+            className="lg-mono tnum"
             style={{
-              padding: "20px 24px 16px",
-              borderBottom: "1px solid var(--border)",
+              fontSize: 13,
+              fontWeight: 500,
+              textAlign: "right",
+              color: s.id === "WON" ? "var(--money)" : "var(--text)",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-              Pipeline this week
-            </h3>
-            <Link href="/deals">
-              <LgButton variant="ghost" size="sm" iconRight="arrow">
-                Open Kanban
-              </LgButton>
-            </Link>
-          </div>
-          <div style={{ padding: 24 }}>
-            <div
-              className="flex items-end"
-              style={{ gap: 12, height: 140 }}
-            >
-              {PIPELINE_STAGES.map((s) => {
-                const count = stageCounts[s.id] || 0;
-                const h = (count / maxCount) * 100;
-                return (
-                  <div
-                    key={s.id}
-                    className="flex flex-col items-center"
-                    style={{ flex: 1, gap: 6 }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text-subtle)",
-                        fontFamily: "var(--font-mono), monospace",
-                      }}
-                    >
-                      {count}
-                    </div>
-                    <div
-                      className="flex items-end"
-                      style={{ width: "100%", flex: 1 }}
-                    >
-                      <div
-                        style={{
-                          width: "100%",
-                          height: `${Math.max(h, 6)}%`,
-                          background:
-                            s.id === "WON" ? "var(--success)" : "var(--accent)",
-                          opacity:
-                            s.id === "SAVED" ? 0.45 : s.id === "WON" ? 1 : 0.7,
-                          borderRadius: "6px 6px 2px 2px",
-                          transition: "height 0.4s cubic-bezier(0.2, 0.7, 0.3, 1)",
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10.5,
-                        color: "var(--text-muted)",
-                        textAlign: "center",
-                        fontWeight: 500,
-                        height: 24,
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      {s.label}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </LgCard>
-      </div>
+            {counts[i]}
+          </span>
+        </Link>
+      ))}
     </div>
   );
 }

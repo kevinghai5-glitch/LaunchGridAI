@@ -30,19 +30,13 @@ export const metadata: Metadata = {
   },
 };
 
-// Avoid FOUC: pick stored theme before paint. Default dark.
-const themeInitScript = `(function(){try{var t=localStorage.getItem('lg-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
+    <html lang="en" data-theme="dark">
       <body className={`${manrope.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         <Providers>
           {children}

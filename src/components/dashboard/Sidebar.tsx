@@ -4,54 +4,111 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
-  Search,
+  Target,
   Sparkles,
   FileText,
   Columns3,
-  ChevronRight,
+  ChevronDown,
+  Settings,
+  type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
-const NAV_ITEMS = [
-  { id: "dashboard", label: "Home", icon: Home, href: "/dashboard" },
-  { id: "businesses", label: "Find Businesses", icon: Search, href: "/businesses" },
-  { id: "studio", label: "AI Studio", icon: Sparkles, href: "/studio" },
-  { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals" },
-  { id: "deals", label: "Pipeline", icon: Columns3, href: "/deals" },
+const NAV_ITEMS: { id: string; label: string; icon: LucideIcon; href: string; hint: string }[] = [
+  { id: "dashboard", label: "Home", icon: Home, href: "/dashboard", hint: "H" },
+  { id: "businesses", label: "Opportunities", icon: Target, href: "/businesses", hint: "F" },
+  { id: "studio", label: "Studio", icon: Sparkles, href: "/studio", hint: "S" },
+  { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", hint: "P" },
+  { id: "deals", label: "Pipeline", icon: Columns3, href: "/deals", hint: "K" },
 ];
 
 interface SidebarProps {
   totalMRR: number;
+  pipelineMRR: number;
   userName: string;
   userPlan: string;
 }
 
-export function Sidebar({ totalMRR, userName, userPlan }: SidebarProps) {
+export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarProps) {
   const pathname = usePathname();
-  const initials = userName
-    .split(" ")
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase())
-    .join("");
+  const initials =
+    userName
+      .split(" ")
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase())
+      .join("") || "U";
+  const firstName = userName.split(" ")[0] || "Operator";
 
   return (
     <aside
       className="flex flex-col flex-none sticky top-0"
       style={{
-        width: 232,
-        background: "var(--sidebar)",
-        borderRight: "1px solid var(--border)",
-        padding: "18px 12px",
+        width: 240,
+        background: "var(--bg-deep)",
+        borderRight: "1px solid var(--line)",
+        padding: "20px 16px 18px",
         height: "100vh",
       }}
     >
-      <Link
-        href="/"
-        className="cursor-pointer text-left"
-        style={{ padding: "4px 8px", marginBottom: 20 }}
+      <div style={{ padding: "2px 6px 4px", marginBottom: 22 }}>
+        <Link href="/" aria-label="LaunchGrid OS home">
+          <Logo />
+        </Link>
+      </div>
+
+      {/* workspace switcher */}
+      <button
+        className="flex items-center w-full text-left"
+        style={{
+          gap: 10,
+          padding: "9px 10px",
+          marginBottom: 24,
+          background: "transparent",
+          border: "1px solid var(--line)",
+          borderRadius: 10,
+          cursor: "pointer",
+          transition: "background var(--t)",
+          fontFamily: "inherit",
+          color: "inherit",
+        }}
+        onMouseEnter={(e) =>
+          ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)")
+        }
+        onMouseLeave={(e) =>
+          ((e.currentTarget as HTMLElement).style.background = "transparent")
+        }
       >
-        <Logo />
-      </Link>
+        <div
+          className="grid place-items-center"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            background: "oklch(0.50 0.10 60)",
+            color: "white",
+            fontSize: 10,
+            fontWeight: 700,
+          }}
+        >
+          {initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: "var(--text)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {firstName}&apos;s Workspace
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-3)" }}>Workspace</div>
+        </div>
+        <ChevronDown size={11} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
+      </button>
 
       <nav className="flex flex-col flex-1" style={{ gap: 1 }}>
         {NAV_ITEMS.map((item) => {
@@ -63,150 +120,111 @@ export function Sidebar({ totalMRR, userName, userPlan }: SidebarProps) {
             <Link
               key={item.id}
               href={item.href}
-              className="flex items-center relative whitespace-nowrap"
+              className="flex items-center whitespace-nowrap"
               style={{
-                gap: 10,
-                padding: "8px 10px",
+                gap: 11,
+                padding: "8px 11px",
                 fontSize: 13.5,
                 fontWeight: 500,
-                background: active ? "var(--surface)" : "transparent",
-                color: active ? "var(--text)" : "var(--text-muted)",
-                border: "none",
-                borderRadius: "var(--radius-sm)",
+                background: active ? "rgba(255,255,255,0.04)" : "transparent",
+                color: active ? "var(--text)" : "var(--text-2)",
+                border: "1px solid transparent",
+                borderRadius: 8,
                 textDecoration: "none",
-                boxShadow: active ? "var(--shadow-sm)" : "none",
-                transition: "background 0.2s, color 0.2s, box-shadow 0.2s",
+                transition: "background var(--t), color var(--t)",
               }}
               onMouseEnter={(e) => {
-                if (!active)
-                  (e.currentTarget as HTMLElement).style.background =
-                    "var(--surface-active)";
+                if (!active) {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                }
               }}
               onMouseLeave={(e) => {
-                if (!active)
+                if (!active) {
                   (e.currentTarget as HTMLElement).style.background = "transparent";
+                  (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+                }
               }}
             >
-              {active && (
-                <span
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    left: -8,
-                    top: 8,
-                    bottom: 8,
-                    width: 3,
-                    background: "var(--accent)",
-                    borderRadius: "0 3px 3px 0",
-                    transformOrigin: "left center",
-                    animation: "lg-active-bar 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both",
-                    boxShadow:
-                      "0 0 12px color-mix(in oklch, var(--accent) 50%, transparent)",
-                  }}
-                />
-              )}
               <Icon
                 size={15}
-                strokeWidth={1.75}
-                style={{
-                  color: active ? "var(--accent)" : "currentColor",
-                  transition: "color 0.2s",
-                  flex: "none",
-                }}
+                strokeWidth={1.6}
+                style={{ color: active ? "var(--text)" : "var(--text-3)", flex: "none" }}
               />
-              <span>{item.label}</span>
+              <span style={{ flex: 1 }}>{item.label}</span>
+              <span
+                className="lg-mono"
+                style={{ fontSize: 10, color: "var(--text-4)", opacity: 0.7 }}
+              >
+                {item.hint}
+              </span>
             </Link>
           );
         })}
       </nav>
 
+      {/* Active MRR */}
+      <div style={{ padding: "16px 4px 12px", borderTop: "1px solid var(--line)" }}>
+        <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 6 }}>Active MRR</div>
+        <div
+          className="lg-display tnum"
+          style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", color: "var(--text)" }}
+        >
+          ${totalMRR.toLocaleString()}
+          <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500, marginLeft: 3 }}>
+            /mo
+          </span>
+        </div>
+        <div
+          className="flex justify-between"
+          style={{ marginTop: 10, fontSize: 11.5 }}
+        >
+          <span style={{ color: "var(--text-3)" }}>In pipeline</span>
+          <span className="lg-mono tnum" style={{ color: "var(--text-2)", fontWeight: 500 }}>
+            ${pipelineMRR.toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* profile row */}
       <div
-        className="flex flex-col"
-        style={{ gap: 12, paddingTop: 14, borderTop: "1px solid var(--border)" }}
+        className="flex items-center"
+        style={{
+          padding: "12px 4px 0",
+          borderTop: "1px solid var(--line)",
+          gap: 10,
+          cursor: "pointer",
+        }}
       >
         <div
+          className="grid place-items-center"
           style={{
-            padding: "12px",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
+            width: 26,
+            height: 26,
+            borderRadius: 99,
+            background: "oklch(0.45 0.08 250)",
+            color: "white",
+            fontSize: 11,
+            fontWeight: 600,
           }}
         >
-          <div
-            style={{
-              fontSize: 10.5,
-              fontWeight: 700,
-              color: "var(--text-subtle)",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-            }}
-          >
-            MRR this month
-          </div>
-          <div
-            style={{
-              fontFamily: "var(--font-sans), sans-serif",
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: "-0.022em",
-              marginTop: 2,
-              color: "var(--text)",
-            }}
-          >
-            ${totalMRR.toLocaleString()}
-            <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500 }}>
-              /mo
-            </span>
-          </div>
+          {initials}
         </div>
-        <button
-          className="flex items-center w-full"
-          style={{
-            gap: 10,
-            padding: "8px 6px",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            color: "var(--text)",
-          }}
-        >
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div
-            className="grid place-items-center"
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 99,
-              background: "color-mix(in oklch, var(--accent) 30%, var(--accent-soft))",
-              color: "var(--accent)",
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: "var(--font-sans), sans-serif",
-              flex: "none",
+              fontSize: 12.5,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
-            {initials || "U"}
+            {userName}
           </div>
-          <div className="flex-1 min-w-0 text-left">
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {userName}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{userPlan}</div>
-          </div>
-          <ChevronRight
-            size={12}
-            strokeWidth={1.75}
-            style={{ color: "var(--text-subtle)" }}
-          />
-        </button>
+          <div style={{ fontSize: 11, color: "var(--text-3)" }}>{userPlan}</div>
+        </div>
+        <Settings size={13} strokeWidth={1.6} style={{ color: "var(--text-3)" }} />
       </div>
     </aside>
   );

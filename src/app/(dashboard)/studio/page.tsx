@@ -93,27 +93,28 @@ export default function StudioPage() {
 
   return (
     <>
-      <TopBar title="AI Studio" />
-      <div style={{ padding: "32px 40px 48px", maxWidth: 1320, margin: "0 auto" }}>
+      <TopBar title="Studio" subtitle={selected ? selected.name : "AI generation lab"} />
+      <div style={{ padding: "40px 56px 80px", maxWidth: 1500, margin: "0 auto" }}>
         <header
           className="flex justify-between items-end"
-          style={{ marginBottom: 24 }}
+          style={{ marginBottom: 32 }}
         >
-          <div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 6 }}>Studio · for</div>
             <h1
+              className="lg-display"
               style={{
                 margin: 0,
-                fontFamily: "var(--font-sans), sans-serif",
-                fontSize: 30,
-                fontWeight: 700,
+                fontSize: 26,
+                fontWeight: 500,
                 letterSpacing: "-0.025em",
                 color: "var(--text)",
               }}
             >
-              AI Studio
+              {selected ? selected.name : "Save a business to begin"}
             </h1>
-            <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14.5 }}>
-              One click generates a complete growth asset pack, custom-written for the business.
+            <p style={{ margin: "8px 0 0", color: "var(--text-3)", fontSize: 13 }}>
+              Generates 5 full, business-specific documents — a Growth Asset Pack you can sell.
             </p>
           </div>
           {done && selected && (
@@ -189,6 +190,59 @@ export default function StudioPage() {
                     {line}
                   </div>
                 ))}
+              </div>
+            </LgCard>
+
+            <LgCard padded={false}>
+              <div
+                style={{
+                  padding: "16px 20px 12px",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <Eyebrow>Deal economics</Eyebrow>
+              </div>
+              <div className="flex flex-col" style={{ padding: 14, gap: 10 }}>
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid var(--line)",
+                  }}
+                >
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 6 }}>Setup fee</div>
+                  <div
+                    className="lg-display tnum"
+                    style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--text)" }}
+                  >
+                    $6,500
+                    <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>one-time</span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 10,
+                    background: "oklch(0.55 0.10 158 / 0.08)",
+                    border: "1px solid oklch(0.55 0.10 158 / 0.18)",
+                  }}
+                >
+                  <div style={{ fontSize: 11.5, color: "oklch(0.78 0.10 158)", marginBottom: 6 }}>Monthly retainer</div>
+                  <div
+                    className="lg-display tnum"
+                    style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--money)" }}
+                  >
+                    $1k–$2k
+                    <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>/mo</span>
+                  </div>
+                </div>
+                <div className="flex justify-between" style={{ padding: "2px 2px", fontSize: 11.5 }}>
+                  <span style={{ color: "var(--text-3)" }}>12-mo deal value</span>
+                  <span className="lg-mono tnum" style={{ color: "var(--text)", fontWeight: 500 }}>
+                    $24,500–$30,500
+                  </span>
+                </div>
               </div>
             </LgCard>
 

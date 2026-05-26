@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { LgButton } from "@/components/ui/lg-button";
 
 const LINKS = [
@@ -46,7 +45,6 @@ export function Nav() {
           ))}
         </nav>
         <div className="flex items-center" style={{ gap: 8 }}>
-          <ThemeToggle />
           <Link href="/login">
             <LgButton variant="ghost">Log in</LgButton>
           </Link>

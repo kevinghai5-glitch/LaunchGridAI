@@ -74,18 +74,15 @@ export const LgButton = React.forwardRef<HTMLButtonElement, LgButtonProps>(
     const variantStyle: React.CSSProperties =
       variant === "primary"
         ? {
-            background: "var(--accent)",
-            color: "var(--accent-text)",
-            border: "1px solid var(--accent)",
-            boxShadow:
-              "var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
+            background: "var(--text)",
+            color: "var(--bg-deep)",
+            border: "1px solid var(--text)",
           }
         : variant === "secondary"
         ? {
-            background: "var(--surface)",
+            background: "rgba(255,255,255,0.04)",
             color: "var(--text)",
-            border: "1px solid var(--border-strong)",
-            boxShadow: "var(--shadow-sm)",
+            border: "1px solid var(--line-strong)",
           }
         : variant === "ghost"
         ? {
