@@ -15,18 +15,29 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const wonDeals = await prisma.deal.findMany({
-    where: { userId: session.user.id, stage: "WON" },
-    select: { monthlyValue: true },
-  });
+  const [wonDeals, pipelineDeals] = await Promise.all([
+    prisma.deal.findMany({
+      where: { userId: session.user.id, stage: "WON" },
+      select: { monthlyValue: true },
+    }),
+    prisma.deal.findMany({
+      where: {
+        userId: session.user.id,
+        stage: { in: ["SYSTEMS_GENERATED", "PROPOSAL_SENT", "FOLLOW_UP"] },
+      },
+      select: { monthlyValue: true },
+    }),
+  ]);
   const totalMRR = wonDeals.reduce((s, d) => s + d.monthlyValue, 0);
+  const pipelineMRR = pipelineDeals.reduce((s, d) => s + d.monthlyValue, 0);
 
   return (
     <div className="flex" style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <Sidebar
         totalMRR={totalMRR}
+        pipelineMRR={pipelineMRR}
         userName={session.user.name ?? "Account"}
-        userPlan={session.user.plan === "pro" ? "Pro · Annual" : "Free"}
+        userPlan={session.user.plan === "pro" ? "Operator" : "Free"}
       />
       <main className="flex-1 min-w-0 flex flex-col">{children}</main>
     </div>

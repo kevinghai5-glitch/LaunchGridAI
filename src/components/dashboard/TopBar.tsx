@@ -1,169 +1,151 @@
 "use client";
 
-import { Bell, Search, Settings } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Bell, ChevronRight, Search, Settings } from "lucide-react";
 
 interface TopBarProps {
   title: string;
+  /** Breadcrumb shown after the title (e.g. "Charleston, SC · Day Spa"). */
   subtitle?: string;
-  status?: string;
 }
 
-export function TopBar({
-  title,
-  subtitle,
-  status = "Google Places API: connected",
-}: TopBarProps) {
+export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
   return (
     <div
-      className="flex items-center justify-between sticky top-0 z-20"
+      className="flex items-center sticky top-0 z-30"
       style={{
-        height: 52,
-        borderBottom: "1px solid var(--border)",
-        background: "var(--bg)",
-        padding: "0 24px",
-        gap: 16,
+        height: 60,
+        padding: "0 32px",
+        gap: 20,
+        background: "rgba(12, 13, 16, 0.75)",
+        borderBottom: "1px solid var(--line)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
       }}
     >
-      <div className="flex items-center" style={{ gap: 16 }}>
-        <div className="flex items-baseline" style={{ gap: 10 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "var(--text)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {title}
-          </div>
-          {subtitle && (
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--text-muted)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {subtitle}
-            </div>
-          )}
-        </div>
+      <div className="flex items-center" style={{ gap: 10, minWidth: 220 }}>
         <div
-          className="flex items-center whitespace-nowrap"
-          style={{
-            gap: 7,
-            padding: "4px 10px",
-            fontSize: 11.5,
-            color: "var(--text-muted)",
-            background: "var(--surface-active)",
-            border: "1px solid var(--border)",
-            borderRadius: 99,
-          }}
+          className="lg-display"
+          style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}
         >
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 99,
-              background: "var(--success)",
-            }}
-          />
-          {status}
+          {title}
         </div>
+        {subtitle && (
+          <>
+            <ChevronRight size={11} strokeWidth={1.75} style={{ color: "var(--text-4)" }} />
+            <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>{subtitle}</div>
+          </>
+        )}
       </div>
 
-      <div className="relative" style={{ flex: "0 1 320px" }}>
-        <Search
-          size={14}
-          strokeWidth={1.75}
+      {/* center search */}
+      <div className="flex justify-center" style={{ flex: 1 }}>
+        <button
+          className="flex items-center text-left"
           style={{
-            position: "absolute",
-            top: "50%",
-            left: 10,
-            transform: "translateY(-50%)",
-            color: "var(--text-subtle)",
-            pointerEvents: "none",
-          }}
-        />
-        <input
-          placeholder="Search businesses, proposals, deals…"
-          style={{
-            width: "100%",
-            height: 32,
-            padding: "0 12px 0 32px",
-            fontSize: 12.5,
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            color: "var(--text)",
-            outline: "none",
+            width: "min(520px, 100%)",
+            gap: 10,
+            height: 34,
+            padding: "0 14px",
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid var(--line)",
+            borderRadius: 10,
+            cursor: "pointer",
             fontFamily: "inherit",
+            transition: "background var(--t)",
           }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: 8,
-            transform: "translateY(-50%)",
-            fontSize: 10.5,
-            color: "var(--text-subtle)",
-            fontFamily: "var(--font-mono), monospace",
-            background: "var(--surface-active)",
-            padding: "1px 5px",
-            borderRadius: 4,
-            border: "1px solid var(--border)",
-          }}
+          onMouseEnter={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")
+          }
+          onMouseLeave={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.025)")
+          }
         >
-          ⌘K
-        </span>
+          <Search size={14} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
+          <span style={{ fontSize: 13, color: "var(--text-3)" }}>Search</span>
+          <span style={{ flex: 1 }} />
+          <Kbd>⌘</Kbd>
+          <Kbd>K</Kbd>
+        </button>
       </div>
 
-      <div className="flex items-center" style={{ gap: 6 }}>
-        <ThemeToggle />
-        <IconButton ariaLabel="Notifications">
-          <Bell size={15} strokeWidth={1.75} />
+      <div className="flex items-center justify-end" style={{ gap: 6, minWidth: 220 }}>
+        <IconButton ariaLabel="Notifications" dot>
+          <Bell size={15} strokeWidth={1.6} />
         </IconButton>
         <IconButton ariaLabel="Settings">
-          <Settings size={15} strokeWidth={1.75} />
+          <Settings size={15} strokeWidth={1.6} />
         </IconButton>
       </div>
     </div>
   );
 }
 
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="lg-mono grid place-items-center"
+      style={{
+        minWidth: 18,
+        height: 18,
+        padding: "0 4px",
+        fontSize: 10.5,
+        color: "var(--text-3)",
+        background: "rgba(255,255,255,0.05)",
+        border: "1px solid var(--line-strong)",
+        borderRadius: 4,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function IconButton({
   children,
   ariaLabel,
+  dot,
 }: {
   children: React.ReactNode;
   ariaLabel: string;
+  dot?: boolean;
 }) {
   return (
     <button
       aria-label={ariaLabel}
-      className="grid place-items-center cursor-pointer"
+      className="grid place-items-center cursor-pointer relative"
       style={{
         width: 32,
         height: 32,
         padding: 0,
         background: "transparent",
         border: "none",
-        color: "var(--text-muted)",
-        borderRadius: "var(--radius-sm)",
-        transition: "background 0.15s, color 0.15s",
+        color: "var(--text-3)",
+        borderRadius: 8,
+        transition: "background var(--t), color var(--t)",
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "var(--surface-active)";
+        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
         (e.currentTarget as HTMLElement).style.color = "var(--text)";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.background = "transparent";
-        (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+        (e.currentTarget as HTMLElement).style.color = "var(--text-3)";
       }}
     >
       {children}
+      {dot && (
+        <span
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 5,
+            height: 5,
+            borderRadius: 99,
+            background: "var(--accent)",
+          }}
+        />
+      )}
     </button>
   );
 }
