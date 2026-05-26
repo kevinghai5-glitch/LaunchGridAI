@@ -451,7 +451,7 @@ export default function BusinessDetailPage() {
                     </p>
                   </div>
                 ) : latestAssetPack ? (
-                  <AssetPackView pack={latestAssetPack} />
+                  <AssetPackView pack={latestAssetPack} businessId={business.id} />
                 ) : null}
               </div>
             )}

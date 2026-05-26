@@ -4,17 +4,26 @@
 // caller falls back to Places metadata only.
 
 const MAX_CHARS = 6000;
+const MAX_HTML_CHARS = 120000;
 
-export async function fetchWebsiteText(
+export interface WebsitePage {
+  text: string;
+  html: string;
+}
+
+// Fetch a page once and return both readable text (for the AI prompt) and a
+// capped slice of raw HTML (for heuristic CTA/form/booking signal detection).
+// Never throws — returns empty strings on any failure.
+export async function fetchWebsitePage(
   website: string | null | undefined
-): Promise<string> {
-  if (!website) return "";
+): Promise<WebsitePage> {
+  if (!website) return { text: "", html: "" };
 
   let url: string;
   try {
     url = new URL(website).toString();
   } catch {
-    return "";
+    return { text: "", html: "" };
   }
 
   try {
@@ -33,13 +42,26 @@ export async function fetchWebsiteText(
     clearTimeout(timeout);
 
     const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok || !contentType.includes("text/html")) return "";
+    if (!res.ok || !contentType.includes("text/html")) {
+      return { text: "", html: "" };
+    }
 
     const html = await res.text();
-    return extractReadableText(html).slice(0, MAX_CHARS);
+    return {
+      text: extractReadableText(html).slice(0, MAX_CHARS),
+      html: html.slice(0, MAX_HTML_CHARS),
+    };
   } catch {
-    return "";
+    return { text: "", html: "" };
   }
+}
+
+// Backwards-compatible helper: readable text only.
+export async function fetchWebsiteText(
+  website: string | null | undefined
+): Promise<string> {
+  const { text } = await fetchWebsitePage(website);
+  return text;
 }
 
 function extractReadableText(html: string): string {

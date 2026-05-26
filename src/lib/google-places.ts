@@ -20,6 +20,14 @@ interface PlacesApiPhoto {
   name?: string;
 }
 
+interface PlacesApiReview {
+  text?: { text?: string };
+  originalText?: { text?: string };
+  rating?: number;
+  relativePublishTimeDescription?: string;
+  authorAttribution?: { displayName?: string };
+}
+
 interface PlacesApiPlace {
   id?: string;
   displayName?: { text?: string };
@@ -33,6 +41,23 @@ interface PlacesApiPlace {
   primaryTypeDisplayName?: { text?: string };
   editorialSummary?: { text?: string };
   photos?: PlacesApiPhoto[];
+  reviews?: PlacesApiReview[];
+}
+
+export interface PlaceReview {
+  author: string;
+  rating: number;
+  text: string;
+  when: string;
+}
+
+export interface CompetitorResult {
+  name: string;
+  rating: number;
+  reviewCount: number;
+  website: string;
+  category: string;
+  address: string;
 }
 
 const PLACES_BASE = "https://places.googleapis.com/v1";
@@ -121,4 +146,94 @@ export async function searchBusinesses(
       };
     })
   );
+}
+
+// Fetch up to 5 of a place's most relevant Google reviews (text + rating).
+// Best-effort: returns [] on any failure or when no placeId/API key is present,
+// so audit generation degrades gracefully to website + Places metadata only.
+export async function fetchPlaceReviews(
+  placeId: string | null | undefined
+): Promise<PlaceReview[]> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey || !placeId) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`${PLACES_BASE}/places/${placeId}`, {
+      signal: controller.signal,
+      headers: {
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "reviews",
+      },
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+
+    const data: PlacesApiPlace = await res.json();
+    const reviews = data.reviews ?? [];
+
+    return reviews
+      .map((r) => ({
+        author: r.authorAttribution?.displayName ?? "Google reviewer",
+        rating: r.rating ?? 0,
+        text: (r.text?.text ?? r.originalText?.text ?? "").trim(),
+        when: r.relativePublishTimeDescription ?? "",
+      }))
+      .filter((r) => r.text.length > 0)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+// Find direct local competitors for the same niche + city. Excludes the target
+// business by placeId. Best-effort: returns [] on any failure so the audit can
+// still proceed without competitor intelligence.
+export async function findCompetitors(
+  industry: string | null | undefined,
+  city: string | null | undefined,
+  excludePlaceId?: string | null
+): Promise<CompetitorResult[]> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey || !industry || !city) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+    const response = await fetch(`${PLACES_BASE}/places:searchText`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.rating,places.userRatingCount,places.primaryTypeDisplayName",
+      },
+      body: JSON.stringify({
+        textQuery: `${industry} in ${city}`,
+        maxResultCount: 12,
+      }),
+    });
+    clearTimeout(timeout);
+    if (!response.ok) return [];
+
+    const data: { places?: PlacesApiPlace[] } = await response.json();
+    const places = data.places ?? [];
+
+    return places
+      .filter((p) => p.id && p.id !== excludePlaceId)
+      .map((p) => ({
+        name: p.displayName?.text ?? "",
+        rating: p.rating ?? 0,
+        reviewCount: p.userRatingCount ?? 0,
+        website: p.websiteUri ?? "",
+        category: p.primaryTypeDisplayName?.text ?? "",
+        address: p.formattedAddress ?? "",
+      }))
+      .filter((c) => c.name.length > 0)
+      .slice(0, 8);
+  } catch {
+    return [];
+  }
 }

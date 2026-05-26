@@ -54,6 +54,9 @@ export const generateContentSchema = z.object({
 
 export const generateAssetsSchema = z.object({
   businessId: z.string().cuid(),
+  // When present, regenerate just one deliverable and merge it into the
+  // existing pack instead of generating all five.
+  section: z.enum(["file1", "file2", "file3", "file4", "file5"]).optional(),
 });
 
 export const generateProposalSchema = z.object({
