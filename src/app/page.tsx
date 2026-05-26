@@ -1,26 +1,14 @@
-import { Nav } from "@/components/landing/Nav";
-import { Hero } from "@/components/landing/Hero";
-import { HowItWorks } from "@/components/landing/HowItWorks";
-import { WhatWeGenerate } from "@/components/landing/WhatWeGenerate";
-import { WhyItWorks } from "@/components/landing/WhyItWorks";
-import { Pricing } from "@/components/landing/Pricing";
-import { FAQ } from "@/components/landing/FAQ";
-import { Footer } from "@/components/landing/Footer";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
 
-export default function LandingPage() {
-  return (
-    <main
-      className="min-h-screen"
-      style={{ background: "var(--bg)", color: "var(--text)", overflowX: "hidden" }}
-    >
-      <Nav />
-      <Hero />
-      <HowItWorks />
-      <WhatWeGenerate />
-      <WhyItWorks />
-      <Pricing />
-      <FAQ />
-      <Footer />
-    </main>
-  );
+export const dynamic = "force-dynamic";
+
+// The app has no public marketing page. Opening the site sends logged-in users
+// straight to their dashboard and everyone else to the login screen. Because the
+// session is a persistent JWT cookie, returning visitors land on the dashboard
+// without signing in again.
+export default async function RootPage() {
+  const session = await getServerSession(authOptions);
+  redirect(session ? "/dashboard" : "/login");
 }
