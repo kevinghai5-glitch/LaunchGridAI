@@ -10,21 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   ArrowLeft,
   ExternalLink,
-  Send,
   Copy,
   Trash2,
   Loader2,
   CheckCircle2,
-  Mail,
 } from "lucide-react";
 import { APP_URL } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -37,10 +28,6 @@ export default function ProposalDetailPage() {
 
   const [proposal, setProposal] = useState<FullProposal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [recipientName, setRecipientName] = useState("");
-  const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -69,33 +56,6 @@ export default function ProposalDetailPage() {
     if (!proposal) return;
     navigator.clipboard.writeText(`${APP_URL}/p/${proposal.publicId}`);
     toast.success("Public link copied to clipboard");
-  };
-
-  const handleSend = async () => {
-    if (!recipientEmail || !recipientName) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-    setSending(true);
-    try {
-      const res = await fetch(`/api/proposals/${id}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipientEmail, recipientName }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to send");
-        return;
-      }
-      toast.success("Proposal sent via email!");
-      setSendDialogOpen(false);
-      loadProposal();
-    } catch {
-      toast.error("Failed to send email");
-    } finally {
-      setSending(false);
-    }
   };
 
   const handleDelete = async () => {
@@ -161,10 +121,6 @@ export default function ProposalDetailPage() {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Preview
               </a>
-            </Button>
-            <Button variant="blue" size="sm" onClick={() => setSendDialogOpen(true)}>
-              <Mail className="h-4 w-4 mr-2" />
-              Send Email
             </Button>
             <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300" onClick={handleDelete} disabled={deleting}>
               <Trash2 className="h-4 w-4" />
@@ -238,46 +194,6 @@ export default function ProposalDetailPage() {
           )}
         </div>
 
-        {/* Send dialog */}
-        <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Send Proposal via Email</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Recipient Name</Label>
-                <Input
-                  placeholder="Business owner's name"
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Recipient Email</Label>
-                <Input
-                  type="email"
-                  placeholder="owner@business.com"
-                  value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
-                />
-              </div>
-              {proposal.emailMessage && (
-                <div className="panel p-3 rounded-xl">
-                  <p className="text-xs text-gray-400 mb-1">Email preview message:</p>
-                  <p className="text-sm text-gray-300">{proposal.emailMessage}</p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
-              <Button variant="blue" onClick={handleSend} disabled={sending}>
-                {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                Send Proposal
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

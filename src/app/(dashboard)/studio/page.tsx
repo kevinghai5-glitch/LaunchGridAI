@@ -30,30 +30,89 @@ export default function StudioPage() {
   const [done, setDone] = useState(false);
   const [pack, setPack] = useState<AssetPack | null>(null);
   const [activeStep, setActiveStep] = useState(-1);
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // Initial business list — pick from URL, then last-used (localStorage), then first.
   useEffect(() => {
     fetch("/api/businesses")
       .then((r) => r.json())
       .then((data) => {
         const list: SavedBusiness[] = data.businesses ?? [];
         setBusinesses(list);
-        const pick = businessId
-          ? list.find((b) => b.id === businessId)
-          : list[0];
+        const remembered =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("studio:lastBusinessId")
+            : null;
+        const pick =
+          (businessId && list.find((b) => b.id === businessId)) ||
+          (remembered && list.find((b) => b.id === remembered)) ||
+          list[0];
         if (pick) setSelected(pick);
       })
       .catch(() => {});
   }, [businessId]);
 
+  // Persist last-used selection + restore latest pack whenever selection changes.
+  useEffect(() => {
+    if (!selected) return;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("studio:lastBusinessId", selected.id);
+    }
+    let cancelled = false;
+    setRestoring(true);
+    setPack(null);
+    setDone(false);
+    setRestoredAt(null);
+    fetch(`/api/assets/latest?businessId=${encodeURIComponent(selected.id)}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((data: { pack: AssetPack | null; generatedAt?: string }) => {
+        if (cancelled) return;
+        if (data.pack) {
+          setPack(data.pack);
+          setDone(true);
+          setRestoredAt(data.generatedAt ?? null);
+          setActiveStep(THINKING_STEPS.length);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRestoring(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
   useEffect(() => {
     return () => {
       if (stepTimer.current) clearInterval(stepTimer.current);
+      abortRef.current?.abort();
     };
   }, []);
 
+  const cancel = () => {
+    abortRef.current?.abort();
+  };
+
+  const reset = () => {
+    abortRef.current?.abort();
+    if (stepTimer.current) clearInterval(stepTimer.current);
+    setRunning(false);
+    setPack(null);
+    setDone(false);
+    setRestoredAt(null);
+    setActiveStep(-1);
+  };
+
   const start = async () => {
     if (!selected || running) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setDone(false);
     setPack(null);
@@ -71,6 +130,7 @@ export default function StudioPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ businessId: selected.id }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -83,11 +143,16 @@ export default function StudioPage() {
       setActiveStep(THINKING_STEPS.length);
       setDone(true);
       toast.success("Asset pack generated");
-    } catch {
-      toast.error("Failed to generate assets");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast("Generation cancelled");
+      } else {
+        toast.error("Failed to generate assets");
+      }
       setActiveStep(-1);
     } finally {
       if (stepTimer.current) clearInterval(stepTimer.current);
+      abortRef.current = null;
       setRunning(false);
     }
   };
@@ -241,7 +306,7 @@ export default function StudioPage() {
                 <div className="flex justify-between" style={{ padding: "2px 2px", fontSize: 11.5 }}>
                   <span style={{ color: "var(--text-3)" }}>12-mo deal value</span>
                   <span className="lg-mono tnum" style={{ color: "var(--text)", fontWeight: 500 }}>
-                    $24,500–$30,500
+                    $18,500–$30,500
                   </span>
                 </div>
               </div>
@@ -289,6 +354,26 @@ export default function StudioPage() {
                     </span>
                   </LgButton>
                 </div>
+                {running && (
+                  <button
+                    onClick={cancel}
+                    style={{
+                      width: "100%",
+                      marginTop: 10,
+                      padding: "9px 16px",
+                      background: "transparent",
+                      border: "1px solid var(--line)",
+                      borderRadius: "var(--radius)",
+                      color: "var(--text-2)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Cancel generation
+                  </button>
+                )}
                 <div
                   className="text-center"
                   style={{
@@ -442,10 +527,86 @@ export default function StudioPage() {
                   Save a business first to use AI Studio.
                 </div>
               )}
-              {selected && !running && !done && <EmptyState business={selected} />}
+              {selected && !running && !done && !restoring && (
+                <EmptyState business={selected} />
+              )}
+              {selected && !running && !done && restoring && (
+                <div
+                  className="text-center"
+                  style={{ padding: "64px 20px", color: "var(--text-muted)", fontSize: 13.5 }}
+                >
+                  Checking for a saved deliverable…
+                </div>
+              )}
               {running && <GeneratingState business={selected} />}
               {done && pack && selected && (
-                <AssetPackView pack={pack} businessId={selected.id} onUpdate={setPack} />
+                <>
+                  {restoredAt && !running && (
+                    <div
+                      style={{
+                        margin: "0 0 18px",
+                        padding: "10px 14px",
+                        border: "1px solid var(--line)",
+                        borderRadius: 10,
+                        background: "rgba(255,255,255,0.02)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
+                        fontSize: 12.5,
+                        color: "var(--text-3)",
+                      }}
+                    >
+                      <span>
+                        Restored from your last session ·{" "}
+                        <span className="lg-mono tnum" style={{ color: "var(--text-2)" }}>
+                          {new Date(restoredAt).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </span>
+                      <div className="flex items-center" style={{ gap: 8 }}>
+                        <button
+                          onClick={start}
+                          disabled={running}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--line)",
+                            color: "var(--text-2)",
+                            padding: "5px 12px",
+                            borderRadius: 999,
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            cursor: running ? "default" : "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Regenerate
+                        </button>
+                        <button
+                          onClick={reset}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--line)",
+                            color: "var(--text-3)",
+                            padding: "5px 12px",
+                            borderRadius: 999,
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <AssetPackView pack={pack} businessId={selected.id} onUpdate={setPack} />
+                </>
               )}
             </div>
           </LgCard>

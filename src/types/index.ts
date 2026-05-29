@@ -105,13 +105,59 @@ export interface ObjectionHandling {
   response: string;
 }
 
+// Real-measured technical UX / performance summary. The narrative is generated
+// by the model from the PageSpeed numbers but translated into business impact —
+// never raw Lighthouse jargon.
+export interface TechnicalUxSection {
+  available: boolean;
+  mobile: {
+    score: number | null;
+    lcpSeconds: number | null;
+    cls: number | null;
+    inpMs: number | null;
+  } | null;
+  desktop: {
+    score: number | null;
+    lcpSeconds: number | null;
+    cls: number | null;
+    inpMs: number | null;
+  } | null;
+  businessImpactSummary: string; // model-written, plain-English business read
+  topFixes: { fix: string; businessImpact: string }[];
+}
+
+// Above-the-fold screenshots embedded into the audit deliverable.
+export interface VisualIntelligenceShot {
+  imageUrl: string;
+  label: string;
+  viewport: "desktop" | "mobile";
+}
+
+export interface VisualIntelligence {
+  available: boolean;
+  shots: VisualIntelligenceShot[];
+  competitiveRead: string; // model-written read on what the visual comparison tells the buyer
+}
+
+// Shared 4-section framing wrapper applied to every deliverable so each one
+// reads as: Overview → Implementation Guide → (Actual Deliverable) → Expected
+// Impact. Optional so packs generated before this upgrade still render cleanly.
+export interface DeliverableFraming {
+  overview: string; // what this deliverable is + why it matters for THIS business
+  implementationGuide: string[]; // ordered, plain-English steps to deploy/use it
+  expectedImpact: string; // the realistic business outcome to expect once live
+}
+
 // FILE 1 — landing-page-growth-audit.html
 export interface GrowthAuditFile {
+  framing?: DeliverableFraming;
   executiveSummary: string;
   growthAudit: {
     overview: string;
     findings: { area: string; finding: string; severity: "high" | "medium" | "low" }[];
   };
+  technicalUx?: TechnicalUxSection;
+  visuals?: VisualIntelligence;
   revenueLeaks: RevenueLeak[]; // top 5
   conversionBottlenecks: { stage: string; problem: string; fix: string }[];
   localMarketIntelligence: {
@@ -169,6 +215,7 @@ export interface GrowthAuditFile {
 
 // FILE 2 — lead-qualification-system.pdf
 export interface LeadQualificationFile {
+  framing?: DeliverableFraming;
   formHeadline: string;
   formSubheadline: string;
   questions: {
@@ -194,6 +241,7 @@ export interface LeadQualificationFile {
 
 // FILE 3 — email-nurture-system.docx
 export interface EmailNurtureFile {
+  framing?: DeliverableFraming;
   emails: {
     day: number;
     timing: string;
@@ -208,6 +256,7 @@ export interface EmailNurtureFile {
 
 // FILE 4 — sms-follow-up-system.txt
 export interface SmsFollowUpFile {
+  framing?: DeliverableFraming;
   messages: {
     order: number;
     timing: string;
@@ -220,6 +269,7 @@ export interface SmsFollowUpFile {
 
 // FILE 5 — booking-appointment-system.html
 export interface BookingSystemFile {
+  framing?: DeliverableFraming;
   headline: string;
   subheadline: string;
   whatToExpect: string[];
@@ -244,6 +294,17 @@ export interface AssetPackMeta {
   generatedAt: string;
   dataConfidence: DataConfidence;
   assumptions: string[];
+  // Real-data signal flags so the deliverable can surface "what was measured"
+  // honestly to the buyer.
+  signals?: {
+    websiteScraped: boolean;
+    reviewsAnalyzed: boolean;
+    competitorsAnalyzed: boolean;
+    performanceMeasured: boolean;
+    gbpProfilePulled: boolean;
+    screenshotsCaptured: boolean;
+    verifiedFactsExtracted: boolean;
+  };
 }
 
 export interface AssetPack {

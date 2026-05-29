@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Sparkles, Check, FileText, TriangleAlert, Radar, ArrowUpRight } from "lucide-react";
+import { Eye, Sparkles, Check, FileText, Radar, ArrowUpRight, BookOpen, ArrowRight } from "lucide-react";
 import { LgButton } from "@/components/ui/lg-button";
 import { Surface, PanelHeader, Spark, useCountUp } from "@/components/dashboard/os";
 import { PIPELINE_STAGES } from "@/lib/stages";
@@ -15,6 +15,29 @@ interface BusinessRow {
   status: string;
 }
 
+interface ActivityRow {
+  kind: "signed" | "generated" | "proposal" | "saved";
+  tone: "money" | "accent" | "neutral";
+  actor: string;
+  what: string;
+  when: string;
+  highlight?: boolean;
+}
+
+interface OpportunityRow {
+  score: number;
+  name: string;
+  city: string;
+  weakness: string;
+}
+
+interface GenerationRow {
+  title: string;
+  sub: string;
+  time: string;
+  closed: boolean;
+}
+
 interface Props {
   firstName: string;
   totalMRR: number;
@@ -23,33 +46,20 @@ interface Props {
   businessCount: number;
   proposalCount: number;
   stageCounts: Record<string, number>;
+  sparkMRR: number[];
+  sparkPipe: number[];
+  activity: ActivityRow[];
+  opportunities: OpportunityRow[];
+  generations: GenerationRow[];
   recentBusinesses: BusinessRow[];
 }
 
-const SPARK_MRR = [3, 4, 3, 5, 6, 5, 7, 8, 7, 9, 11, 10, 12, 14, 13, 15, 17, 16, 18];
-const SPARK_PIPE = [12, 14, 13, 15, 14, 17, 18, 17, 20, 22, 21, 24, 26, 25, 28, 27, 30, 32, 31];
-
-const ACTIVITY = [
-  { Icon: Eye, tone: "accent", actor: "Maya Holcomb", what: "opened the Cedar & Sage proposal · 3rd view", when: "just now" },
-  { Icon: Sparkles, tone: "accent", actor: "Studio", what: "shipped Growth Asset Pack for Bluebird HVAC", when: "2m" },
-  { Icon: Check, tone: "money", actor: "Dr. Lena Park", what: "signed Northgate Family Dental · $1,500/mo", when: "14m", highlight: true },
-  { Icon: TriangleAlert, tone: "warn", actor: "Radar", what: "flagged Tiger Lily Day Spa · 94 opportunity score", when: "38m" },
-  { Icon: FileText, tone: "neutral", actor: "You", what: "drafted proposal for Iron Forge Strength Co.", when: "1h" },
-  { Icon: Radar, tone: "neutral", actor: "Radar", what: "scanned 247 businesses across Tampa, FL", when: "2h" },
-] as const;
-
-const OPPORTUNITIES = [
-  { score: 94, name: "Tiger Lily Day Spa", city: "Charleston, SC", weakness: "No online booking, 4-day review gap" },
-  { score: 89, name: "Magnolia Wellness Retreat", city: "Charleston, SC", weakness: "Stale Instagram, weak lead capture" },
-  { score: 86, name: "Lowcountry Bodyworks", city: "Charleston, SC", weakness: "No follow-up sequence detected" },
-];
-
-const GENERATIONS = [
-  { title: "Growth Asset Pack", sub: "Cedar & Sage Wellness Spa · 5 docs", time: "14m", closed: false },
-  { title: "Growth Asset Pack", sub: "Bluebird HVAC · 5 docs", time: "2h", closed: false },
-  { title: "Proposal draft", sub: "Iron Forge Strength Co.", time: "yesterday", closed: false },
-  { title: "Growth Asset Pack", sub: "Northgate Family Dental", time: "2d", closed: true },
-];
+const KIND_ICON: Record<ActivityRow["kind"], typeof Eye> = {
+  signed: Check,
+  generated: Sparkles,
+  proposal: FileText,
+  saved: Radar,
+};
 
 const TONE_C: Record<string, string> = {
   accent: "var(--accent)",
@@ -64,6 +74,11 @@ export function DashboardBody({
   pipelineMRR,
   wonCount,
   stageCounts,
+  sparkMRR,
+  sparkPipe,
+  activity,
+  opportunities,
+  generations,
 }: Props) {
   const animMRR = useCountUp(totalMRR, 1100);
   const animPipe = useCountUp(pipelineMRR, 1100);
@@ -104,6 +119,12 @@ export function DashboardBody({
               Open Studio
             </LgButton>
           </Link>
+          <Link href="/playbook">
+            <LgButton variant="ghost">
+              <BookOpen size={15} strokeWidth={1.75} />
+              Sales Playbook
+            </LgButton>
+          </Link>
         </div>
       </div>
 
@@ -116,21 +137,62 @@ export function DashboardBody({
           label="Active MRR"
           value={`$${Math.round(animMRR).toLocaleString()}`}
           unit="/mo"
-          delta={wonCount > 0 ? `${wonCount} retainers active` : "No retainers yet"}
-          spark={SPARK_MRR}
+          delta={wonCount > 0 ? `${wonCount} retainer${wonCount === 1 ? "" : "s"} active` : "No retainers yet"}
+          spark={sparkMRR}
           accent="money"
-          sub="Recurring · auto-renew"
+          sub="Recurring · won deals"
         />
         <MetricCard
           label="In pipeline"
           value={`$${Math.round(animPipe).toLocaleString()}`}
           unit="/mo"
-          delta="Deals warming"
-          spark={SPARK_PIPE}
+          delta={pipelineMRR > 0 ? "Deals warming" : "No open deals"}
+          spark={sparkPipe}
           accent="accent"
           sub="Awaiting reply · negotiating"
         />
       </div>
+
+      {/* Sales Playbook entry */}
+      <Link href="/playbook" style={{ textDecoration: "none", color: "inherit" }}>
+        <div
+          className="row-hover flex items-center"
+          style={{
+            gap: 18,
+            padding: "20px 24px",
+            marginBottom: 40,
+            borderRadius: 14,
+            background: "var(--accent-soft)",
+            border: "1px solid oklch(0.55 0.18 248 / 0.22)",
+          }}
+        >
+          <div
+            className="grid place-items-center flex-none"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 11,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid oklch(0.55 0.18 248 / 0.3)",
+              color: "var(--accent)",
+            }}
+          >
+            <BookOpen size={20} strokeWidth={1.75} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+              Sales Playbook
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 3 }}>
+              Deliverables explained, pricing & ROI math, copy-paste scripts, and objection handling — everything to close the deal.
+            </div>
+          </div>
+          <div className="flex items-center flex-none" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: "var(--accent)" }}>
+            Open playbook
+            <ArrowRight size={15} strokeWidth={1.75} />
+          </div>
+        </div>
+      </Link>
 
       {/* Activity + Opportunities */}
       <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", gap: 20, marginBottom: 40 }}>
@@ -145,41 +207,51 @@ export function DashboardBody({
             }
           />
           <div style={{ padding: "6px 0 14px" }}>
-            {ACTIVITY.map((a, i) => (
-              <div
-                key={i}
-                className="row-hover grid items-center"
-                style={{ gridTemplateColumns: "32px 1fr auto", gap: 14, padding: "12px 24px" }}
-              >
-                <div
-                  className="grid place-items-center"
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 99,
-                    background: "rgba(255,255,255,0.03)",
-                    color: TONE_C[a.tone],
-                  }}
-                >
-                  <a.Icon size={13} strokeWidth={1.75} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-                    <span style={{ color: "var(--text)", fontWeight: 500 }}>{a.actor}</span> {a.what}
+            {activity.length === 0 ? (
+              <EmptyRow text="No activity yet — scan a niche or ship a pack to get started." />
+            ) : (
+              activity.map((a, i) => {
+                const Icon = KIND_ICON[a.kind];
+                return (
+                  <div
+                    key={i}
+                    className="row-hover grid items-center"
+                    style={{ gridTemplateColumns: "32px 1fr auto", gap: 14, padding: "12px 24px" }}
+                  >
+                    <div
+                      className="grid place-items-center"
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 99,
+                        background: "rgba(255,255,255,0.03)",
+                        color: TONE_C[a.tone],
+                      }}
+                    >
+                      <Icon size={13} strokeWidth={1.75} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+                        <span style={{ color: "var(--text)", fontWeight: 500 }}>{a.actor}</span> {a.what}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: "var(--text-3)", whiteSpace: "nowrap" }}>
+                      {a.when}
+                    </span>
                   </div>
-                </div>
-                <span style={{ fontSize: 12, color: "var(--text-3)", whiteSpace: "nowrap" }}>
-                  {a.when}
-                </span>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </Surface>
 
         <Surface padded={0}>
           <PanelHeader title="Opportunities" sub="Auto-detected this week" />
           <div style={{ padding: "6px 16px 16px" }}>
-            {OPPORTUNITIES.map((o) => (
+            {opportunities.length === 0 ? (
+              <EmptyRow text="No opportunities scored yet — run a scan to populate this." />
+            ) : (
+              opportunities.map((o) => (
               <Link
                 key={o.name}
                 href="/businesses"
@@ -208,7 +280,8 @@ export function DashboardBody({
                 </div>
                 <ArrowUpRight size={13} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
               </Link>
-            ))}
+              ))
+            )}
           </div>
         </Surface>
       </div>
@@ -228,7 +301,10 @@ export function DashboardBody({
             }
           />
           <div style={{ padding: "6px 14px 16px", display: "flex", flexDirection: "column", gap: 4 }}>
-            {GENERATIONS.map((g, i) => (
+            {generations.length === 0 ? (
+              <EmptyRow text="No generations yet — open Studio to ship your first pack." />
+            ) : (
+              generations.map((g, i) => (
               <div
                 key={i}
                 className="row-hover flex items-center"
@@ -245,7 +321,8 @@ export function DashboardBody({
                   {g.time}
                 </span>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </Surface>
 
@@ -303,9 +380,24 @@ function MetricCard({
           <div style={{ fontSize: 12.5, color: c, fontWeight: 500 }}>{delta}</div>
           <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 3 }}>{sub}</div>
         </div>
-        <Spark data={spark} color={c} w={120} h={32} />
+        {spark.length >= 2 && <Spark data={spark} color={c} w={120} h={32} />}
       </div>
     </Surface>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        padding: "22px 24px",
+        fontSize: 13,
+        color: "var(--text-3)",
+        lineHeight: 1.5,
+      }}
+    >
+      {text}
+    </div>
   );
 }
 

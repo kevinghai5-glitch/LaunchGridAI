@@ -12,6 +12,13 @@
 // AuditIntelligence shape without touching callers.
 
 import type { PlaceReview, CompetitorResult } from "./google-places";
+import type { BusinessFacts } from "./business-facts";
+import { factsToPromptBlock } from "./business-facts";
+import type { PsiBundle } from "./pagespeed";
+import { psiToPromptBlock } from "./pagespeed";
+import type { DataForSeoBundle } from "./dataforseo";
+import { dfsToPromptBlock } from "./dataforseo";
+import type { ScreenshotBundle } from "./screenshotone";
 
 export interface WebsiteSignals {
   hasWebsite: boolean;
@@ -55,6 +62,10 @@ export interface AuditIntelligence {
   website: WebsiteSignals;
   reviews: ReviewIntel;
   competitors: CompetitorIntel;
+  verifiedFacts: BusinessFacts | null;
+  performance: PsiBundle | null;
+  dataForSeo: DataForSeoBundle | null;
+  screenshots: ScreenshotBundle | null;
   dataConfidence: "high" | "medium" | "low";
   assumptions: string[];
 }
@@ -319,6 +330,10 @@ export interface AuditIntelligenceInput {
   reviews: PlaceReview[];
   competitors: CompetitorResult[];
   self: { rating?: number | null; reviewCount?: number | null };
+  verifiedFacts?: BusinessFacts | null;
+  performance?: PsiBundle | null;
+  dataForSeo?: DataForSeoBundle | null;
+  screenshots?: ScreenshotBundle | null;
 }
 
 export function buildAuditIntelligence(
@@ -327,6 +342,10 @@ export function buildAuditIntelligence(
   const website = analyzeWebsite(input.websiteHtml);
   const reviews = analyzeReviews(input.reviews);
   const competitors = analyzeCompetitors(input.competitors, input.self);
+  const verifiedFacts = input.verifiedFacts ?? null;
+  const performance = input.performance ?? null;
+  const dataForSeo = input.dataForSeo ?? null;
+  const screenshots = input.screenshots ?? null;
 
   const assumptions: string[] = [];
   if (!input.hasWebsiteUrl) {
@@ -338,7 +357,7 @@ export function buildAuditIntelligence(
       "The website could not be read automatically — on-page findings are inferred from the niche and Places data."
     );
   }
-  if (!reviews.available) {
+  if (!reviews.available && !(dataForSeo?.reviews.available)) {
     assumptions.push(
       "No Google review text was available — trust and sentiment findings are strategic assumptions, not extracted from real reviews."
     );
@@ -348,15 +367,38 @@ export function buildAuditIntelligence(
       "Local competitor data was unavailable — positioning is based on common patterns for this niche and city."
     );
   }
+  if (!performance?.available) {
+    assumptions.push(
+      "Live page-speed data was unavailable — technical UX findings are strategic assumptions, not measured."
+    );
+  }
 
   // Confidence reflects how much of the audit rests on real vs assumed data.
-  const realSignals = [website.hasWebsite, reviews.available, competitors.available].filter(
-    Boolean
-  ).length;
-  const dataConfidence =
-    realSignals >= 3 ? "high" : realSignals === 2 ? "medium" : "low";
+  // We now weight in the deeper signals (deep reviews, perf, screenshots, verified facts).
+  const realSignals = [
+    website.hasWebsite,
+    reviews.available || Boolean(dataForSeo?.reviews.available),
+    competitors.available,
+    Boolean(performance?.available),
+    Boolean(dataForSeo?.gbp.available),
+    Boolean(screenshots?.available),
+    Boolean(verifiedFacts && (verifiedFacts.phones.value.length || verifiedFacts.services.value.length)),
+  ].filter(Boolean).length;
 
-  return { website, reviews, competitors, dataConfidence, assumptions };
+  const dataConfidence =
+    realSignals >= 5 ? "high" : realSignals >= 3 ? "medium" : "low";
+
+  return {
+    website,
+    reviews,
+    competitors,
+    verifiedFacts,
+    performance,
+    dataForSeo,
+    screenshots,
+    dataConfidence,
+    assumptions,
+  };
 }
 
 // Render the intelligence into a compact, prompt-friendly briefing block.
@@ -412,6 +454,28 @@ export function intelligenceToPromptBlock(intel: AuditIntelligence): string {
     intel.competitors.observations.forEach((o) => lines.push(`- ${o}`));
   } else {
     lines.push("- No competitor data. Base positioning on common niche patterns.");
+  }
+
+  if (intel.verifiedFacts) {
+    lines.push("");
+    lines.push(factsToPromptBlock(intel.verifiedFacts));
+  }
+
+  if (intel.performance) {
+    lines.push("");
+    lines.push(psiToPromptBlock(intel.performance));
+  }
+
+  if (intel.dataForSeo) {
+    lines.push("");
+    lines.push(dfsToPromptBlock(intel.dataForSeo));
+  }
+
+  if (intel.screenshots?.available) {
+    lines.push("");
+    lines.push(
+      `VISUAL INTELLIGENCE: ${intel.screenshots.shots.length} above-the-fold screenshots captured (target + competitors, desktop + mobile). The deliverable embeds these so the buyer can SEE the competitive landscape — reference visual differences (hero clarity, CTA prominence, trust signal placement, mobile UX gaps) where relevant.`
+    );
   }
 
   if (intel.assumptions.length) {

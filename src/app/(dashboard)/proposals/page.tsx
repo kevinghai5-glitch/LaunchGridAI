@@ -11,6 +11,19 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+function relTime(d: Date): string {
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 type Tone = "neutral" | "accent" | "money" | "warn" | "danger";
 const STATUS_TONE: Record<string, Tone> = {
   DRAFT: "neutral",
@@ -40,6 +53,68 @@ export default async function ProposalsPage() {
   const closedMRR = proposals.reduce((s, p) => (p.status === "ACCEPTED" ? s + p.monthlyPrice : s), 0);
   const inMotion = proposals.filter((p) => ["SENT", "VIEWED"].includes(p.status));
   const pipelineMRR = inMotion.reduce((s, p) => s + p.monthlyPrice, 0);
+
+  // Real buyer-activity timeline derived from actual proposal state changes.
+  type Tl = {
+    at: number;
+    when: string;
+    tone: Tone;
+    icon: "eye" | "phone" | "mail" | "check";
+    who: string;
+    what: string;
+    meta: string;
+    highlight?: boolean;
+  };
+  const timeline: Tl[] = proposals
+    .filter((p) => p.status !== "DRAFT")
+    .map((p) => {
+      const place = [p.business.industry, p.business.city].filter(Boolean).join(" · ");
+      if (p.status === "ACCEPTED") {
+        return {
+          at: p.updatedAt.getTime(),
+          when: relTime(p.updatedAt),
+          tone: "money" as Tone,
+          icon: "check" as const,
+          who: p.business.name,
+          what: "signed the retainer",
+          meta: `${formatCurrency(p.monthlyPrice)}/mo`,
+          highlight: true,
+        };
+      }
+      if (p.status === "REJECTED") {
+        return {
+          at: p.updatedAt.getTime(),
+          when: relTime(p.updatedAt),
+          tone: "danger" as Tone,
+          icon: "mail" as const,
+          who: p.business.name,
+          what: "passed on the proposal",
+          meta: place || "no longer in pipeline",
+        };
+      }
+      if (p.status === "VIEWED") {
+        return {
+          at: p.updatedAt.getTime(),
+          when: relTime(p.updatedAt),
+          tone: "accent" as Tone,
+          icon: "eye" as const,
+          who: p.business.name,
+          what: "opened the proposal",
+          meta: place || "awaiting decision",
+        };
+      }
+      return {
+        at: p.createdAt.getTime(),
+        when: relTime(p.createdAt),
+        tone: "accent" as Tone,
+        icon: "mail" as const,
+        who: p.business.name,
+        what: "proposal sent",
+        meta: place || "awaiting open",
+      };
+    })
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 6);
 
   return (
     <>
@@ -128,15 +203,28 @@ export default async function ProposalsPage() {
           <Surface padded={0} style={{ position: "sticky", top: 80, alignSelf: "start" }}>
             <PanelHeader
               title="Buyer activity"
-              sub="Real-time signals"
-              right={<Pill tone="accent" dot>live</Pill>}
+              sub="From your proposals"
+              right={timeline.length > 0 ? <Pill tone="accent" dot>live</Pill> : undefined}
             />
             <div style={{ padding: "8px 8px 14px" }}>
-              <TimelineEvent when="just now" tone="accent" icon="eye" who="Maya Holcomb" what="opened Cedar & Sage proposal · 3rd view" meta="dwelled 4m on pricing" />
-              <TimelineEvent when="3h ago" tone="warn" icon="phone" who="Caleb Voss" what="requested call after viewing Iron Forge proposal" meta="calendar link sent" />
-              <TimelineEvent when="1d ago" tone="accent" icon="mail" who="Daniel Reyes" what="forwarded Bluebird proposal to a partner" meta="2 new viewers" />
-              <TimelineEvent when="2d ago" tone="money" icon="check" who="Dr. Lena Park" what="signed Northgate retainer" meta="$497/mo · auto-renew" highlight />
-              <TimelineEvent when="4d ago" tone="money" icon="check" who="Sara Whitman" what="signed The Polished Pup retainer" meta="$297/mo" />
+              {timeline.length === 0 ? (
+                <div style={{ padding: "20px 12px", fontSize: 12.5, color: "var(--text-3)", lineHeight: 1.5 }}>
+                  No buyer activity yet. Send a proposal and tracked events — opens, signatures, passes — will show up here.
+                </div>
+              ) : (
+                timeline.map((t, i) => (
+                  <TimelineEvent
+                    key={i}
+                    when={t.when}
+                    tone={t.tone}
+                    icon={t.icon}
+                    who={t.who}
+                    what={t.what}
+                    meta={t.meta}
+                    highlight={t.highlight}
+                  />
+                ))
+              )}
             </div>
           </Surface>
         </div>

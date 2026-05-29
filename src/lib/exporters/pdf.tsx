@@ -11,7 +11,7 @@ import {
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import type { AssetPack, LeadQualificationFile } from "@/types";
+import type { AssetPack, LeadQualificationFile, DeliverableFraming } from "@/types";
 
 const ACCENT = "#1F5FFF";
 const INK = "#15171C";
@@ -43,6 +43,7 @@ const s = StyleSheet.create({
   dot: { width: 10, fontFamily: "Helvetica-Bold", color: ACCENT },
   num: { width: 16, fontFamily: "Helvetica-Bold", color: ACCENT, fontSize: 9 },
   footer: { position: "absolute", bottom: 26, left: 52, right: 52, textAlign: "center", color: SOFT, fontSize: 8 },
+  frame: { backgroundColor: ACCENT_SOFT, borderLeftWidth: 3, borderLeftColor: ACCENT, borderRadius: 4, padding: 9, marginBottom: 7, fontSize: 9.5 },
 });
 
 function Section({ num, title, children }: { num: number; title: string; children: React.ReactNode }) {
@@ -88,8 +89,11 @@ function Numbered({ items }: { items?: string[] }) {
 function LeadDoc({ pack }: { pack: AssetPack }) {
   const f: LeadQualificationFile = pack.file2;
   const { meta } = pack;
+  const framing: DeliverableFraming | undefined = f.framing;
+  let n = 0;
+  const next = () => ++n;
   return (
-    <Document title={`Lead Qualification System — ${meta.businessName}`} author="LaunchGrid AI">
+    <Document title={`Lead Qualification System — ${meta.businessName}`}>
       <Page size="A4" style={s.page}>
         <Text style={s.eyebrow}>CLIENT ACQUISITION INFRASTRUCTURE</Text>
         <Text style={s.h1}>Lead Qualification System</Text>
@@ -104,12 +108,18 @@ function LeadDoc({ pack }: { pack: AssetPack }) {
           <Text style={s.note}>Methodology note. {meta.assumptions.join(" ")}</Text>
         )}
 
-        <Section num={1} title="Intake Form">
+        {framing?.overview ? (
+          <Section num={next()} title="Overview">
+            <Text style={s.frame}>{framing.overview}</Text>
+          </Section>
+        ) : null}
+
+        <Section num={next()} title="Intake Form">
           <Text style={[s.qTitle, { fontSize: 13 }]}>{f.formHeadline}</Text>
           <Text style={s.p}>{f.formSubheadline}</Text>
         </Section>
 
-        <Section num={2} title="Intake Questions">
+        <Section num={next()} title="Intake Questions">
           {(f.questions ?? []).map((q, i) => (
             <View style={s.card} key={i} wrap={false}>
               <Text style={s.qTitle}>
@@ -137,7 +147,7 @@ function LeadDoc({ pack }: { pack: AssetPack }) {
           ))}
         </Section>
 
-        <Section num={3} title="Lead Scoring Rubric">
+        <Section num={next()} title="Lead Scoring Rubric">
           <Text style={s.label}>Rubric</Text>
           <Text style={s.p}>{f.leadScoring?.rubric}</Text>
           <Text style={s.label}>Hot lead</Text>
@@ -148,7 +158,7 @@ function LeadDoc({ pack }: { pack: AssetPack }) {
           <Text style={s.p}>{f.leadScoring?.cold}</Text>
         </Section>
 
-        <Section num={4} title="Routing Logic">
+        <Section num={next()} title="Routing Logic">
           <View style={[s.row, { borderTopWidth: 1, borderTopColor: LINE }]}>
             <Text style={[s.th, { width: 70 }]}>Tier</Text>
             <Text style={[s.th, { flex: 1 }]}>Action</Text>
@@ -163,30 +173,47 @@ function LeadDoc({ pack }: { pack: AssetPack }) {
           ))}
         </Section>
 
-        <Section num={5} title="Automation Workflow">
+        <Section num={next()} title="Automation Workflow">
           <Numbered items={f.automationWorkflow} />
         </Section>
 
-        <Section num={6} title="Thank-You Page">
+        <Section num={next()} title="Thank-You Page">
           <Text style={s.p}>{f.thankYouPage}</Text>
         </Section>
 
-        <Section num={7} title="CRM Field Recommendations">
+        <Section num={next()} title="CRM Field Recommendations">
           <Bullets items={f.crmFields} />
         </Section>
 
-        <Section num={8} title="Follow-Up Timing">
+        <Section num={next()} title="Follow-Up Timing">
           <Text style={s.p}>{f.followUpTiming}</Text>
         </Section>
 
-        <Section num={9} title="Implementation Instructions">
+        <Section num={next()} title="Implementation Instructions">
           <Numbered items={f.implementation} />
         </Section>
+
+        {framing?.implementationGuide?.length || framing?.expectedImpact ? (
+          <Section num={next()} title="Implementation Guide & Expected Impact">
+            {framing.implementationGuide?.length ? (
+              <>
+                <Text style={s.label}>Implementation guide</Text>
+                <Numbered items={framing.implementationGuide} />
+              </>
+            ) : null}
+            {framing.expectedImpact ? (
+              <>
+                <Text style={s.label}>Expected impact</Text>
+                <Text style={s.frame}>{framing.expectedImpact}</Text>
+              </>
+            ) : null}
+          </Section>
+        ) : null}
 
         <Text
           style={s.footer}
           render={({ pageNumber, totalPages }) =>
-            `Prepared by LaunchGrid AI  ·  Page ${pageNumber} of ${totalPages}`
+            `${meta.businessName}  ·  Page ${pageNumber} of ${totalPages}`
           }
           fixed
         />

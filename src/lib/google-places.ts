@@ -87,7 +87,8 @@ async function resolvePhotoUrl(
 
 export async function searchBusinesses(
   industry: string,
-  city: string
+  city: string,
+  maxResults = 60
 ): Promise<PlaceResult[]> {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
@@ -96,29 +97,47 @@ export async function searchBusinesses(
 
   const query = `${industry} in ${city}`;
 
-  const response = await fetch(`${PLACES_BASE}/places:searchText`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.location,places.googleMapsUri,places.primaryTypeDisplayName,places.editorialSummary,places.photos",
-    },
-    body: JSON.stringify({
-      textQuery: query,
-      maxResultCount: 20,
-    }),
-  });
+  // Google Places Text Search returns up to 20 per page and a maximum of 60
+  // total across 3 pages (hard API cap). Walk the nextPageToken chain until we
+  // hit the cap, the requested max, or run out of pages.
+  const collected: PlacesApiPlace[] = [];
+  let pageToken: string | undefined;
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      `Google Places API error: ${response.status} - ${JSON.stringify(errorData)}`
-    );
-  }
+  do {
+    const response = await fetch(`${PLACES_BASE}/places:searchText`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        // nextPageToken must be in the field mask or it won't be returned.
+        "X-Goog-FieldMask":
+          "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.location,places.googleMapsUri,places.primaryTypeDisplayName,places.editorialSummary,places.photos,nextPageToken",
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        pageSize: 20,
+        ...(pageToken ? { pageToken } : {}),
+      }),
+    });
 
-  const data: { places?: PlacesApiPlace[] } = await response.json();
-  const places: PlacesApiPlace[] = data.places ?? [];
+    if (!response.ok) {
+      // Fail hard only on the first page; otherwise return what we have so far.
+      if (collected.length === 0) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Google Places API error: ${response.status} - ${JSON.stringify(errorData)}`
+        );
+      }
+      break;
+    }
+
+    const data: { places?: PlacesApiPlace[]; nextPageToken?: string } =
+      await response.json();
+    collected.push(...(data.places ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken && collected.length < maxResults);
+
+  const places = collected.slice(0, maxResults);
 
   return Promise.all(
     places.map(async (place: PlacesApiPlace) => {

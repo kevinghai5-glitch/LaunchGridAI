@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { MotivationPopup } from "@/components/dashboard/MotivationPopup";
 
 export default async function DashboardLayout({
   children,
@@ -40,6 +41,7 @@ export default async function DashboardLayout({
         userPlan={session.user.plan === "pro" ? "Operator" : "Free"}
       />
       <main className="flex-1 min-w-0 flex flex-col">{children}</main>
+      <MotivationPopup />
     </div>
   );
 }

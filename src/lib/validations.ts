@@ -84,11 +84,6 @@ export const createProposalSchema = z.object({
 
 export const updateProposalSchema = createProposalSchema.partial();
 
-export const sendProposalSchema = z.object({
-  recipientEmail: z.string().email("Invalid email address"),
-  recipientName: z.string().min(1, "Recipient name is required"),
-});
-
 // Deal
 export const createDealSchema = z.object({
   businessId: z.string().cuid(),

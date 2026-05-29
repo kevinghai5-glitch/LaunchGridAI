@@ -23,6 +23,7 @@ import type {
   EmailNurtureFile,
   SmsFollowUpFile,
   BookingSystemFile,
+  DeliverableFraming,
 } from "@/types";
 
 const TABS: { id: AssetSection; label: string; icon: typeof Layout }[] = [
@@ -262,11 +263,57 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* 4-section framing: Overview on top, Implementation Guide + Expected Impact at the close. */
+function FramingOverview({ framing }: { framing?: DeliverableFraming }) {
+  if (!framing?.overview) return null;
+  return (
+    <>
+      <SectionTitle>Overview</SectionTitle>
+      <div className="panel p-4 mb-3 border-l-2 border-blue-500/40 bg-blue-500/[0.05]">
+        <Para>{framing.overview}</Para>
+      </div>
+    </>
+  );
+}
+
+function FramingClose({ framing }: { framing?: DeliverableFraming }) {
+  if (!framing?.implementationGuide?.length && !framing?.expectedImpact) return null;
+  return (
+    <>
+      <SectionTitle>Implementation Guide & Expected Impact</SectionTitle>
+      <Panel>
+        {framing.implementationGuide?.length ? (
+          <>
+            <Label>Implementation guide</Label>
+            <ol className="space-y-1.5 list-decimal pl-5">
+              {framing.implementationGuide.map((step, i) => (
+                <li key={i} className="text-sm text-white leading-relaxed">
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : null}
+        {framing.expectedImpact ? (
+          <>
+            <Label>Expected impact</Label>
+            <div className="border-l-2 border-blue-500/40 bg-blue-500/[0.05] rounded-r-lg px-3 py-2">
+              <Para>{framing.expectedImpact}</Para>
+            </div>
+          </>
+        ) : null}
+      </Panel>
+    </>
+  );
+}
+
 /* ---------- File 1: Growth Audit ---------- */
 
 function AuditTab({ f }: { f: GrowthAuditFile }) {
   return (
     <div className="space-y-1">
+      <FramingOverview framing={f.framing} />
+
       <SectionTitle>Executive Summary</SectionTitle>
       <Panel>
         <Para>{f.executiveSummary}</Para>
@@ -478,6 +525,8 @@ function AuditTab({ f }: { f: GrowthAuditFile }) {
           </div>
         ))}
       </Panel>
+
+      <FramingClose framing={f.framing} />
     </div>
   );
 }
@@ -487,6 +536,8 @@ function AuditTab({ f }: { f: GrowthAuditFile }) {
 function LeadTab({ f }: { f: LeadQualificationFile }) {
   return (
     <div className="space-y-1">
+      <FramingOverview framing={f.framing} />
+
       <Panel>
         <div className="text-base font-semibold text-white">{f.formHeadline}</div>
         <Para>{f.formSubheadline}</Para>
@@ -545,6 +596,8 @@ function LeadTab({ f }: { f: LeadQualificationFile }) {
         <Label>Implementation</Label>
         <Bullets items={f.implementation} />
       </Panel>
+
+      <FramingClose framing={f.framing} />
     </div>
   );
 }
@@ -554,6 +607,8 @@ function LeadTab({ f }: { f: LeadQualificationFile }) {
 function EmailTab({ f }: { f: EmailNurtureFile }) {
   return (
     <div className="space-y-3">
+      <FramingOverview framing={f.framing} />
+
       {(f.emails ?? []).map((e, i) => (
         <div key={i} className="panel p-4">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -573,6 +628,8 @@ function EmailTab({ f }: { f: EmailNurtureFile }) {
           <div className="text-sm text-blue-300 mt-2">CTA: {e.cta}</div>
         </div>
       ))}
+
+      <FramingClose framing={f.framing} />
     </div>
   );
 }
@@ -582,6 +639,8 @@ function EmailTab({ f }: { f: EmailNurtureFile }) {
 function SmsTab({ f }: { f: SmsFollowUpFile }) {
   return (
     <div className="space-y-3">
+      <FramingOverview framing={f.framing} />
+
       {(f.messages ?? []).map((m, i) => (
         <div key={i} className="panel p-4">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -603,6 +662,8 @@ function SmsTab({ f }: { f: SmsFollowUpFile }) {
           <p className="text-xs text-gray-500 mt-1">On reply: {m.replyStrategy}</p>
         </div>
       ))}
+
+      <FramingClose framing={f.framing} />
     </div>
   );
 }
@@ -612,6 +673,8 @@ function SmsTab({ f }: { f: SmsFollowUpFile }) {
 function BookingTab({ f }: { f: BookingSystemFile }) {
   return (
     <div className="space-y-1">
+      <FramingOverview framing={f.framing} />
+
       <Panel>
         <div className="text-base font-semibold text-white">{f.headline}</div>
         <Para>{f.subheadline}</Para>
@@ -660,6 +723,8 @@ function BookingTab({ f }: { f: BookingSystemFile }) {
         <Label>Implementation</Label>
         <Bullets items={f.implementation} />
       </Panel>
+
+      <FramingClose framing={f.framing} />
     </div>
   );
 }

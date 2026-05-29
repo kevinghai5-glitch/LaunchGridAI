@@ -7,6 +7,11 @@ import { checkPlanLimit } from "@/lib/limits";
 import { fetchWebsitePage } from "@/lib/website-analyzer";
 import { fetchPlaceReviews, findCompetitors } from "@/lib/google-places";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
+import { firecrawlSite } from "@/lib/firecrawl";
+import { buildBusinessFacts } from "@/lib/business-facts";
+import { runPageSpeed } from "@/lib/pagespeed";
+import { runDataForSeo } from "@/lib/dataforseo";
+import { buildScreenshotBundle } from "@/lib/screenshotone";
 import {
   generateAssetPack,
   generateOneSection,
@@ -56,8 +61,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Enrichment: ground the pack in the live site, real reviews, and local
-    // competitors. Each source degrades gracefully to empty on failure.
-    const [page, reviews, competitors] = await Promise.all([
+    // competitors plus the premium signals (Firecrawl, PageSpeed, DataForSEO,
+    // ScreenshotOne). Each source degrades gracefully to empty on failure.
+    const [page, reviews, competitors, scrape, psi, dfs] = await Promise.all([
       fetchWebsitePage(business.website),
       fetchPlaceReviews(business.googlePlaceId),
       findCompetitors(
@@ -65,14 +71,53 @@ export async function POST(req: NextRequest) {
         business.city,
         business.googlePlaceId
       ),
+      firecrawlSite(business.website),
+      runPageSpeed(business.website),
+      runDataForSeo(business.name, business.address),
     ]);
 
+    const verifiedFacts = buildBusinessFacts({
+      scrape,
+      fallbackText: page.text,
+      places: {
+        name: business.name,
+        phone: business.phone,
+        address: business.address,
+        website: business.website,
+      },
+    });
+
+    const screenshots = buildScreenshotBundle({
+      target: { url: business.website, label: `${business.name} (Target)` },
+      competitors: competitors.map((c) => ({
+        url: c.website ?? null,
+        label: `Competitor: ${c.name}`,
+      })),
+    });
+
+    // Prefer the richer Firecrawl markdown when we have it, else fall back to
+    // the native scrape (still useful for legacy / Firecrawl-disabled runs).
+    const websiteTextForPrompt = scrape.used && scrape.homepage
+      ? [scrape.homepage.markdown, ...scrape.subpages.map((s) => s.markdown)]
+          .filter(Boolean)
+          .join("\n\n---\n\n")
+          .slice(0, 18000)
+      : page.text;
+
+    const websiteHtmlForSignals = scrape.used && scrape.homepage
+      ? scrape.homepage.html || page.html
+      : page.html;
+
     const intel = buildAuditIntelligence({
-      websiteHtml: page.html,
+      websiteHtml: websiteHtmlForSignals,
       hasWebsiteUrl: Boolean(business.website),
       reviews,
       competitors,
       self: { rating: business.rating, reviewCount: business.reviewCount },
+      verifiedFacts,
+      performance: psi,
+      dataForSeo: dfs,
+      screenshots,
     });
 
     const ctx: GenerationContext = {
@@ -87,7 +132,7 @@ export async function POST(req: NextRequest) {
         description: business.description,
       },
       intel,
-      websiteText: page.text,
+      websiteText: websiteTextForPrompt,
     };
 
     // ── Regenerate a single deliverable, merging into the latest stored pack.

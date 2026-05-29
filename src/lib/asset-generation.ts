@@ -37,6 +37,19 @@ export interface GenerationContext {
   websiteText: string;
 }
 
+// Maps PsiResult → the compact shape we ship in the deliverable JSON.
+function shapePsi(
+  r: { performanceScore: number | null; metrics: { lcpSeconds: number | null; cls: number | null; inpMs: number | null } } | null
+): { score: number | null; lcpSeconds: number | null; cls: number | null; inpMs: number | null } | null {
+  if (!r) return null;
+  return {
+    score: r.performanceScore,
+    lcpSeconds: r.metrics.lcpSeconds,
+    cls: r.metrics.cls,
+    inpMs: r.metrics.inpMs,
+  };
+}
+
 const STYLE_RULES = `STYLE & QUALITY RULES (follow strictly):
 - You are a senior growth strategist at a high-end client-acquisition consultancy, not an AI copywriter. The deliverable must read like a paid audit a firm would charge $3,000–$15,000 for.
 - Frame everything as conversion infrastructure / acquisition systems / revenue recovery — never as "copywriting."
@@ -47,6 +60,20 @@ const STYLE_RULES = `STYLE & QUALITY RULES (follow strictly):
 - BANNED phrases/words: "unlock your potential", "supercharge", "revolutionary", "game-changing", "10x", "next-level", and obvious AI/guru filler.
 - Tone: clear, tactical, premium, direct, human. No hype, no corporate filler.
 - Return ONLY valid JSON matching the requested shape exactly. No commentary outside the JSON.`;
+
+// Shared 4-section framing every deliverable must carry. The "Actual
+// Deliverable" is the file's existing content; framing wraps it with an
+// Overview (what + why for THIS business), an Implementation Guide (how to
+// deploy), and Expected Impact (the realistic outcome). Keep it specific,
+// non-generic, and free of platform/agency self-reference.
+function framingInstruction(deliverableName: string): string {
+  return `Also produce a "framing" object that positions this deliverable for the business owner reading it:
+- overview: 2-4 sentences on what ${deliverableName} is and why it matters for THIS specific business and city. No generic boilerplate.
+- implementationGuide: 4-7 ordered, plain-English steps the owner or their VA follows to put this live (tools, where to paste, what to switch on). Practical, not theoretical.
+- expectedImpact: 2-3 sentences on the realistic business outcome once this is running (more booked jobs, better lead quality, fewer no-shows, higher close rate). Honest — no inflated numbers.`;
+}
+
+const FRAMING_SCHEMA = `"framing": {"overview": "...", "implementationGuide": ["..."], "expectedImpact": "..."},`;
 
 function profileBlock(b: BusinessProfile, websiteText: string): string {
   const lines = [
@@ -91,11 +118,38 @@ async function generateJson<T>(prompt: string): Promise<T> {
 // ── FILE 1: Growth Audit + Landing Page ──────────────────────────────────────
 
 async function generateFile1(ctx: GenerationContext): Promise<GrowthAuditFile> {
+  const psi = ctx.intel.performance;
+  const hasPsi = Boolean(psi?.available);
+  const visualsAvailable = Boolean(ctx.intel.screenshots?.available);
+
+  const technicalUxSchema = `,
+  "technicalUx": {
+    "available": ${hasPsi ? "true" : "false"},
+    "mobile": ${hasPsi && psi?.mobile ? "{score, lcpSeconds, cls, inpMs}" : "null"},
+    "desktop": ${hasPsi && psi?.desktop ? "{score, lcpSeconds, cls, inpMs}" : "null"},
+    "businessImpactSummary": "${hasPsi ? "2-4 sentences translating the measured perf numbers into business impact (lost mobile conversions, bounce risk, perceived slowness, ad-spend efficiency). NO Lighthouse jargon." : "1-2 sentences noting perf is unmeasured and what assumption you're working from."}",
+    "topFixes": [${hasPsi ? '{"fix": "...", "businessImpact": "..."}' : ""}]
+  }`;
+
+  const visualsSchema = `,
+  "visuals": {
+    "available": ${visualsAvailable ? "true" : "false"},
+    "shots": [],
+    "competitiveRead": "${visualsAvailable ? "2-4 sentences calling out what the above-the-fold visual comparison says about hero clarity, CTA prominence, trust signals, and mobile UX — what the buyer should see." : "1 sentence noting screenshots are unavailable for this run."}"
+  }`;
+
   const prompt = `${STYLE_RULES}
 
 ${contextHeader(ctx)}
 
 TASK: Produce FILE 1 of the acquisition pack — a premium business growth audit AND a complete landing-page conversion blueprint for this ONE business. This is the flagship document; it must feel like a real consulting audit that diagnoses exactly where the business is losing leads, bookings, and revenue, then hands over the fix.
+
+${hasPsi
+  ? "Include a 'Technical UX & Performance' section that translates the REAL measured PageSpeed numbers (provided above) into business consequences — slower mobile = lost calls, layout shifts = lower form completion, etc. The owner does not care about LCP/CLS; they care about money. Recommend the 2-4 highest-leverage fixes with their plain-English business impact."
+  : "Performance data is unavailable for this run — keep the Technical UX section short and label it as assumption-based."}
+${visualsAvailable
+  ? "Above-the-fold screenshots (target + nearby competitors, desktop + mobile) will be embedded into the final HTML deliverable. Write a short 'competitiveRead' that tells the buyer what the visual comparison reveals (hero clarity, CTA prominence, trust signals, mobile UX) — do not list URLs, just the strategic read."
+  : ""}
 
 The audit must consider: weak positioning, unclear offer, weak CTAs, confusing customer journey, poor lead capture, missing qualification, weak booking flow, weak follow-up, lack of nurture, weak trust signals, poor use of reviews, outdated branding, weak mobile UX, weak local relevance, missed seasonal opportunities, lack of urgency, poor objection handling, poor perceived authority. Ground findings in the website signals + review + competitor intelligence above where present.
 
@@ -103,8 +157,11 @@ Local market intelligence must be specific to the city and niche (customer psych
 
 The landing page copy must be clear, conversion-focused, locally relevant, niche-specific, believable, emotionally direct — not hypey, not generic.
 
+${framingInstruction("this growth audit & landing-page blueprint")}
+
 Return JSON in EXACTLY this shape:
 {
+  ${FRAMING_SCHEMA}
   "executiveSummary": "3-5 sentence sharp summary of the core opportunity and what this pack fixes",
   "growthAudit": {
     "overview": "2-4 sentence read on the current state of their acquisition system",
@@ -147,11 +204,43 @@ Return JSON in EXACTLY this shape:
     "coldOutreachAngle": "...", "personalizedOpener": "...",
     "loomScriptBullets": ["..."], "proposalPositioning": "...",
     "discoveryCallPoints": ["..."], "objectionHandling": [{"objection": "...", "response": "..."}]
-  }
+  }${technicalUxSchema}${visualsSchema}
 }
 
-Provide EXACTLY 5 items in revenueLeaks. Provide 4-7 findings, 3-5 conversionBottlenecks, 2-4 testimonials, 4-6 FAQ items.`;
-  return generateJson<GrowthAuditFile>(prompt);
+Provide EXACTLY 5 items in revenueLeaks. Provide 4-7 findings, 3-5 conversionBottlenecks, 2-4 testimonials, 4-6 FAQ items.${hasPsi ? " Provide 2-4 topFixes in technicalUx." : ""}`;
+
+  const file = await generateJson<GrowthAuditFile>(prompt);
+
+  // Overlay the REAL measured metrics on top of whatever the model produced,
+  // and attach the real screenshot URLs — the model never sees image URLs.
+  if (hasPsi && psi) {
+    file.technicalUx = {
+      available: true,
+      mobile: shapePsi(psi.mobile),
+      desktop: shapePsi(psi.desktop),
+      businessImpactSummary: file.technicalUx?.businessImpactSummary ?? "",
+      topFixes: file.technicalUx?.topFixes ?? [],
+    };
+  } else {
+    file.technicalUx = {
+      available: false,
+      mobile: null,
+      desktop: null,
+      businessImpactSummary:
+        file.technicalUx?.businessImpactSummary ??
+        "Live page-speed data was unavailable for this run. Treat any technical UX commentary as a strategic assumption to verify post-engagement.",
+      topFixes: file.technicalUx?.topFixes ?? [],
+    };
+  }
+
+  const shots = ctx.intel.screenshots?.shots ?? [];
+  file.visuals = {
+    available: shots.length > 0,
+    shots: shots.map((s) => ({ imageUrl: s.imageUrl, label: s.label, viewport: s.viewport })),
+    competitiveRead: file.visuals?.competitiveRead ?? "",
+  };
+
+  return file;
 }
 
 // ── FILE 2: Lead Qualification System ────────────────────────────────────────
@@ -172,8 +261,11 @@ Lead tiers:
 
 Recommend a realistic automation stack only where relevant (e.g. Typeform/Jotform/HighLevel, Zapier/Make, Google Sheets/CRM, Calendly, SMS/email platform).
 
+${framingInstruction("this lead qualification & routing system")}
+
 Return JSON in EXACTLY this shape:
 {
+  ${FRAMING_SCHEMA}
   "formHeadline": "...",
   "formSubheadline": "...",
   "questions": [
@@ -210,8 +302,11 @@ Sequence purpose by day:
 6: Urgency + offer
 7: Final direct ask
 
+${framingInstruction("this 7-day email nurture sequence")}
+
 Return JSON in EXACTLY this shape:
 {
+  ${FRAMING_SCHEMA}
   "emails": [
     {"day": 1, "timing": "immediately after opt-in", "subject": "...", "subjectB": "A/B alternative subject", "previewText": "inbox preview text", "body": "full email body with natural line breaks", "cta": "the call to action", "purpose": "welcome + credibility"}
   ]
@@ -238,8 +333,11 @@ Timing:
 5: Day 5 re-engagement
 6: Day 7 final follow-up
 
+${framingInstruction("this SMS follow-up sequence")}
+
 Return JSON in EXACTLY this shape:
 {
+  ${FRAMING_SCHEMA}
   "messages": [
     {"order": 1, "timing": "within 2 minutes", "message": "the SMS text", "charCount": 0, "psychology": "why this works", "replyStrategy": "how to handle the reply"}
   ]
@@ -264,8 +362,11 @@ ${contextHeader(ctx)}
 
 TASK: Produce FILE 5 — a booking page + appointment show-up optimization system that reduces no-shows and increases appointment quality. Remove uncertainty by explaining what happens during the appointment, how long it takes, what to prepare, the outcome they can expect, why showing up matters, and how to reschedule. Tone: calm, confident, human, low-pressure, professional. No-show recovery must feel curious, human, helpful, open-door — never passive-aggressive.
 
+${framingInstruction("this booking & appointment show-up system")}
+
 Return JSON in EXACTLY this shape:
 {
+  ${FRAMING_SCHEMA}
   "headline": "...",
   "subheadline": "...",
   "whatToExpect": ["..."],
@@ -320,13 +421,28 @@ export async function generateOneSection(
 }
 
 export function buildMeta(ctx: GenerationContext) {
+  const i = ctx.intel;
   return {
     businessName: ctx.business.name,
     city: ctx.business.city ?? "",
     industry: ctx.business.industry ?? ctx.business.category ?? "local business",
     generatedAt: new Date().toISOString(),
-    dataConfidence: ctx.intel.dataConfidence,
-    assumptions: ctx.intel.assumptions,
+    dataConfidence: i.dataConfidence,
+    assumptions: i.assumptions,
+    signals: {
+      websiteScraped: i.website.hasWebsite,
+      reviewsAnalyzed: i.reviews.available || Boolean(i.dataForSeo?.reviews.available),
+      competitorsAnalyzed: i.competitors.available,
+      performanceMeasured: Boolean(i.performance?.available),
+      gbpProfilePulled: Boolean(i.dataForSeo?.gbp.available),
+      screenshotsCaptured: Boolean(i.screenshots?.available),
+      verifiedFactsExtracted: Boolean(
+        i.verifiedFacts &&
+          (i.verifiedFacts.phones.value.length ||
+            i.verifiedFacts.services.value.length ||
+            i.verifiedFacts.bookingLinks.value.length)
+      ),
+    },
   };
 }
 

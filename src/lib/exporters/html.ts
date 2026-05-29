@@ -4,7 +4,24 @@
 // client-facing consulting deliverables. No external assets — everything is
 // inlined so the file works when downloaded and opened directly.
 
-import type { AssetPack, GrowthAuditFile, BookingSystemFile, AssetPackMeta } from "@/types";
+import type {
+  AssetPack,
+  GrowthAuditFile,
+  BookingSystemFile,
+  AssetPackMeta,
+  TechnicalUxSection,
+  VisualIntelligence,
+  DeliverableFraming,
+} from "@/types";
+import { resolveNicheTheme, type NicheTheme } from "./niche-theme";
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
 
 function esc(s: string | number | null | undefined): string {
   if (s === null || s === undefined) return "";
@@ -32,13 +49,32 @@ function list(items: string[] | undefined, ordered = false): string {
 
 function section(num: number, title: string, inner: string): string {
   if (!inner) return "";
-  return `<section class="sec"><div class="sec-num">${num
+  const id = `sec-${num.toString().padStart(2, "0")}-${slugify(title)}`;
+  return `<section class="sec reveal" id="${id}"><div class="sec-num">${num
     .toString()
     .padStart(2, "0")}</div><h2>${esc(title)}</h2>${inner}</section>`;
 }
 
+// Extract section anchors from rendered body for the sticky TOC.
+function buildToc(body: string): string {
+  const re = /<section class="sec reveal" id="(sec-[^"]+)">[\s\S]*?<h2>([^<]+)<\/h2>/g;
+  const items: { id: string; title: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    items.push({ id: m[1], title: m[2] });
+  }
+  if (items.length < 3) return "";
+  return `<nav class="toc" aria-label="Document sections"><div class="toc-label">In this document</div><ol>${items
+    .map((i, idx) => `<li><a href="#${i.id}"><span class="toc-n">${(idx + 1)
+      .toString()
+      .padStart(2, "0")}</span>${i.title}</a></li>`)
+    .join("")}</ol></nav>`;
+}
+
 function shell(meta: AssetPackMeta, docTitle: string, body: string): string {
   const confidence = meta.dataConfidence.toUpperCase();
+  const theme: NicheTheme = resolveNicheTheme(meta.industry);
+  const toc = buildToc(body);
   const assumptions = meta.assumptions.length
     ? `<div class="assumptions"><strong>Methodology note.</strong> ${meta.assumptions
         .map((a) => esc(a))
@@ -52,83 +88,319 @@ function shell(meta: AssetPackMeta, docTitle: string, body: string): string {
 <title>${esc(docTitle)} — ${esc(meta.businessName)}</title>
 <style>
   :root {
-    --ink: #15171c; --muted: #5b6472; --soft: #8a93a2; --line: #e7e9ee;
-    --accent: #1f5fff; --accent-soft: #eef3ff; --bg: #f6f7f9; --card: #ffffff;
-    --warn: #b54708; --high: #b42318; --med: #b54708; --low: #027a48;
+    --ink: #14161b; --muted: #56606e; --soft: #8a93a2; --line: #e7e9ee;
+    --accent: ${theme.accent}; --accent-soft: ${theme.accentSoft};
+    --grad-a: ${theme.gradientStart}; --grad-b: ${theme.gradientEnd};
+    --bg: #f4f5f8; --card: #ffffff; --warn: #b54708;
+    --high: #b42318; --med: #b54708; --low: #027a48;
+    --heading: ${theme.headingFont};
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.6; font-size: 16px; -webkit-font-smoothing: antialiased;
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -100px, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+      radial-gradient(900px 500px at -10% 200px, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.62; font-size: 16px; -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+  h1, h2, h3 { font-family: var(--heading); }
+  .layout { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; display: grid; grid-template-columns: 240px 1fr; gap: 36px; }
+  .toc { position: sticky; top: 32px; align-self: start; max-height: calc(100vh - 64px); overflow-y: auto; padding: 6px 4px; }
+  .toc-label { text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; font-weight: 700; color: var(--soft); margin: 0 8px 10px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li { margin: 0; }
+  .toc a {
+    display: flex; gap: 10px; align-items: baseline;
+    text-decoration: none; color: var(--muted); font-size: 13px;
+    padding: 7px 10px; border-radius: 7px; line-height: 1.35;
+    border-left: 2px solid transparent; transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .toc a:hover { background: rgba(0,0,0,.03); color: var(--ink); border-left-color: var(--accent); }
+  .toc-n { font-size: 10.5px; font-weight: 700; color: var(--soft); letter-spacing: .04em; min-width: 18px; }
+  .main { min-width: 0; }
   header.doc {
-    background: linear-gradient(135deg, #0b1f4d, #1f5fff);
-    color: #fff; border-radius: 16px; padding: 40px 40px 36px; margin-bottom: 40px;
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+    color: #fff; border-radius: 20px; padding: 44px 44px 40px; margin-bottom: 32px;
+    box-shadow: 0 18px 40px -22px color-mix(in srgb, var(--grad-b) 60%, transparent);
   }
-  header.doc .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; opacity: .8; margin-bottom: 14px; }
-  header.doc h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; letter-spacing: -.02em; }
-  header.doc .meta { font-size: 14px; opacity: .9; }
+  header.doc::before {
+    content: ""; position: absolute; inset: -40% -20% auto auto; width: 70%; height: 200%;
+    background: radial-gradient(closest-side, rgba(255,255,255,.18), transparent 70%);
+    pointer-events: none;
+  }
+  header.doc::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 40%);
+    pointer-events: none;
+  }
+  header.doc > * { position: relative; }
+  header.doc .eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: 11.5px; opacity: .88; margin-bottom: 16px; font-weight: 600; }
+  header.doc h1 { margin: 0 0 10px; font-size: 34px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; }
+  header.doc .meta { font-size: 14.5px; opacity: .92; }
   header.doc .badge {
-    display: inline-block; margin-top: 18px; background: rgba(255,255,255,.16);
-    border: 1px solid rgba(255,255,255,.25); padding: 5px 12px; border-radius: 99px; font-size: 12px;
+    display: inline-block; margin-top: 20px; background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.28); padding: 6px 14px; border-radius: 99px; font-size: 11.5px;
+    font-weight: 600; letter-spacing: .04em; backdrop-filter: blur(8px);
   }
   .assumptions {
     background: #fff8ec; border: 1px solid #f5d9a8; color: #7a4d05;
-    border-radius: 10px; padding: 14px 16px; font-size: 13.5px; margin-bottom: 32px;
+    border-radius: 12px; padding: 14px 18px; font-size: 13.5px; margin-bottom: 28px;
   }
-  .sec { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 28px 32px; margin-bottom: 20px; position: relative; }
-  .sec-num { position: absolute; top: 22px; right: 28px; font-size: 13px; font-weight: 700; color: var(--soft); letter-spacing: .04em; }
-  h2 { font-size: 20px; margin: 0 0 16px; letter-spacing: -.01em; padding-right: 40px; }
+  .sec {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 30px 34px; margin-bottom: 18px; position: relative;
+    box-shadow: 0 1px 2px rgba(15,17,28,.04), 0 8px 24px -16px rgba(15,17,28,.08);
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  }
+  .sec:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 1px 2px rgba(15,17,28,.04), 0 16px 36px -20px rgba(15,17,28,.14);
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  }
+  .sec-num {
+    position: absolute; top: 24px; right: 30px; font-size: 11.5px; font-weight: 700;
+    color: var(--accent); letter-spacing: .08em;
+    background: var(--accent-soft); padding: 4px 10px; border-radius: 99px;
+  }
+  h2 { font-size: 22px; margin: 0 0 16px; letter-spacing: -.015em; padding-right: 64px; font-weight: 700; }
   h3 { font-size: 15px; margin: 22px 0 8px; color: var(--ink); }
   p { margin: 0 0 12px; }
   p:last-child { margin-bottom: 0; }
   ul, ol { margin: 0 0 12px; padding-left: 20px; }
   li { margin: 0 0 6px; }
   .muted { color: var(--muted); }
-  .label { text-transform: uppercase; letter-spacing: .07em; font-size: 11.5px; font-weight: 700; color: var(--soft); margin: 18px 0 6px; }
+  .label { text-transform: uppercase; letter-spacing: .09em; font-size: 11px; font-weight: 700; color: var(--accent); margin: 20px 0 8px; }
   table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 14px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { background: var(--accent-soft); color: #1a3a8a; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--accent-soft); color: color-mix(in srgb, var(--grad-b) 80%, #000); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+  tbody tr { transition: background .15s ease; }
+  tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
   .score { font-weight: 700; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .pill.high { background: #fee4e2; color: var(--high); }
   .pill.medium { background: #fef0c7; color: var(--med); }
   .pill.low { background: #d1fadf; color: var(--low); }
-  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 0 0 12px; }
-  .hero-quote { background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; padding: 18px 20px; font-size: 19px; font-weight: 600; margin: 0 0 14px; }
+  .card {
+    background: linear-gradient(180deg, #fafbfd, var(--bg));
+    border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 0 0 12px;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); transform: translateY(-1px); }
+  .hero-quote {
+    background: var(--accent-soft); border-left: 4px solid var(--accent);
+    border-radius: 0 12px 12px 0; padding: 20px 22px;
+    font-family: var(--heading); font-size: 21px; font-weight: 600; line-height: 1.3;
+    margin: 0 0 14px; letter-spacing: -.01em;
+  }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
-  .ba > div { padding: 14px 16px; font-size: 14px; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+  .ba > div { padding: 16px 18px; font-size: 14px; }
   .ba .before { background: #fff5f5; border-right: 1px solid var(--line); }
   .ba .after { background: #f2fbf6; }
-  .ba .t { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 4px; }
-  .email { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; }
-  .email .subj { font-weight: 700; margin-bottom: 4px; }
+  .ba .t { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin-bottom: 6px; color: var(--muted); }
+  .email { border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 12px; background: var(--card); }
+  .email .subj { font-weight: 700; margin-bottom: 4px; font-size: 15px; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 6px 0 4px; }
+  .shot { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #0b1220; box-shadow: 0 12px 28px -20px rgba(0,0,0,.4); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot .cap { background: #0b1220; color: #e5edff; padding: 9px 13px; font-size: 12.5px; letter-spacing: .02em; font-weight: 500; }
+  .shots-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; margin-bottom: 14px; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 14px; }
+  .metric {
+    background: linear-gradient(180deg, #fff, var(--bg));
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+    transition: border-color .15s ease;
+  }
+  .metric:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  .metric .v { font-family: var(--heading); font-size: 24px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+  .metric .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--soft); margin-top: 2px; font-weight: 600; }
+  .strategy-block {
+    background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent-soft) 55%, #fff));
+    border-left: 3px solid var(--accent);
+    padding: 16px 18px; border-radius: 0 10px 10px 0; margin: 12px 0 16px; font-size: 14.5px;
+  }
+  details.collapsible {
+    border: 1px solid var(--line); border-radius: 10px; padding: 0; margin: 0 0 10px;
+    background: var(--card); transition: border-color .15s ease;
+  }
+  details.collapsible[open] { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  details.collapsible > summary {
+    cursor: pointer; padding: 14px 18px; font-weight: 600; list-style: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  details.collapsible > summary::-webkit-details-marker { display: none; }
+  details.collapsible > summary::after {
+    content: "+"; color: var(--accent); font-weight: 700; font-size: 18px; line-height: 1;
+    transition: transform .2s ease;
+  }
+  details.collapsible[open] > summary::after { content: "−"; }
+  details.collapsible > *:not(summary) { padding: 0 18px 16px; }
   footer.doc { text-align: center; color: var(--soft); font-size: 12.5px; margin-top: 40px; }
-  @media (max-width: 640px) { .grid2, .ba { grid-template-columns: 1fr; } .wrap { padding: 32px 16px 64px; } header.doc { padding: 28px 24px; } }
-  @media print { body { background: #fff; } .sec, .card { break-inside: avoid; } }
+  .reveal { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .sec:hover { transform: none; }
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; gap: 0; padding: 32px 16px 64px; }
+    .toc { display: none; }
+    .grid2, .ba, .shots, .shots-row { grid-template-columns: 1fr; }
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    header.doc { padding: 28px 24px; }
+    header.doc h1 { font-size: 26px; }
+    .sec { padding: 22px 22px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .toc { display: none; }
+    .layout { display: block; padding: 0; }
+    .sec, .card { break-inside: avoid; box-shadow: none; }
+    .reveal { opacity: 1; transform: none; }
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="doc">
-      <div class="eyebrow">Client Acquisition Infrastructure</div>
-      <h1>${esc(docTitle)}</h1>
-      <div class="meta">${esc(meta.businessName)}${meta.city ? ` · ${esc(meta.city)}` : ""}${
-        meta.industry ? ` · ${esc(meta.industry)}` : ""
-      }</div>
-      <div class="badge">Data confidence: ${esc(confidence)}</div>
-    </header>
-    ${assumptions}
-    ${body}
-    <footer class="doc">Prepared by LaunchGrid AI · ${esc(
-      new Date(meta.generatedAt).toLocaleDateString()
-    )}</footer>
+  <div class="layout">
+    ${toc}
+    <main class="main">
+      <header class="doc">
+        <div class="eyebrow">${esc(theme.eyebrow)}</div>
+        <h1>${esc(docTitle)}</h1>
+        <div class="meta">${esc(meta.businessName)}${meta.city ? ` · ${esc(meta.city)}` : ""}${
+          meta.industry ? ` · ${esc(meta.industry)}` : ""
+        }</div>
+        <div class="badge">Data confidence: ${esc(confidence)}</div>
+      </header>
+      ${assumptions}
+      ${body}
+      <footer class="doc">${esc(meta.businessName)} · ${esc(
+        new Date(meta.generatedAt).toLocaleDateString()
+      )}</footer>
+    </main>
   </div>
+  <script>
+    (function () {
+      if (!("IntersectionObserver" in window)) {
+        document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+      document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+    })();
+  </script>
 </body>
 </html>`;
+}
+
+function renderTechnicalUx(tux: TechnicalUxSection | undefined): string {
+  if (!tux) return "";
+  if (!tux.available) {
+    return `<div class="strategy-block">${esc(
+      tux.businessImpactSummary ||
+        "Live page-speed data was unavailable for this run. Treat any technical UX commentary as a strategic assumption to verify post-engagement."
+    )}</div>`;
+  }
+  const metricCell = (k: string, v: string | number | null | undefined) =>
+    v == null || v === ""
+      ? `<div class="metric"><div class="v muted">—</div><div class="k">${esc(k)}</div></div>`
+      : `<div class="metric"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`;
+
+  const grid = (label: string, m: TechnicalUxSection["mobile"]) =>
+    m
+      ? `<div class="label">${esc(label)}</div><div class="metric-grid">${metricCell(
+          "Perf score",
+          m.score != null ? `${m.score}/100` : null
+        )}${metricCell("LCP", m.lcpSeconds != null ? `${m.lcpSeconds}s` : null)}${metricCell(
+          "CLS",
+          m.cls != null ? m.cls : null
+        )}${metricCell("INP", m.inpMs != null ? `${m.inpMs}ms` : null)}</div>`
+      : "";
+
+  const fixes = (tux.topFixes ?? []).length
+    ? `<div class="label">Highest-leverage fixes</div>${(tux.topFixes ?? [])
+        .map(
+          (f) =>
+            `<div class="card"><strong>${esc(f.fix)}</strong><p>${esc(
+              f.businessImpact
+            )}</p></div>`
+        )
+        .join("")}`
+    : "";
+
+  return `${grid("Mobile (measured)", tux.mobile)}${grid("Desktop (measured)", tux.desktop)}${
+    tux.businessImpactSummary
+      ? `<div class="strategy-block">${esc(tux.businessImpactSummary)}</div>`
+      : ""
+  }${fixes}`;
+}
+
+function renderVisuals(viz: VisualIntelligence | undefined): string {
+  if (!viz || !viz.available || !viz.shots?.length) return "";
+  // Group by label (target/competitor) so desktop+mobile sit side-by-side.
+  const groups = new Map<string, { desktop?: typeof viz.shots[number]; mobile?: typeof viz.shots[number] }>();
+  for (const s of viz.shots) {
+    const base = s.label.replace(/\s+—\s+(desktop|mobile)$/i, "").trim();
+    const g = groups.get(base) ?? {};
+    if (s.viewport === "desktop") g.desktop = s;
+    else g.mobile = s;
+    groups.set(base, g);
+  }
+  const blocks = Array.from(groups.entries())
+    .map(([name, g]) => {
+      const cells: string[] = [];
+      if (g.desktop) {
+        cells.push(
+          `<div class="shot"><img loading="lazy" src="${esc(
+            g.desktop.imageUrl
+          )}" alt="${esc(g.desktop.label)}"><div class="cap">${esc(g.desktop.label)}</div></div>`
+        );
+      }
+      if (g.mobile) {
+        cells.push(
+          `<div class="shot"><img loading="lazy" src="${esc(
+            g.mobile.imageUrl
+          )}" alt="${esc(g.mobile.label)}"><div class="cap">${esc(g.mobile.label)}</div></div>`
+        );
+      }
+      return `<div class="label">${esc(name)}</div><div class="shots-row">${cells.join(
+        ""
+      )}</div>`;
+    })
+    .join("");
+  return `${viz.competitiveRead ? `<div class="strategy-block">${esc(viz.competitiveRead)}</div>` : ""}${blocks}`;
+}
+
+// 4-section framing: Overview goes first, Implementation Guide + Expected
+// Impact close the document. Returns "" when no framing exists (old packs).
+function renderFramingOverview(framing: DeliverableFraming | undefined): string {
+  if (!framing?.overview) return "";
+  return `<div class="strategy-block">${para(framing.overview)}</div>`;
+}
+
+function renderFramingClose(framing: DeliverableFraming | undefined): string {
+  if (!framing) return "";
+  const guide = framing.implementationGuide?.length
+    ? `<div class="label">Implementation guide</div>${list(framing.implementationGuide, true)}`
+    : "";
+  const impact = framing.expectedImpact
+    ? `<div class="label">Expected impact</div><div class="strategy-block">${para(
+        framing.expectedImpact
+      )}</div>`
+    : "";
+  return `${guide}${impact}`;
 }
 
 function emailBlock(label: string, e: { subject: string; body: string }): string {
@@ -144,11 +416,27 @@ export function renderFile1Html(pack: AssetPack): string {
   const f: GrowthAuditFile = pack.file1;
   const parts: string[] = [];
 
-  parts.push(section(1, "Executive Summary", para(f.executiveSummary)));
+  let n = 0;
+  const next = () => ++n;
+
+  const overview = renderFramingOverview(f.framing);
+  if (overview) parts.push(section(next(), "Overview", overview));
+
+  parts.push(section(next(), "Executive Summary", para(f.executiveSummary)));
+
+  const visualsHtml = renderVisuals(f.visuals);
+  if (visualsHtml) {
+    parts.push(section(next(), "Visual Intelligence (Target vs. Local Competitors)", visualsHtml));
+  }
+
+  const tuxHtml = renderTechnicalUx(f.technicalUx);
+  if (tuxHtml) {
+    parts.push(section(next(), "Technical UX & Performance", tuxHtml));
+  }
 
   parts.push(
     section(
-      2,
+      next(),
       "Business Growth Audit",
       para(f.growthAudit?.overview) +
         (f.growthAudit?.findings?.length
@@ -168,7 +456,7 @@ export function renderFile1Html(pack: AssetPack): string {
 
   parts.push(
     section(
-      3,
+      next(),
       "Top 5 Revenue Leaks",
       f.revenueLeaks?.length
         ? `<table><thead><tr><th>Issue</th><th>Why it matters</th><th>Impact</th><th>Urgency</th><th>Difficulty</th><th>Recommended fix</th><th>Expected impact</th></tr></thead><tbody>${f.revenueLeaks
@@ -189,7 +477,7 @@ export function renderFile1Html(pack: AssetPack): string {
 
   parts.push(
     section(
-      4,
+      next(),
       "Conversion Bottleneck Analysis",
       (f.conversionBottlenecks ?? [])
         .map(
@@ -205,7 +493,7 @@ export function renderFile1Html(pack: AssetPack): string {
   const lmi = f.localMarketIntelligence;
   parts.push(
     section(
-      5,
+      next(),
       "Local Market Intelligence",
       lmi
         ? [
@@ -226,7 +514,7 @@ export function renderFile1Html(pack: AssetPack): string {
   const cp = f.competitorPositioning;
   parts.push(
     section(
-      6,
+      next(),
       "Competitor Positioning Analysis",
       cp
         ? `<div class="label">Common weak messaging</div>${list(cp.commonWeakMessaging)}
@@ -240,7 +528,7 @@ export function renderFile1Html(pack: AssetPack): string {
 
   parts.push(
     section(
-      7,
+      next(),
       "Trust Gap Analysis",
       (f.trustGapAnalysis ?? [])
         .map(
@@ -253,13 +541,13 @@ export function renderFile1Html(pack: AssetPack): string {
     )
   );
 
-  parts.push(section(8, "Fastest Conversion Wins", list(f.fastestWins)));
-  parts.push(section(9, "Recommended Positioning Strategy", para(f.positioningStrategy)));
+  parts.push(section(next(), "Fastest Conversion Wins", list(f.fastestWins)));
+  parts.push(section(next(), "Recommended Positioning Strategy", para(f.positioningStrategy)));
 
   const lp = f.landingPage;
   parts.push(
     section(
-      10,
+      next(),
       "Complete Landing Page Copy",
       lp
         ? `<div class="hero-quote">${esc(lp.heroHeadline)}</div>${para(lp.heroSubheadline)}
@@ -290,15 +578,15 @@ export function renderFile1Html(pack: AssetPack): string {
     )
   );
 
-  parts.push(section(11, "Landing Page Structure", list(f.landingStructure, true)));
-  parts.push(section(12, "CTA Strategy", para(f.ctaStrategy)));
-  parts.push(section(13, "Social Proof Recommendations", list(f.socialProofRecommendations)));
-  parts.push(section(14, "Urgency / Scarcity Strategy", para(f.urgencyStrategy)));
-  parts.push(section(15, "Implementation Notes", para(f.implementationNotes)));
+  parts.push(section(next(), "Landing Page Structure", list(f.landingStructure, true)));
+  parts.push(section(next(), "CTA Strategy", para(f.ctaStrategy)));
+  parts.push(section(next(), "Social Proof Recommendations", list(f.socialProofRecommendations)));
+  parts.push(section(next(), "Urgency / Scarcity Strategy", para(f.urgencyStrategy)));
+  parts.push(section(next(), "Implementation Notes", para(f.implementationNotes)));
 
   parts.push(
     section(
-      16,
+      next(),
       "Recommended Tech Stack",
       (f.techStack ?? []).length
         ? `<table><thead><tr><th>Tool</th><th>Purpose</th></tr></thead><tbody>${f.techStack
@@ -308,12 +596,12 @@ export function renderFile1Html(pack: AssetPack): string {
     )
   );
 
-  parts.push(section(17, "Tracking / Analytics Recommendations", list(f.trackingAnalytics)));
-  parts.push(section(18, "Loom Walkthrough Talking Points", list(f.loomTalkingPoints)));
+  parts.push(section(next(), "Tracking / Analytics Recommendations", list(f.trackingAnalytics)));
+  parts.push(section(next(), "Loom Walkthrough Talking Points", list(f.loomTalkingPoints)));
 
   parts.push(
     section(
-      19,
+      next(),
       "Before / After Content Angles",
       (f.beforeAfterAngles ?? [])
         .map(
@@ -329,7 +617,7 @@ export function renderFile1Html(pack: AssetPack): string {
   const se = f.salesEnablement;
   parts.push(
     section(
-      20,
+      next(),
       "High-Ticket Sales Enablement",
       se
         ? `<div class="label">Cold outreach angle</div>${para(se.coldOutreachAngle)}
@@ -346,6 +634,9 @@ export function renderFile1Html(pack: AssetPack): string {
     )
   );
 
+  const close = renderFramingClose(f.framing);
+  if (close) parts.push(section(next(), "Implementation & Expected Impact", close));
+
   return shell(pack.meta, "Landing Page Growth Audit", parts.join("\n"));
 }
 
@@ -355,26 +646,32 @@ export function renderFile5Html(pack: AssetPack): string {
   const f: BookingSystemFile = pack.file5;
   const parts: string[] = [];
 
+  let n = 0;
+  const next = () => ++n;
+
+  const overview = renderFramingOverview(f.framing);
+  if (overview) parts.push(section(next(), "Overview", overview));
+
   parts.push(
     section(
-      1,
+      next(),
       "Booking Page",
       `<div class="hero-quote">${esc(f.headline)}</div>${para(f.subheadline)}`
     )
   );
-  parts.push(section(2, "What to Expect", list(f.whatToExpect)));
+  parts.push(section(next(), "What to Expect", list(f.whatToExpect)));
   parts.push(
     section(
-      3,
+      next(),
       "3-Step Appointment Breakdown",
       list((f.threeStepBreakdown ?? []).map((s) => `${s.step} — ${s.description}`), true)
     )
   );
-  parts.push(section(4, "Appointment Positioning", para(f.appointmentPositioning)));
-  parts.push(section(5, "Micro Social Proof", list(f.microSocialProof)));
+  parts.push(section(next(), "Appointment Positioning", para(f.appointmentPositioning)));
+  parts.push(section(next(), "Micro Social Proof", list(f.microSocialProof)));
   parts.push(
     section(
-      6,
+      next(),
       "Email & SMS Sequence",
       emailBlock("Confirmation email", f.confirmationEmail) +
         emailBlock("24-hour reminder email", f.reminderEmail24h) +
@@ -390,9 +687,12 @@ export function renderFile5Html(pack: AssetPack): string {
         )}</div>`
     )
   );
-  parts.push(section(7, "Reschedule Framing", para(f.rescheduleFraming)));
-  parts.push(section(8, "Show-Up Quality Notes", para(f.showUpQualityNotes)));
-  parts.push(section(9, "Implementation Instructions", list(f.implementation, true)));
+  parts.push(section(next(), "Reschedule Framing", para(f.rescheduleFraming)));
+  parts.push(section(next(), "Show-Up Quality Notes", para(f.showUpQualityNotes)));
+  parts.push(section(next(), "Implementation Instructions", list(f.implementation, true)));
+
+  const close = renderFramingClose(f.framing);
+  if (close) parts.push(section(next(), "Implementation Guide & Expected Impact", close));
 
   return shell(pack.meta, "Booking & Appointment System", parts.join("\n"));
 }

@@ -22,6 +22,13 @@ export function renderFile4Txt(pack: AssetPack): string {
   lines.push("Twilio, etc.). Timing is measured from the lead opting in / inquiring.");
   lines.push("");
 
+  const framing = file4.framing;
+  if (framing?.overview) {
+    lines.push("OVERVIEW");
+    lines.push(framing.overview);
+    lines.push("");
+  }
+
   if (meta.assumptions.length) {
     lines.push("NOTE:");
     meta.assumptions.forEach((a) => lines.push(`  - ${a}`));
@@ -40,8 +47,23 @@ export function renderFile4Txt(pack: AssetPack): string {
     lines.push("");
   });
 
+  if (framing?.implementationGuide?.length || framing?.expectedImpact) {
+    lines.push(THIN);
+    lines.push("IMPLEMENTATION GUIDE & EXPECTED IMPACT");
+    lines.push(THIN);
+    lines.push("");
+    if (framing.implementationGuide?.length) {
+      framing.implementationGuide.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+      lines.push("");
+    }
+    if (framing.expectedImpact) {
+      lines.push(`Expected impact: ${framing.expectedImpact}`);
+      lines.push("");
+    }
+  }
+
   lines.push(RULE);
-  lines.push(`Prepared by LaunchGrid AI · ${new Date(meta.generatedAt).toLocaleDateString()}`);
+  lines.push(`${meta.businessName} · ${new Date(meta.generatedAt).toLocaleDateString()}`);
   lines.push(RULE);
 
   return lines.join("\n");

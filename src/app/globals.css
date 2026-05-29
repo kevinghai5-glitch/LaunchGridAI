@@ -186,6 +186,7 @@
 @keyframes lg-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes lg-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes lg-spin { to { transform: rotate(360deg); } }
+@keyframes lg-menu-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
 
 /* ───────── Helpers ───────── */
 .rise > * { animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both; }

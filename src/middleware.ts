@@ -20,6 +20,5 @@ export const config = {
     "/businesses/:path*",
     "/proposals/:path*",
     "/deals/:path*",
-    "/billing/:path*",
   ],
 };

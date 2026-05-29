@@ -97,6 +97,12 @@ export async function renderFile3Docx(pack: AssetPack): Promise<Buffer> {
   );
   children.push(metaLine(`7-day sequence · Data confidence: ${meta.dataConfidence.toUpperCase()}`));
 
+  const framing = file3.framing;
+  if (framing?.overview) {
+    children.push(heading("Overview"));
+    children.push(...body(framing.overview));
+  }
+
   if (meta.assumptions.length) {
     children.push(
       new Paragraph({
@@ -128,13 +134,28 @@ export async function renderFile3Docx(pack: AssetPack): Promise<Buffer> {
     if (idx < (file3.emails?.length ?? 0) - 1) children.push(divider());
   });
 
+  if (framing?.implementationGuide?.length || framing?.expectedImpact) {
+    children.push(divider());
+    children.push(heading("Implementation Guide & Expected Impact"));
+    if (framing.implementationGuide?.length) {
+      children.push(label("Implementation guide"));
+      framing.implementationGuide.forEach((step, i) =>
+        children.push(...body(`${i + 1}. ${step}`))
+      );
+    }
+    if (framing.expectedImpact) {
+      children.push(label("Expected impact"));
+      children.push(...body(framing.expectedImpact));
+    }
+  }
+
   children.push(divider());
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [
         new TextRun({
-          text: `Prepared by LaunchGrid AI · ${new Date(meta.generatedAt).toLocaleDateString()}`,
+          text: `${meta.businessName} · ${new Date(meta.generatedAt).toLocaleDateString()}`,
           size: 16,
           color: MUTED,
         }),
@@ -143,7 +164,6 @@ export async function renderFile3Docx(pack: AssetPack): Promise<Buffer> {
   );
 
   const doc = new Document({
-    creator: "LaunchGrid AI",
     title: `Email Nurture System — ${meta.businessName}`,
     sections: [
       {
