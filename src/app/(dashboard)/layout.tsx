@@ -16,27 +16,40 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [wonDeals, pipelineDeals] = await Promise.all([
-    prisma.deal.findMany({
-      where: { userId: session.user.id, stage: "WON" },
-      select: { monthlyValue: true },
-    }),
-    prisma.deal.findMany({
-      where: {
-        userId: session.user.id,
-        stage: { in: ["SYSTEMS_GENERATED", "PROPOSAL_SENT", "FOLLOW_UP"] },
-      },
-      select: { monthlyValue: true },
-    }),
-  ]);
+  const [wonDeals, pipelineDeals, opportunityCount, pipelineCount, proposalCount] =
+    await Promise.all([
+      prisma.deal.findMany({
+        where: { userId: session.user.id, stage: "WON" },
+        select: { monthlyValue: true },
+      }),
+      prisma.deal.findMany({
+        where: {
+          userId: session.user.id,
+          stage: { in: ["SYSTEMS_GENERATED", "PROPOSAL_SENT", "FOLLOW_UP"] },
+        },
+        select: { monthlyValue: true },
+      }),
+      prisma.business.count({ where: { userId: session.user.id } }),
+      prisma.deal.count({
+        where: { userId: session.user.id, stage: { notIn: ["WON", "LOST"] } },
+      }),
+      prisma.proposal.count({
+        where: { userId: session.user.id, status: { notIn: ["ACCEPTED", "REJECTED"] } },
+      }),
+    ]);
   const totalMRR = wonDeals.reduce((s, d) => s + d.monthlyValue, 0);
   const pipelineMRR = pipelineDeals.reduce((s, d) => s + d.monthlyValue, 0);
+  const activeClients = wonDeals.length;
 
   return (
     <div className="flex" style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <Sidebar
         totalMRR={totalMRR}
         pipelineMRR={pipelineMRR}
+        activeClients={activeClients}
+        opportunityCount={opportunityCount}
+        pipelineCount={pipelineCount}
+        proposalCount={proposalCount}
         userName={session.user.name ?? "Account"}
         userPlan={session.user.plan === "pro" ? "Operator" : "Free"}
       />

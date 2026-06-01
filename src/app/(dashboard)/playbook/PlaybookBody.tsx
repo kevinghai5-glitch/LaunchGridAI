@@ -44,7 +44,7 @@ const SECTIONS: { id: SectionId; label: string; icon: LucideIcon; blurb: string 
   { id: "overview", label: "The Offer", icon: Package, blurb: "What you sell, in one frame" },
   { id: "deliverables", label: "The 5 Deliverables", icon: Layers, blurb: "Each asset & how to sell it" },
   { id: "economics", label: "Pricing & ROI", icon: DollarSign, blurb: "What to charge + the math" },
-  { id: "process", label: "Sales Process", icon: Route, blurb: "Source → close, step by step" },
+  { id: "process", label: "Sales Process", icon: Route, blurb: "Outreach → Zoom → close" },
   { id: "scripts", label: "Scripts & Talk Tracks", icon: MessageSquare, blurb: "Copy-paste outreach & pitch" },
   { id: "discovery", label: "Discovery Questions", icon: HelpCircle, blurb: "Uncover pain, qualify fast" },
   { id: "objections", label: "Objection Handling", icon: ShieldCheck, blurb: "Answers to every pushback" },
@@ -721,138 +721,249 @@ function ResultTile({ label, value, tone }: { label: string; value: string; tone
 
 /* ───────────────────────── 4 · PROCESS ───────────────────────── */
 
-const PHASES: {
-  n: number;
-  title: string;
-  goal: string;
-  actions: string[];
-  tool?: { label: string; href: string };
-}[] = [
+// Top-of-funnel flow: how a prospect moves from cold to closed.
+const FLOW: { emoji: string; label: string; sub: string; tool?: { label: string; href: string } }[] = [
   {
-    n: 1,
-    title: "Source the right prospects",
-    goal: "Build a list of businesses with visible, fixable gaps.",
-    actions: [
-      "Scan a niche + city and save 10–20 businesses with obvious gaps — no website, thin reviews, low rating.",
-      "Prioritize owner-operated businesses doing real volume; skip franchises and giants.",
-      "A weaker online presence = more upside to sell, which is exactly what scores highest.",
-    ],
-    tool: { label: "Open Opportunities", href: "/businesses" },
+    emoji: "📞",
+    label: "Cold call / email for outreach",
+    sub: "Cold calling is the primary channel, email the backup. This first touch has one job: book the meeting — not pitch.",
   },
   {
-    n: 2,
-    title: "Build the hook",
-    goal: "Generate the asset pack that becomes your demo.",
-    actions: [
-      "Generate a Growth Asset Pack for your top prospect — it's grounded in their real site + Places data.",
-      "Skim the audit's revenue leaks and the rewritten page; these are your talking points.",
-      "The pack is proof you've done the work before they've paid a cent.",
-    ],
+    emoji: "💻",
+    label: "Book a Zoom meeting to pitch the assets",
+    sub: "Get them on a screen-share. On the call you show the free cold audit, then the prospect's proposal — the assets do the selling.",
     tool: { label: "Open Studio", href: "/studio" },
   },
   {
-    n: 3,
-    title: "Reach out with specifics",
-    goal: "Earn the reply by leading with their gap, not a generic pitch.",
-    actions: [
-      "Open with one concrete finding (load time, a competitor beating them, missing follow-up).",
-      "Offer the audit as a free, no-strings teardown — low friction to say yes.",
-      "Use the cold email / DM scripts; personalize the first line only.",
-    ],
-  },
-  {
-    n: 4,
-    title: "Demo the value",
-    goal: "Show, don't tell — make the gap undeniable.",
-    actions: [
-      "Walk them through the audit on a call or a 3–5 min Loom; screen-share the before/after page.",
-      "Pick the one deliverable that hits their biggest pain and go deep on it.",
-      "End on the outcome, not the features: more booked, paying customers.",
-    ],
-  },
-  {
-    n: 5,
-    title: "Present the proposal",
-    goal: "Put the offer and price in writing while interest is hot.",
-    actions: [
-      "Send the proposal same day as the demo — momentum closes deals.",
-      "Anchor the price with the ROI math from their own numbers.",
-      "Present setup + retainer as one system, not a menu to negotiate down.",
-    ],
+    emoji: "💰",
+    label: "Close",
+    sub: "Sell the OUTCOME — more booked, paying customers — never the system or the files.",
     tool: { label: "Open Proposals", href: "/proposals" },
   },
+];
+
+// The Zoom call itself — three timed moves.
+const MEETING: {
+  n: number;
+  time: string;
+  title: string;
+  tag: string;
+  objective: string;
+  execution: string;
+  kicker: { label: string; body: string; quote?: boolean };
+}[] = [
   {
-    n: 6,
-    title: "Follow up & handle objections",
-    goal: "Most deals are won in the follow-up, not the first call.",
-    actions: [
-      "Move the deal to Follow-up and sequence 3–5 touches over two weeks.",
-      "Answer objections with the framed responses — never discount on the first push.",
-      "Create urgency with a real reason (limited onboarding slots this month).",
-    ],
-    tool: { label: "Open Pipeline", href: "/deals" },
+    n: 1,
+    time: "0–15 min",
+    title: "Diagnose",
+    tag: "The Cold Audit",
+    objective: "Make the hidden gaps visible and painful.",
+    execution:
+      "Share your screen and walk through your pre-identified findings. Lean heavily on the negative business consequences of these broken systems — wasted time, lost revenue, operational bottlenecks.",
+    kicker: {
+      label: "The goal",
+      body: "Get them to verbally agree that these gaps exist and need to be fixed.",
+    },
   },
   {
-    n: 7,
-    title: "Close & onboard",
-    goal: "Turn the yes into a paying, renewing client.",
-    actions: [
-      "Mark the deal Won, take the setup deposit, and book the kickoff.",
-      "Deliver the pack, then start the retainer with a clear monthly reporting rhythm.",
-      "A great first month is what earns months 2 through 12.",
-    ],
+    n: 2,
+    time: "15–20 min",
+    title: "The Pivot",
+    tag: "The Transition",
+    objective: "Shift them from looking at a problem to looking for a solution.",
+    execution: "Stop sharing the audit and ask a framing question to test their readiness.",
+    kicker: {
+      label: "The script",
+      quote: true,
+      body: "Now that we can see exactly where the bottlenecks are in your system, we have two choices. You can take this data and try to patch it up internally, or I can show you the exact system we use to fully automate and deploy this infrastructure for you. Would you like to see how we build that out?",
+    },
+  },
+  {
+    n: 3,
+    time: "20–45 min",
+    title: "Prescribe",
+    tag: "The Proposal",
+    objective: "Present your solution as the definitive fix to the specific gaps you just showed them.",
+    execution: "Open the proposal. Frame every deliverable and line item directly back to the audit.",
+    kicker: {
+      label: "The logic",
+      body: "Don't say \u201CWe offer CRM setup.\u201D Say \u201CTo fix the broken lead-tracking system we looked at 10 minutes ago, we deploy this specific CRM infrastructure.\u201D",
+    },
   },
 ];
+
+function FieldLabel({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <span
+      className="lg-mono"
+      style={{
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: accent ? "var(--accent)" : "var(--text-4)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 function Process() {
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
       <SectionHead
         eyebrow="Sales Process"
-        title="Source to close, in seven repeatable phases"
-        sub="This maps directly to your pipeline stages. Run every prospect through the same motion so nothing leaks and you always know the next action."
+        title="Outreach to close, on one Zoom call"
+        sub="The whole motion: reach out to book the meeting, then let the cold audit and proposal do the selling on a screen-share. Always sell the outcome — never the files."
       />
-      <div className="flex flex-col" style={{ gap: 12 }}>
-        {PHASES.map((p) => (
-          <Surface key={p.n} padded={0} style={{ padding: "22px 24px" }}>
-            <div className="flex items-start" style={{ gap: 16 }}>
+
+      {/* Top-level flow */}
+      <Surface padded={0} style={{ padding: "26px 26px 8px" }}>
+        {FLOW.map((s, i) => (
+          <div key={i} className="flex" style={{ gap: 16 }}>
+            {/* node + connector rail */}
+            <div className="flex flex-col items-center flex-none" style={{ width: 42 }}>
               <div
-                className="grid place-items-center flex-none lg-display"
+                className="grid place-items-center"
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: "rgba(255,255,255,0.03)",
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.04)",
                   border: "1px solid var(--line-strong)",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  color: "var(--accent)",
+                  fontSize: 20,
+                  lineHeight: 1,
                 }}
               >
-                {p.n}
+                {s.emoji}
+              </div>
+              {i < FLOW.length - 1 && (
+                <div style={{ width: 2, flex: 1, background: "var(--line-strong)", margin: "6px 0" }} />
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, paddingBottom: i < FLOW.length - 1 ? 22 : 18 }}>
+              <div
+                className="lg-display"
+                style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.012em", color: "var(--text)", marginTop: 9 }}
+              >
+                {s.label}
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--text-3)", marginTop: 5 }}>{s.sub}</div>
+              {s.tool && (
+                <div style={{ marginTop: 12 }}>
+                  <Link href={s.tool.href}>
+                    <LgButton variant="secondary" size="sm" iconRight="arrow">
+                      {s.tool.label}
+                    </LgButton>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </Surface>
+
+      {/* Inside the Zoom call */}
+      <div style={{ marginTop: 12 }}>
+        <div className="flex items-center" style={{ gap: 10, marginBottom: 5 }}>
+          <h3
+            className="lg-display"
+            style={{ margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: "-0.015em", color: "var(--text)" }}
+          >
+            Inside the Zoom call
+          </h3>
+          <Pill tone="accent">45-min structure</Pill>
+        </div>
+        <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-3)" }}>
+          Three moves: make the gaps hurt, pivot to the fix, then prescribe the proposal as the cure.
+        </p>
+      </div>
+
+      <div className="flex flex-col" style={{ gap: 12 }}>
+        {MEETING.map((m) => (
+          <Surface key={m.n} padded={0} style={{ padding: "22px 24px" }}>
+            <div className="flex items-start" style={{ gap: 16 }}>
+              <div className="flex flex-col items-center flex-none" style={{ gap: 8, width: 56 }}>
+                <div
+                  className="grid place-items-center lg-display"
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid var(--line-strong)",
+                    fontSize: 16,
+                    fontWeight: 600,
+                    color: "var(--accent)",
+                  }}
+                >
+                  {m.n}
+                </div>
+                <span
+                  className="lg-mono"
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: "0.02em",
+                    color: "var(--text-4)",
+                    textAlign: "center",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {m.time}
+                </span>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h3
-                  className="lg-display"
-                  style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: "-0.015em", color: "var(--text)" }}
-                >
-                  {p.title}
-                </h3>
-                <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 4 }}>{p.goal}</div>
-                <div className="flex flex-col" style={{ gap: 9, marginTop: 14 }}>
-                  {p.actions.map((a, i) => (
-                    <Point key={i}>{a}</Point>
-                  ))}
+                <div className="flex items-baseline" style={{ gap: 9, flexWrap: "wrap" }}>
+                  <h3
+                    className="lg-display"
+                    style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: "-0.015em", color: "var(--text)" }}
+                  >
+                    {m.title}
+                  </h3>
+                  <span style={{ fontSize: 13, color: "var(--accent)", fontWeight: 500 }}>{m.tag}</span>
                 </div>
-                {p.tool && (
-                  <div style={{ marginTop: 16 }}>
-                    <Link href={p.tool.href}>
-                      <LgButton variant="secondary" size="sm" iconRight="arrow">
-                        {p.tool.label}
-                      </LgButton>
-                    </Link>
+
+                <div style={{ marginTop: 14 }}>
+                  <FieldLabel>Objective</FieldLabel>
+                  <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+                    {m.objective}
+                  </p>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <FieldLabel>Execution</FieldLabel>
+                  <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+                    {m.execution}
+                  </p>
+                </div>
+
+                {/* kicker box */}
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: "13px 15px",
+                    borderRadius: 10,
+                    background: "var(--accent-soft)",
+                    borderLeft: "2px solid var(--accent)",
+                  }}
+                >
+                  <div className="flex items-center justify-between" style={{ gap: 10 }}>
+                    <FieldLabel accent>{m.kicker.label}</FieldLabel>
+                    {m.kicker.quote && <CopyButton text={m.kicker.body} label="Copy script" />}
                   </div>
-                )}
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: m.kicker.quote ? 14 : 13.5,
+                      lineHeight: 1.6,
+                      color: "var(--text)",
+                      fontStyle: m.kicker.quote ? "italic" : "normal",
+                    }}
+                  >
+                    {m.kicker.quote ? `\u201C${m.kicker.body}\u201D` : m.kicker.body}
+                  </p>
+                </div>
               </div>
             </div>
           </Surface>
@@ -866,29 +977,41 @@ function Process() {
 
 const SCRIPTS: { title: string; when: string; body: string }[] = [
   {
-    title: "Cold email — the audit hook",
-    when: "First touch by email. Personalize only the bracketed bits.",
-    body: `Subject: quick note on [Business]'s website
+    title: "Cold call — the opener",
+    when: "Your primary first touch. The phone is where deals start. Hook them in under 30 seconds.",
+    body: `"Hey, is this [First name]? … Hi [First name], it's [Your name] — I'll be quick, I know you're busy. I help [niche] businesses around [City] get more booked customers off their website, and I actually took a look at [Business] before I called.
 
-Hi [First name],
+The reason I'm reaching out: [one specific finding — e.g. your site takes about [X] seconds to load on a phone, and there's no easy way to book without calling]. For a business doing your kind of volume, that's quietly costing you customers every week.
 
-I was looking at [Business] and noticed your site takes about [X] seconds to load on mobile — and there's no clear way for a visitor to book without calling. That combination quietly costs local businesses a lot of leads.
-
-I put together a short teardown showing exactly where you're losing potential customers, plus a rewritten version of your homepage built to convert. No charge, no pitch — happy to just send it over.
-
-Want me to send the teardown?
-
-[Your name]`,
+I put together a quick breakdown showing exactly where — no charge, no pitch. Can I walk you through the two biggest things real quick, or would it be easier if I sent it over and we grabbed two minutes later this week?"`,
   },
   {
-    title: "Cold DM — short version",
-    when: "Instagram / Facebook DM. Keep it casual and specific.",
-    body: `Hey [First name] — love what you're doing at [Business]. Quick thing: I noticed your site doesn't have any follow-up or text reminders set up, so you're probably losing booked customers to no-shows. I built a quick breakdown of how to fix it for a business like yours — want me to send it over? No charge.`,
+    title: "Getting past the gatekeeper",
+    when: "When a receptionist or staff member picks up. Stay friendly, assume the connection.",
+    body: `"Hey, could you do me a favor and put me through to [Owner first name]? … It's [Your name] — just tell them it's about a couple things I noticed on the [Business] website that are costing them bookings. They'll know what it's about. Appreciate you."
+
+If pushed: "Totally fair — I'm honestly not selling anything today, I actually built them a free breakdown. What's the best way to get it in front of [Owner]?"`,
   },
   {
-    title: "Voicemail script",
-    when: "If they don't pick up. Under 20 seconds.",
-    body: `Hi [First name], this is [Your name] — I help [niche] businesses turn more website visitors into booked customers. I actually pulled some specifics on [Business] and found a couple quick wins I think you'd want to see. I'll shoot you a text too — give me a call back at [number] when you get a sec. Thanks!`,
+    title: "Voicemail — if they don't pick up",
+    when: "No answer. Under 20 seconds, then follow with a quick text.",
+    body: `"Hi [First name], this is [Your name] — I help [niche] businesses turn more website visitors into booked customers. I pulled some specifics on [Business] and found a couple quick wins I think you'd want to see. I'll shoot you a text too — give me a call back at [number] when you get a sec. Thanks, [First name]."`,
+  },
+  {
+    title: "Text / email follow-up — secondary",
+    when: "After a call or voicemail, or when phone isn't landing. Reference the call, keep it short.",
+    body: `Subject: the [Business] breakdown I mentioned
+
+Hi [First name] — [Your name] here, tried giving you a call earlier. Like I mentioned, I took a look at [Business] and noticed your site takes about [X] seconds to load on mobile, with no clear way to book without calling — that combination quietly costs local businesses a lot of leads.
+
+I put together a short teardown showing exactly where you're losing customers, plus a rewritten homepage built to convert. No charge, no pitch. Want me to send it over, or is there a better time to call?
+
+[Your name] · [number]`,
+  },
+  {
+    title: "Cold DM — backup channel",
+    when: "Instagram / Facebook DM when you can't reach them by phone. Casual and specific.",
+    body: `Hey [First name] — love what you're doing at [Business]. Tried reaching you by phone earlier. Quick thing: I noticed your site doesn't have any follow-up or text reminders set up, so you're probably losing booked customers to no-shows. I built a quick breakdown of how to fix it for a business like yours — want me to send it over? No charge.`,
   },
   {
     title: "Loom / demo walkthrough",
@@ -927,8 +1050,8 @@ function Scripts() {
     <div className="flex flex-col" style={{ gap: 16 }}>
       <SectionHead
         eyebrow="Scripts & Talk Tracks"
-        title="Word-for-word, ready to send"
-        sub="Every touch in the sequence, written to copy and personalize. Change the bracketed details, keep the structure — it's built to earn the reply and frame the value before price ever comes up."
+        title="Word-for-word, ready to dial"
+        sub="The sequence, phone first — with text, email, and DM as backup. Change the bracketed details, keep the structure. It's built to open the conversation live, then frame the value before price ever comes up."
       />
       {SCRIPTS.map((s) => (
         <Surface key={s.title} padded={0} style={{ padding: "22px 24px" }}>

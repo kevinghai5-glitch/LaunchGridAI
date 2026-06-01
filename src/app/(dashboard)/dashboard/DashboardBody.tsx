@@ -82,6 +82,8 @@ export function DashboardBody({
 }: Props) {
   const animMRR = useCountUp(totalMRR, 1100);
   const animPipe = useCountUp(pipelineMRR, 1100);
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
     <div style={{ padding: "40px 56px 80px", maxWidth: 1280, margin: "0 auto" }}>
@@ -102,7 +104,7 @@ export function DashboardBody({
             color: "var(--text)",
           }}
         >
-          Good morning, {firstName}.
+          {greeting}, {firstName}.
           <br />
           <span style={{ color: "var(--text-3)" }}>
             Your acquisition engine is running.
@@ -366,7 +368,7 @@ function MetricCard({
 }) {
   const c = accent === "money" ? "var(--money)" : "var(--accent)";
   return (
-    <Surface padded={0} style={{ padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
+    <Surface hover padded={0} style={{ padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>{label}</div>
       <div
         className="lg-display tnum"

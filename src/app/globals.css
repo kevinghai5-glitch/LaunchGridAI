@@ -2,16 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────── LaunchGrid OS — operator aesthetic (dark only) ─────────
-   Matte black + deep navy surfaces, ambient blue accent, money-green.
-   Calm, editorial, Linear-tier restraint. */
+/* ───────── LaunchGrid OS — Apple-grade dark aesthetic ─────────
+   Deep neutral charcoal, restrained system-blue accent, soft diffuse
+   depth. SF Pro typography. Calm, spacious, premium — built on
+   consistency and restraint. */
 
 :root {
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -22,65 +23,67 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
-  --transition: 280ms cubic-bezier(0.2, 0.7, 0.3, 1);
-  --t: 280ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --transition: 240ms cubic-bezier(0.32, 0.72, 0, 1);
+  --t: 240ms cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* base / surfaces */
-  --bg: #0c0d10;
-  --bg-deep: #0a0b0e;
-  --bg-elevated: #111317;
-  --surface: #14161b;
-  --surface-2: #171a20;
-  --surface-hi: #1c1f26;
-  --glass: rgba(20, 22, 27, 0.85);
+  /* base / surfaces — deep neutral charcoal, near-black */
+  --bg: #0a0a0b;
+  --bg-deep: #060607;
+  --bg-elevated: #161617;
+  --surface: #151517;
+  --surface-2: #1c1c1f;
+  --surface-hi: #232326;
+  --glass: rgba(22, 22, 24, 0.72);
 
   /* legacy aliases used across existing components */
-  --surface-hover: #171a20;
-  --surface-active: #1c1f26;
-  --sidebar: #0a0b0e;
+  --surface-hover: #1c1c1f;
+  --surface-active: #232326;
+  --sidebar: #060607;
 
-  /* lines */
-  --line: rgba(255, 255, 255, 0.06);
-  --line-strong: rgba(255, 255, 255, 0.09);
-  --line-bright: rgba(255, 255, 255, 0.14);
-  --border: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.09);
+  /* lines — fewer, softer */
+  --line: rgba(255, 255, 255, 0.05);
+  --line-strong: rgba(255, 255, 255, 0.08);
+  --line-bright: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.08);
 
-  /* text */
-  --text: oklch(0.97 0.003 240);
-  --text-2: oklch(0.80 0.005 240);
-  --text-3: oklch(0.60 0.008 240);
-  --text-4: oklch(0.45 0.008 240);
-  --text-muted: oklch(0.80 0.005 240);
-  --text-subtle: oklch(0.60 0.008 240);
+  /* text — neutral cool-gray, near-zero chroma */
+  --text: oklch(0.98 0.001 270);
+  --text-2: oklch(0.79 0.003 270);
+  --text-3: oklch(0.62 0.004 270);
+  --text-4: oklch(0.47 0.005 270);
+  --text-muted: oklch(0.79 0.003 270);
+  --text-subtle: oklch(0.62 0.004 270);
 
-  /* accent */
-  --accent: oklch(0.74 0.11 250);
-  --accent-2: oklch(0.66 0.13 252);
-  --accent-hover: oklch(0.80 0.11 250);
-  --accent-soft: oklch(0.55 0.10 250 / 0.12);
-  --accent-glow: oklch(0.66 0.13 250 / 0.20);
-  --accent-text: oklch(0.15 0.04 250);
+  /* accent — refined Apple system-blue, used sparingly */
+  --accent: oklch(0.68 0.15 252);
+  --accent-2: oklch(0.62 0.16 254);
+  --accent-hover: oklch(0.74 0.15 252);
+  --accent-soft: oklch(0.62 0.15 252 / 0.13);
+  --accent-glow: oklch(0.62 0.16 252 / 0.16);
+  --accent-text: oklch(0.16 0.04 252);
 
   /* money / status */
-  --money: oklch(0.78 0.11 158);
+  --money: oklch(0.76 0.13 158);
   --money-soft: oklch(0.55 0.10 158 / 0.10);
-  --success: oklch(0.78 0.11 158);
-  --success-soft: oklch(0.55 0.10 158 / 0.12);
-  --warn: oklch(0.80 0.10 75);
-  --warn-soft: oklch(0.55 0.10 75 / 0.12);
-  --warning: oklch(0.80 0.10 75);
-  --warning-soft: oklch(0.55 0.10 75 / 0.12);
-  --danger: oklch(0.72 0.15 25);
-  --danger-soft: oklch(0.55 0.13 25 / 0.13);
+  --success: oklch(0.76 0.13 158);
+  --success-soft: oklch(0.55 0.10 158 / 0.11);
+  --warn: oklch(0.80 0.11 75);
+  --warn-soft: oklch(0.55 0.10 75 / 0.11);
+  --warning: oklch(0.80 0.11 75);
+  --warning-soft: oklch(0.55 0.10 75 / 0.11);
+  --danger: oklch(0.70 0.16 25);
+  --danger-soft: oklch(0.55 0.13 25 / 0.12);
 
-  /* fonts */
-  --font-display: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* fonts — SF Pro first (Apple design language) */
+  --font-sf: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro";
+  --font-display: var(--font-sf), var(--font-sans), "Segoe UI", sans-serif;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 32px -10px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 28px 70px -20px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.3);
+  /* shadows — soft, diffuse, layered depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.28), 0 8px 24px -12px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 8px 28px -8px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --shadow-xl: 0 24px 60px -16px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.28);
 
   /* shadcn aliases */
   --background: var(--bg);
@@ -117,18 +120,19 @@
     padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-feature-settings: "ss01", "cv11";
+    font-family: var(--font-sf), var(--font-sans), "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    letter-spacing: -0.011em;
   }
 
   body {
     min-height: 100vh;
     min-width: 1320px;
-    /* atmosphere — quiet, a hint of cool light top-left */
+    /* atmosphere — barely-there neutral depth, no color cast */
     background:
-      radial-gradient(1400px 800px at 0% -20%, oklch(0.30 0.06 250 / 0.10), transparent 60%),
+      radial-gradient(1200px 700px at 0% -25%, rgba(255, 255, 255, 0.022), transparent 62%),
       var(--bg);
     background-attachment: fixed;
   }
@@ -222,21 +226,39 @@
   animation: pingRing 2.2s cubic-bezier(0, 0.55, 0.45, 1) infinite;
 }
 
-/* surface — solid, soft */
+/* surface — solid, soft, layered depth */
 .surface {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 24px -16px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow);
 }
 
-/* hover lift — quiet */
+/* glass — subtle frosted depth for floating panels */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+}
+
+/* hover lift — refined Apple micro-interaction */
 .hover-lift {
-  transition: transform var(--t), border-color var(--t), background var(--t);
+  transition: transform var(--t), border-color var(--t), background var(--t), box-shadow var(--t);
+  will-change: transform;
 }
 .hover-lift:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   background: var(--surface-2);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lg);
+}
+.hover-lift:active {
+  transform: translateY(0) scale(0.997);
+  box-shadow: var(--shadow);
+  transition-duration: 90ms;
 }
 
 .lg-hover-lift {
@@ -281,8 +303,9 @@
 }
 
 /* row hover */
-.row-hover { transition: background var(--t); }
-.row-hover:hover { background: rgba(255,255,255,0.022); }
+.row-hover { transition: background var(--t), transform var(--t); }
+.row-hover:hover { background: rgba(255,255,255,0.045); transform: translateX(2px); }
+.row-hover:active { background: rgba(255,255,255,0.06); transition-duration: 90ms; }
 
 /* faint grid */
 .grid-bg,

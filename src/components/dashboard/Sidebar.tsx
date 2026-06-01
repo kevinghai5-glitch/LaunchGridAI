@@ -5,39 +5,87 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  Home,
-  Target,
-  Sparkles,
-  Library,
-  FileText,
-  Columns3,
-  BookOpen,
   ChevronDown,
-  Settings,
   Check,
   LogOut,
+  Home,
+  Target,
+  Workflow,
+  FileText,
+  Sparkles,
+  Library,
+  BookOpen,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
-const NAV_ITEMS: { id: string; label: string; icon: LucideIcon; href: string; hint: string }[] = [
-  { id: "dashboard", label: "Home", icon: Home, href: "/dashboard", hint: "H" },
-  { id: "businesses", label: "Opportunities", icon: Target, href: "/businesses", hint: "F" },
-  { id: "studio", label: "Studio", icon: Sparkles, href: "/studio", hint: "S" },
-  { id: "playbook", label: "Sales Playbook", icon: BookOpen, href: "/playbook", hint: "B" },
-  { id: "library", label: "Library", icon: Library, href: "/library", hint: "L" },
-  { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", hint: "P" },
-  { id: "deals", label: "Pipeline", icon: Columns3, href: "/deals", hint: "K" },
+// Neutral "clear" accent used across the sidebar in place of the old blue.
+const SB_BRIGHT = "oklch(0.95 0.004 270)"; // near-white, high clarity
+const SB_ON_BRIGHT = "oklch(0.20 0.004 270)"; // dark text on bright fills
+const SB_ACTIVE_BG = "rgba(255,255,255,0.07)";
+
+type NavItem = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  href: string;
+  badgeKey?: "opportunities" | "pipeline" | "proposals";
+  primary?: boolean;
+};
+
+const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
+  {
+    heading: "Overview",
+    items: [{ id: "dashboard", label: "Home", icon: Home, href: "/dashboard" }],
+  },
+  {
+    heading: "Sales",
+    items: [
+      { id: "businesses", label: "Opportunities", icon: Target, href: "/businesses", badgeKey: "opportunities", primary: true },
+      { id: "deals", label: "Pipeline", icon: Workflow, href: "/deals", badgeKey: "pipeline" },
+      { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", badgeKey: "proposals" },
+    ],
+  },
+  {
+    heading: "Execution",
+    items: [
+      { id: "studio", label: "Studio", icon: Sparkles, href: "/studio" },
+      { id: "library", label: "Library", icon: Library, href: "/library" },
+      { id: "playbook", label: "Sales Playbook", icon: BookOpen, href: "/playbook" },
+    ],
+  },
 ];
 
 interface SidebarProps {
   totalMRR: number;
   pipelineMRR: number;
+  activeClients: number;
+  opportunityCount: number;
+  pipelineCount: number;
+  proposalCount: number;
   userName: string;
   userPlan: string;
 }
 
-export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarProps) {
+export function Sidebar({
+  totalMRR,
+  pipelineMRR,
+  activeClients,
+  opportunityCount,
+  pipelineCount,
+  proposalCount,
+  userName,
+  userPlan,
+}: SidebarProps) {
+  const badgeFor = (key?: NavItem["badgeKey"]): number | undefined => {
+    if (key === "opportunities") return opportunityCount;
+    if (key === "pipeline") return pipelineCount;
+    if (key === "proposals") return proposalCount;
+    return undefined;
+  };
   const pathname = usePathname();
   const initials =
     userName
@@ -49,8 +97,47 @@ export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarPr
 
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  // Restore persisted layout prefs.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("lg-sidebar-collapsed") === "1") setCollapsed(true);
+      const cg = localStorage.getItem("lg-sidebar-groups");
+      if (cg) setClosedGroups(JSON.parse(cg));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("lg-sidebar-collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+    setWsOpen(false);
+    setUserOpen(false);
+  };
+
+  const toggleGroup = (heading: string) => {
+    setClosedGroups((prev) => {
+      const next = { ...prev, [heading]: !prev[heading] };
+      try {
+        localStorage.setItem("lg-sidebar-groups", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   // Close menus on outside click or Escape.
   useEffect(() => {
@@ -76,67 +163,110 @@ export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarPr
     <aside
       className="flex flex-col flex-none sticky top-0"
       style={{
-        width: 240,
-        background: "var(--bg-deep)",
+        width: collapsed ? 68 : 232,
+        background: "var(--sidebar)",
         borderRight: "1px solid var(--line)",
-        padding: "20px 16px 18px",
+        padding: collapsed ? "22px 12px 18px" : "22px 14px 18px",
         height: "100vh",
+        transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), padding 0.22s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
-      <div style={{ padding: "2px 6px 4px", marginBottom: 22 }}>
-        <Link href="/" aria-label="LaunchGrid OS home">
-          <Logo />
-        </Link>
+      {/* header: logo + collapse toggle */}
+      <div
+        className="flex items-center"
+        style={{
+          justifyContent: collapsed ? "center" : "space-between",
+          padding: collapsed ? "2px 0" : "2px 4px 2px 8px",
+          marginBottom: 18,
+        }}
+      >
+        {!collapsed && (
+          <Link href="/" aria-label="LaunchGrid OS home">
+            <Logo textOnly />
+          </Link>
+        )}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="grid place-items-center"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--text-3)",
+            transition: "background var(--t), color var(--t)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+            (e.currentTarget as HTMLElement).style.color = "var(--text-3)";
+          }}
+        >
+          {collapsed ? (
+            <PanelLeftOpen size={17} strokeWidth={1.85} />
+          ) : (
+            <PanelLeftClose size={17} strokeWidth={1.85} />
+          )}
+        </button>
       </div>
 
       {/* workspace switcher */}
-      <div ref={wsRef} className="relative" style={{ marginBottom: 24 }}>
-        <button
-          className="flex items-center w-full text-left"
-          aria-haspopup="menu"
-          aria-expanded={wsOpen}
-          onClick={() => {
-            setWsOpen((v) => !v);
-            setUserOpen(false);
-          }}
-          style={{
-            gap: 10,
-            padding: "9px 10px",
-            background: wsOpen ? "rgba(255,255,255,0.04)" : "transparent",
-            border: "1px solid var(--line)",
-            borderRadius: 10,
-            cursor: "pointer",
-            transition: "background var(--t)",
-            fontFamily: "inherit",
-            color: "inherit",
-            width: "100%",
-          }}
-          onMouseEnter={(e) => {
-            if (!wsOpen)
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
-          }}
-          onMouseLeave={(e) => {
-            if (!wsOpen) (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
-        >
-          <div
-            className="grid place-items-center"
+      {!collapsed ? (
+        <div ref={wsRef} className="relative" style={{ marginBottom: 14 }}>
+          <button
+            className="flex items-center w-full text-left"
+            aria-haspopup="menu"
+            aria-expanded={wsOpen}
+            onClick={() => {
+              setWsOpen((v) => !v);
+              setUserOpen(false);
+            }}
             style={{
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              background: "oklch(0.50 0.10 60)",
-              color: "white",
-              fontSize: 10,
-              fontWeight: 700,
+              gap: 10,
+              padding: "8px 10px",
+              background: wsOpen ? "rgba(255,255,255,0.05)" : "transparent",
+              border: "1px solid transparent",
+              borderRadius: 10,
+              cursor: "pointer",
+              transition: "background var(--t)",
+              fontFamily: "inherit",
+              color: "inherit",
+              width: "100%",
+            }}
+            onMouseEnter={(e) => {
+              if (!wsOpen)
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
+            }}
+            onMouseLeave={(e) => {
+              if (!wsOpen) (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            {initials}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              className="grid place-items-center"
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 7,
+                background: "var(--surface-hi)",
+                color: "var(--text-2)",
+                fontSize: 10.5,
+                fontWeight: 700,
+              }}
+            >
+              {initials}
+            </div>
             <div
               style={{
-                fontSize: 12.5,
+                flex: 1,
+                minWidth: 0,
+                fontSize: 13,
                 fontWeight: 600,
                 color: "var(--text)",
                 whiteSpace: "nowrap",
@@ -146,146 +276,275 @@ export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarPr
             >
               {firstName}&apos;s Workspace
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-3)" }}>Workspace</div>
-          </div>
-          <ChevronDown
-            size={11}
-            strokeWidth={1.75}
-            style={{
-              color: "var(--text-3)",
-              transition: "transform var(--t)",
-              transform: wsOpen ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          />
-        </button>
-        {wsOpen && (
-          <Menu>
-            <MenuLabel>Workspace</MenuLabel>
-            <button
-              className="flex items-center w-full text-left"
-              onClick={() => setWsOpen(false)}
-              style={menuItemStyle}
-              onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")
-              }
-              onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "transparent")
-              }
-            >
-              <div
-                className="grid place-items-center flex-none"
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 6,
-                  background: "oklch(0.50 0.10 60)",
-                  color: "white",
-                  fontSize: 10,
-                  fontWeight: 700,
-                }}
-              >
-                {initials}
-              </div>
-              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>
-                {firstName}&apos;s Workspace
-              </span>
-              <Check size={13} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
-            </button>
-          </Menu>
-        )}
-      </div>
-
-      <nav className="flex flex-col flex-1" style={{ gap: 1 }}>
-        {NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname?.startsWith(item.href));
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              className="flex items-center whitespace-nowrap"
+            <ChevronDown
+              size={12}
+              strokeWidth={1.75}
               style={{
-                gap: 11,
-                padding: "8px 11px",
-                fontSize: 13.5,
-                fontWeight: 500,
-                background: active ? "rgba(255,255,255,0.04)" : "transparent",
-                color: active ? "var(--text)" : "var(--text-2)",
-                border: "1px solid transparent",
-                borderRadius: 8,
-                textDecoration: "none",
-                transition: "background var(--t), color var(--t)",
+                color: "var(--text-3)",
+                transition: "transform var(--t)",
+                transform: wsOpen ? "rotate(180deg)" : "rotate(0deg)",
               }}
-              onMouseEnter={(e) => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
-                  (e.currentTarget as HTMLElement).style.color = "var(--text)";
+            />
+          </button>
+          {wsOpen && (
+            <Menu>
+              <MenuLabel>Workspace</MenuLabel>
+              <button
+                className="flex items-center w-full text-left"
+                onClick={() => setWsOpen(false)}
+                style={menuItemStyle}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")
                 }
-              }}
-              onMouseLeave={(e) => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                  (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLElement).style.background = "transparent")
                 }
-              }}
-            >
-              <Icon
-                size={15}
-                strokeWidth={1.6}
-                style={{ color: active ? "var(--text)" : "var(--text-3)", flex: "none" }}
-              />
-              <span style={{ flex: 1 }}>{item.label}</span>
-              <span
-                className="lg-mono"
-                style={{ fontSize: 10, color: "var(--text-4)", opacity: 0.7 }}
               >
-                {item.hint}
-              </span>
-            </Link>
+                <div
+                  className="grid place-items-center flex-none"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    background: "oklch(0.50 0.10 60)",
+                    color: "white",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {initials}
+                </div>
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>
+                  {firstName}&apos;s Workspace
+                </span>
+                <Check size={13} strokeWidth={2.5} style={{ color: SB_BRIGHT }} />
+              </button>
+            </Menu>
+          )}
+        </div>
+      ) : (
+        <div
+          className="grid place-items-center"
+          title={`${firstName}'s Workspace`}
+          style={{
+            width: 28,
+            height: 28,
+            margin: "0 auto 14px",
+            borderRadius: 8,
+            background: "var(--surface-hi)",
+            color: "var(--text-2)",
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
+          {initials}
+        </div>
+      )}
+
+      <nav className="flex flex-col flex-1" style={{ gap: collapsed ? 8 : 18 }}>
+        {NAV_GROUPS.map((group) => {
+          const groupClosed = !collapsed && closedGroups[group.heading];
+          return (
+            <div key={group.heading} className="flex flex-col" style={{ gap: 2 }}>
+              {!collapsed && (
+                <button
+                  onClick={() => toggleGroup(group.heading)}
+                  aria-expanded={!groupClosed}
+                  className="flex items-center w-full"
+                  style={{
+                    gap: 5,
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    letterSpacing: "0.07em",
+                    textTransform: "uppercase",
+                    color: "var(--text-4)",
+                    padding: "0 11px",
+                    marginBottom: 6,
+                    transition: "color var(--t)",
+                  }}
+                  onMouseEnter={(e) =>
+                    ((e.currentTarget as HTMLElement).style.color = "var(--text-3)")
+                  }
+                  onMouseLeave={(e) =>
+                    ((e.currentTarget as HTMLElement).style.color = "var(--text-4)")
+                  }
+                >
+                  <span style={{ flex: 1, textAlign: "left" }}>{group.heading}</span>
+                  <ChevronDown
+                    size={11}
+                    strokeWidth={2}
+                    style={{
+                      transition: "transform var(--t)",
+                      transform: groupClosed ? "rotate(-90deg)" : "rotate(0deg)",
+                    }}
+                  />
+                </button>
+              )}
+              {!groupClosed &&
+                group.items.map((item) => {
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+                  const Icon = item.icon;
+                  const badge = badgeFor(item.badgeKey);
+                  const emphasized = item.primary && !active;
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      className="flex items-center whitespace-nowrap relative"
+                      style={{
+                        gap: 11,
+                        padding: collapsed ? "9px 0" : "8px 11px",
+                        justifyContent: collapsed ? "center" : "flex-start",
+                        fontSize: 13.5,
+                        fontWeight: active || item.primary ? 600 : 480,
+                        background: active
+                          ? SB_ACTIVE_BG
+                          : emphasized
+                          ? "rgba(255,255,255,0.025)"
+                          : "transparent",
+                        color: active || emphasized ? "var(--text)" : "var(--text-2)",
+                        borderRadius: 9,
+                        textDecoration: "none",
+                        transition: "background var(--t), color var(--t)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active)
+                          (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                        (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active)
+                          (e.currentTarget as HTMLElement).style.background = emphasized
+                            ? "rgba(255,255,255,0.025)"
+                            : "transparent";
+                        (e.currentTarget as HTMLElement).style.color =
+                          active || emphasized ? "var(--text)" : "var(--text-2)";
+                      }}
+                    >
+                      {active && (
+                        <span
+                          aria-hidden
+                          style={{
+                            position: "absolute",
+                            left: collapsed ? -12 : -14,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            width: 3,
+                            height: 18,
+                            borderRadius: "0 3px 3px 0",
+                            background: SB_BRIGHT,
+                          }}
+                        />
+                      )}
+                      <span className="relative" style={{ display: "grid", placeItems: "center" }}>
+                        <Icon
+                          size={16}
+                          strokeWidth={active || item.primary ? 2.1 : 1.85}
+                          style={{
+                            flex: "none",
+                            color: active || item.primary ? SB_BRIGHT : "var(--text-3)",
+                          }}
+                        />
+                        {collapsed && badge !== undefined && badge > 0 && (
+                          <span
+                            aria-hidden
+                            style={{
+                              position: "absolute",
+                              top: -5,
+                              right: -7,
+                              minWidth: 6,
+                              height: 6,
+                              borderRadius: 99,
+                              background: SB_BRIGHT,
+                            }}
+                          />
+                        )}
+                      </span>
+                      {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+                      {!collapsed && badge !== undefined && badge > 0 && (
+                        <span
+                          className="lg-mono tnum grid place-items-center"
+                          style={{
+                            minWidth: 19,
+                            height: 18,
+                            padding: "0 5px",
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            borderRadius: 6,
+                            background: active ? SB_BRIGHT : "rgba(255,255,255,0.06)",
+                            color: active ? SB_ON_BRIGHT : "var(--text-3)",
+                          }}
+                        >
+                          {badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+            </div>
           );
         })}
       </nav>
 
-      {/* Active MRR */}
-      <div style={{ padding: "16px 4px 12px", borderTop: "1px solid var(--line)" }}>
-        <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 6 }}>Active MRR</div>
-        <div
-          className="lg-display tnum"
-          style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", color: "var(--text)" }}
-        >
-          ${totalMRR.toLocaleString()}
-          <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500, marginLeft: 3 }}>
-            /mo
-          </span>
+      {/* Revenue snapshot */}
+      {!collapsed ? (
+        <div style={{ padding: "16px 11px 14px", borderTop: "1px solid var(--line)" }}>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
+              color: "var(--text-4)",
+              marginBottom: 10,
+            }}
+          >
+            Revenue
+          </div>
+          <div className="flex items-baseline justify-between" style={{ marginBottom: 12 }}>
+            <span
+              className="lg-display tnum"
+              style={{ fontSize: 25, fontWeight: 600, letterSpacing: "-0.03em", color: "var(--text)" }}
+            >
+              ${totalMRR.toLocaleString()}
+              <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500, marginLeft: 3 }}>
+                /mo
+              </span>
+            </span>
+            <span style={{ fontSize: 11, color: "var(--text-4)" }}>MRR</span>
+          </div>
+          <div className="flex flex-col" style={{ gap: 7 }}>
+            <StatLine label="Pipeline value" value={`$${pipelineMRR.toLocaleString()}`} />
+            <StatLine label="Active clients" value={activeClients.toLocaleString()} accent="money" />
+          </div>
         </div>
-        <div
-          className="flex justify-between"
-          style={{ marginTop: 10, fontSize: 11.5 }}
-        >
-          <span style={{ color: "var(--text-3)" }}>In pipeline</span>
-          <span className="lg-mono tnum" style={{ color: "var(--text-2)", fontWeight: 500 }}>
-            ${pipelineMRR.toLocaleString()}
-          </span>
-        </div>
-      </div>
+      ) : (
+        <div style={{ borderTop: "1px solid var(--line)", margin: "0 auto", paddingTop: 14 }} />
+      )}
 
       {/* profile row */}
-      <div ref={userRef} className="relative" style={{ borderTop: "1px solid var(--line)" }}>
+      <div ref={userRef} className="relative" style={{ marginTop: 4 }}>
         <button
-          className="flex items-center w-full text-left"
+          className="flex items-center text-left"
           aria-haspopup="menu"
           aria-expanded={userOpen}
+          title={collapsed ? userName : undefined}
           onClick={() => {
             setUserOpen((v) => !v);
             setWsOpen(false);
           }}
           style={{
-            padding: "10px 6px",
+            padding: collapsed ? "8px 0" : "10px 6px",
             marginTop: 6,
             gap: 10,
             width: "100%",
+            justifyContent: collapsed ? "center" : "flex-start",
             background: userOpen ? "rgba(255,255,255,0.04)" : "transparent",
             border: "none",
             borderRadius: 8,
@@ -305,41 +564,47 @@ export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarPr
           <div
             className="grid place-items-center flex-none"
             style={{
-              width: 26,
-              height: 26,
+              width: 28,
+              height: 28,
               borderRadius: 99,
-              background: "oklch(0.45 0.08 250)",
-              color: "white",
+              background: "rgba(255,255,255,0.07)",
+              color: SB_BRIGHT,
               fontSize: 11,
-              fontWeight: 600,
+              fontWeight: 700,
+              border: "1px solid rgba(255,255,255,0.14)",
             }}
           >
             {initials}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 500,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "var(--text)",
-              }}
-            >
-              {userName}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-3)" }}>{userPlan}</div>
-          </div>
-          <Settings
-            size={13}
-            strokeWidth={1.6}
-            style={{
-              color: "var(--text-3)",
-              transition: "transform var(--t)",
-              transform: userOpen ? "rotate(60deg)" : "rotate(0deg)",
-            }}
-          />
+          {!collapsed && (
+            <>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    color: "var(--text)",
+                  }}
+                >
+                  {userName}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-3)" }}>{userPlan}</div>
+              </div>
+              <Settings
+                size={14}
+                strokeWidth={1.85}
+                style={{
+                  flex: "none",
+                  color: "var(--text-3)",
+                  transition: "transform var(--t)",
+                  transform: userOpen ? "rotate(60deg)" : "rotate(0deg)",
+                }}
+              />
+            </>
+          )}
         </button>
         {userOpen && (
           <Menu up>
@@ -368,6 +633,28 @@ export function Sidebar({ totalMRR, pipelineMRR, userName, userPlan }: SidebarPr
         )}
       </div>
     </aside>
+  );
+}
+
+function StatLine({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: "money";
+}) {
+  return (
+    <div className="flex justify-between items-center" style={{ fontSize: 11.5 }}>
+      <span style={{ color: "var(--text-3)" }}>{label}</span>
+      <span
+        className="lg-mono tnum"
+        style={{ color: accent === "money" ? "var(--money)" : "var(--text-2)", fontWeight: 500 }}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 

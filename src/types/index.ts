@@ -318,6 +318,48 @@ export interface AssetPack {
 
 export type AssetSection = "file1" | "file2" | "file3" | "file4" | "file5";
 
+// ── Cold-Open Audit ───────────────────────────────────────────────────────────
+// The free, 1-page "here's what's quietly costing you customers" mini-report we
+// send BEFORE pitching the full 5-file pack. Grounded in real PageSpeed /
+// screenshot / scrape / reviews data. Ends in ONE soft, editable, reply-driving
+// CTA tied to the single highest-impact finding.
+
+export interface ColdAuditFinding {
+  title: string; // short, specific, plain-English ("Your booking link is buried")
+  problem: string; // what's actually happening, grounded in observed data
+  whyItCosts: string; // the business/revenue consequence in their language
+  severity: "high" | "medium" | "low";
+}
+
+export interface ColdAuditPerformance {
+  available: boolean;
+  mobileScore: number | null;
+  lcpSeconds: number | null;
+  clsValue: number | null;
+  // plain-English read of the numbers, never raw Lighthouse jargon
+  readout: string;
+}
+
+export interface ColdAuditReport {
+  businessName: string;
+  city: string;
+  industry: string;
+  websiteUrl: string;
+  // signed above-the-fold screenshot of their current site (best-effort)
+  screenshotUrl: string | null;
+  headline: string; // personalized hook ("I looked at {biz}'s site — 3 quick things")
+  intro: string; // 1-2 warm sentences framing why this was sent, no pitch
+  findings: ColdAuditFinding[]; // 3-5, ordered most→least impactful
+  performance?: ColdAuditPerformance;
+  // the soft close. editable so the user tweaks the ask before sending.
+  closingCta: {
+    tiedToFinding: string; // which finding this references (the #1)
+    message: string; // the soft, low-friction, reply-driving ask
+  };
+  generatedAt: string;
+  dataConfidence: DataConfidence;
+}
+
 export interface ProposalData {
   title: string;
   packageOverview: string;

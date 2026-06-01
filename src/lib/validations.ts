@@ -59,6 +59,10 @@ export const generateAssetsSchema = z.object({
   section: z.enum(["file1", "file2", "file3", "file4", "file5"]).optional(),
 });
 
+export const generateColdAuditSchema = z.object({
+  businessId: z.string().cuid(),
+});
+
 export const generateProposalSchema = z.object({
   businessId: z.string().cuid(),
   monthlyPrice: z.number().int().positive(),

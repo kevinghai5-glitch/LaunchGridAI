@@ -59,8 +59,6 @@ export default function BusinessDetailPage() {
   const [business, setBusiness] = useState<BusinessWithSystems | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
-  const [generatingLead, setGeneratingLead] = useState(false);
-  const [generatingContent, setGeneratingContent] = useState(false);
   const [generatingAssets, setGeneratingAssets] = useState(false);
   const [favoriting, setFavoriting] = useState(false);
   const autoGenTriggered = useRef(false);
@@ -145,28 +143,6 @@ export default function BusinessDetailPage() {
     }
   };
 
-  const handleGenerateLead = async () => {
-    setGeneratingLead(true);
-    try {
-      const res = await fetch("/api/generate/lead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate lead system");
-        return;
-      }
-      toast.success("Lead system generated!");
-      loadBusiness();
-    } catch {
-      toast.error("Failed to generate lead system");
-    } finally {
-      setGeneratingLead(false);
-    }
-  };
-
   const handleGenerateAssets = async () => {
     setGeneratingAssets(true);
     try {
@@ -189,28 +165,6 @@ export default function BusinessDetailPage() {
     }
   };
 
-  const handleGenerateContent = async () => {
-    setGeneratingContent(true);
-    try {
-      const res = await fetch("/api/generate/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate content system");
-        return;
-      }
-      toast.success("Content system generated!");
-      loadBusiness();
-    } catch {
-      toast.error("Failed to generate content system");
-    } finally {
-      setGeneratingContent(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col min-h-full">
@@ -226,8 +180,6 @@ export default function BusinessDetailPage() {
 
   if (!business) return null;
 
-  const leadSystems = business.generatedSystems.filter((s) => s.type === "LEAD");
-  const contentSystems = business.generatedSystems.filter((s) => s.type === "CONTENT");
   const assetSystems = business.generatedSystems.filter((s) => s.type === "ASSETS");
   const latestAssetPack = assetSystems[0]?.content as AssetPack | undefined;
 
@@ -330,40 +282,6 @@ export default function BusinessDetailPage() {
               <p className="text-xs text-gray-500 -mt-1 mb-1">
                 Full growth pack: landing page, lead capture, 7-day emails, SMS &amp; booking copy.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={handleGenerateLead}
-                disabled={generatingLead}
-              >
-                {generatingLead ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Target className="h-4 w-4 mr-2" />
-                )}
-                Generate Lead System
-                {leadSystems.length > 0 && (
-                  <Badge variant="blue" className="ml-2 text-xs">{leadSystems.length}</Badge>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={handleGenerateContent}
-                disabled={generatingContent}
-              >
-                {generatingContent ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Zap className="h-4 w-4 mr-2" />
-                )}
-                Generate Content System
-                {contentSystems.length > 0 && (
-                  <Badge variant="blue" className="ml-2 text-xs">{contentSystems.length}</Badge>
-                )}
-              </Button>
               <Button variant="outline" size="sm" className="w-full" asChild>
                 <Link href={`/proposals/new?businessId=${id}`}>
                   <FileText className="h-4 w-4 mr-2" />

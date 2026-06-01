@@ -1,7 +1,5 @@
 "use client";
 
-import { Bell, ChevronRight, Search, Settings } from "lucide-react";
-
 interface TopBarProps {
   title: string;
   /** Breadcrumb shown after the title (e.g. "Charleston, SC · Day Spa"). */
@@ -13,26 +11,26 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
     <div
       className="flex items-center sticky top-0 z-30"
       style={{
-        height: 60,
-        padding: "0 32px",
-        gap: 20,
-        background: "rgba(12, 13, 16, 0.75)",
+        height: 64,
+        padding: "0 40px",
+        gap: 24,
+        background: "rgba(10, 10, 11, 0.6)",
         borderBottom: "1px solid var(--line)",
-        backdropFilter: "blur(24px) saturate(160%)",
-        WebkitBackdropFilter: "blur(24px) saturate(160%)",
+        backdropFilter: "blur(32px) saturate(180%)",
+        WebkitBackdropFilter: "blur(32px) saturate(180%)",
       }}
     >
       <div className="flex items-center" style={{ gap: 10, minWidth: 220 }}>
         <div
           className="lg-display"
-          style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}
+          style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}
         >
           {title}
         </div>
         {subtitle && (
           <>
-            <ChevronRight size={11} strokeWidth={1.75} style={{ color: "var(--text-4)" }} />
-            <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>{subtitle}</div>
+            <span style={{ fontSize: 13, color: "var(--text-4)", fontWeight: 400 }}>›</span>
+            <div style={{ fontSize: 13, color: "var(--text-3)" }}>{subtitle}</div>
           </>
         )}
       </div>
@@ -42,25 +40,27 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
         <button
           className="flex items-center text-left"
           style={{
-            width: "min(520px, 100%)",
+            width: "min(540px, 100%)",
             gap: 10,
-            height: 34,
+            height: 38,
             padding: "0 14px",
-            background: "rgba(255,255,255,0.025)",
+            background: "rgba(255,255,255,0.03)",
             border: "1px solid var(--line)",
-            borderRadius: 10,
+            borderRadius: 12,
             cursor: "pointer",
             fontFamily: "inherit",
-            transition: "background var(--t)",
+            transition: "background var(--t), border-color var(--t)",
           }}
-          onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")
-          }
-          onMouseLeave={(e) =>
-            ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.025)")
-          }
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--line-strong)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--line)";
+          }}
         >
-          <Search size={14} strokeWidth={1.75} style={{ color: "var(--text-3)" }} />
+          <span aria-hidden style={{ fontSize: 13, opacity: 0.8, lineHeight: 1 }}>🔍</span>
           <span style={{ fontSize: 13, color: "var(--text-3)" }}>Search</span>
           <span style={{ flex: 1 }} />
           <Kbd>⌘</Kbd>
@@ -68,12 +68,12 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
         </button>
       </div>
 
-      <div className="flex items-center justify-end" style={{ gap: 6, minWidth: 220 }}>
+      <div className="flex items-center justify-end" style={{ gap: 4, minWidth: 220 }}>
         <IconButton ariaLabel="Notifications" dot>
-          <Bell size={15} strokeWidth={1.6} />
+          🔔
         </IconButton>
         <IconButton ariaLabel="Settings">
-          <Settings size={15} strokeWidth={1.6} />
+          ⚙️
         </IconButton>
       </div>
     </div>
@@ -114,22 +114,24 @@ function IconButton({
       aria-label={ariaLabel}
       className="grid place-items-center cursor-pointer relative"
       style={{
-        width: 32,
-        height: 32,
+        width: 36,
+        height: 36,
         padding: 0,
+        fontSize: 15,
+        lineHeight: 1,
         background: "transparent",
         border: "none",
-        color: "var(--text-3)",
-        borderRadius: 8,
-        transition: "background var(--t), color var(--t)",
+        borderRadius: 10,
+        opacity: 0.78,
+        transition: "background var(--t), opacity var(--t)",
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
-        (e.currentTarget as HTMLElement).style.color = "var(--text)";
+        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+        (e.currentTarget as HTMLElement).style.opacity = "1";
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.background = "transparent";
-        (e.currentTarget as HTMLElement).style.color = "var(--text-3)";
+        (e.currentTarget as HTMLElement).style.opacity = "0.78";
       }}
     >
       {children}
@@ -137,12 +139,13 @@ function IconButton({
         <span
           style={{
             position: "absolute",
-            top: 8,
-            right: 8,
-            width: 5,
-            height: 5,
+            top: 7,
+            right: 7,
+            width: 6,
+            height: 6,
             borderRadius: 99,
             background: "var(--accent)",
+            boxShadow: "0 0 0 2px rgba(10,10,11,0.6)",
           }}
         />
       )}

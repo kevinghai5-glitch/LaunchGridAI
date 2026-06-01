@@ -3,13 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Sparkles, Check, ChevronDown } from "lucide-react";
+import { Sparkles, Check, ChevronDown, Send } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
-import type { AssetPack, SavedBusiness } from "@/types";
+import { ColdAuditView } from "@/components/businesses/ColdAuditView";
+import type { AssetPack, ColdAuditReport, SavedBusiness } from "@/types";
+
+type StudioView = "pack" | "audit";
 
 const THINKING_STEPS = [
   "Loading business profile",
@@ -32,8 +35,12 @@ export default function StudioPage() {
   const [activeStep, setActiveStep] = useState(-1);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [view, setView] = useState<StudioView>("pack");
+  const [coldAudit, setColdAudit] = useState<ColdAuditReport | null>(null);
+  const [coldRunning, setColdRunning] = useState(false);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const coldAbortRef = useRef<AbortController | null>(null);
 
   // Initial business list — pick from URL, then last-used (localStorage), then first.
   useEffect(() => {
@@ -66,6 +73,7 @@ export default function StudioPage() {
     setPack(null);
     setDone(false);
     setRestoredAt(null);
+    setColdAudit(null);
     fetch(`/api/assets/latest?businessId=${encodeURIComponent(selected.id)}`, {
       cache: "no-store",
     })
@@ -83,6 +91,15 @@ export default function StudioPage() {
       .finally(() => {
         if (!cancelled) setRestoring(false);
       });
+    fetch(`/api/cold-audit/latest?businessId=${encodeURIComponent(selected.id)}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((data: { audit: ColdAuditReport | null }) => {
+        if (cancelled) return;
+        if (data.audit) setColdAudit(data.audit);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -92,6 +109,7 @@ export default function StudioPage() {
     return () => {
       if (stepTimer.current) clearInterval(stepTimer.current);
       abortRef.current?.abort();
+      coldAbortRef.current?.abort();
     };
   }, []);
 
@@ -156,6 +174,40 @@ export default function StudioPage() {
       setRunning(false);
     }
   };
+
+  const startCold = async () => {
+    if (!selected || coldRunning) return;
+    const controller = new AbortController();
+    coldAbortRef.current = controller;
+    setColdRunning(true);
+    try {
+      const res = await fetch("/api/generate/cold-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: selected.id }),
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to generate cold audit");
+        return;
+      }
+      setColdAudit(data.coldAudit as ColdAuditReport);
+      toast.success("Cold audit ready");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast("Generation cancelled");
+      } else {
+        toast.error("Failed to generate cold audit");
+      }
+    } finally {
+      coldAbortRef.current = null;
+      setColdRunning(false);
+    }
+  };
+
+  const isAudit = view === "audit";
+  const busy = isAudit ? coldRunning : running;
 
   return (
     <>
@@ -315,7 +367,7 @@ export default function StudioPage() {
             <LgCard padded={false}>
               <div style={{ padding: 16 }}>
                 <div className="relative">
-                  {!running && (
+                  {!busy && (
                     <div
                       aria-hidden
                       style={{
@@ -334,9 +386,9 @@ export default function StudioPage() {
                   <LgButton
                     variant="primary"
                     size="lg"
-                    icon={running ? undefined : "sparkles"}
-                    onClick={start}
-                    disabled={running || !selected}
+                    icon={busy ? undefined : "sparkles"}
+                    onClick={isAudit ? startCold : start}
+                    disabled={busy || !selected}
                     style={{
                       width: "100%",
                       position: "relative",
@@ -344,9 +396,15 @@ export default function StudioPage() {
                       overflow: "hidden",
                     }}
                   >
-                    {running ? <Spinner /> : null}
+                    {busy ? <Spinner /> : null}
                     <span style={{ position: "relative" }}>
-                      {running
+                      {isAudit
+                        ? coldRunning
+                          ? "Generating…"
+                          : coldAudit
+                          ? "Regenerate cold audit"
+                          : "Generate cold audit"
+                        : running
                         ? "Generating…"
                         : done
                         ? "Regenerate asset pack"
@@ -354,9 +412,9 @@ export default function StudioPage() {
                     </span>
                   </LgButton>
                 </div>
-                {running && (
+                {busy && (
                   <button
-                    onClick={cancel}
+                    onClick={isAudit ? () => coldAbortRef.current?.abort() : cancel}
                     style={{
                       width: "100%",
                       marginTop: 10,
@@ -382,12 +440,14 @@ export default function StudioPage() {
                     color: "var(--text-subtle)",
                   }}
                 >
-                  Grounded in their live website + Google Places data
+                  {isAudit
+                    ? "A free, specific mini-report to send before you pitch"
+                    : "Grounded in their live website + Google Places data"}
                 </div>
               </div>
             </LgCard>
 
-            {(running || done) && (
+            {!isAudit && (running || done) && (
               <LgCard padded={false}>
                 <div
                   className="flex justify-between items-center"
@@ -472,19 +532,16 @@ export default function StudioPage() {
                 borderBottom: "1px solid var(--border)",
               }}
             >
-              <div className="flex items-center" style={{ gap: 10 }}>
-                <Sparkles size={14} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                  Growth Asset Pack
-                  {selected && (
-                    <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
-                      {" "}· {selected.name}
-                    </span>
-                  )}
-                </div>
+              <div className="flex items-center" style={{ gap: 12 }}>
+                <ViewToggle value={view} onChange={setView} />
+                {selected && (
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
+                    {selected.name}
+                  </span>
+                )}
               </div>
               <div className="flex items-center" style={{ gap: 8 }}>
-                {running && (
+                {isAudit && coldRunning && (
                   <>
                     <div
                       style={{
@@ -500,14 +557,39 @@ export default function StudioPage() {
                     </span>
                   </>
                 )}
-                {done && (
+                {isAudit && !coldRunning && coldAudit && (
+                  <LgBadge tone="success">
+                    <Check size={11} strokeWidth={2.5} /> Ready to send
+                  </LgBadge>
+                )}
+                {!isAudit && running && (
+                  <>
+                    <div
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 99,
+                        background: "var(--accent)",
+                        animation: "lg-pulse 1s ease-in-out infinite",
+                      }}
+                    />
+                    <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>
+                      Generating
+                    </span>
+                  </>
+                )}
+                {!isAudit && done && (
                   <LgBadge tone="success">
                     <Check size={11} strokeWidth={2.5} /> Generated
                   </LgBadge>
                 )}
-                {!running && !done && (
-                  <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
-                )}
+                {isAudit
+                  ? !coldRunning && !coldAudit && (
+                      <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
+                    )
+                  : !running && !done && (
+                      <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
+                    )}
               </div>
             </div>
 
@@ -527,10 +609,23 @@ export default function StudioPage() {
                   Save a business first to use AI Studio.
                 </div>
               )}
-              {selected && !running && !done && !restoring && (
+
+              {/* ── COLD AUDIT VIEW ── */}
+              {selected && isAudit && coldRunning && (
+                <ColdGeneratingState business={selected} />
+              )}
+              {selected && isAudit && !coldRunning && !coldAudit && (
+                <ColdEmptyState business={selected} />
+              )}
+              {selected && isAudit && !coldRunning && coldAudit && (
+                <ColdAuditView report={coldAudit} businessId={selected.id} />
+              )}
+
+              {/* ── ASSET PACK VIEW ── */}
+              {selected && !isAudit && !running && !done && !restoring && (
                 <EmptyState business={selected} />
               )}
-              {selected && !running && !done && restoring && (
+              {selected && !isAudit && !running && !done && restoring && (
                 <div
                   className="text-center"
                   style={{ padding: "64px 20px", color: "var(--text-muted)", fontSize: 13.5 }}
@@ -538,8 +633,8 @@ export default function StudioPage() {
                   Checking for a saved deliverable…
                 </div>
               )}
-              {running && <GeneratingState business={selected} />}
-              {done && pack && selected && (
+              {!isAudit && running && <GeneratingState business={selected} />}
+              {!isAudit && done && pack && selected && (
                 <>
                   {restoredAt && !running && (
                     <div
@@ -850,6 +945,115 @@ function GeneratingState({ business }: { business: SavedBusiness | null }) {
       </p>
       <p style={{ fontSize: 12.5, color: "var(--text-subtle)", marginTop: 6 }}>
         This usually takes 15–40 seconds.
+      </p>
+    </div>
+  );
+}
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: StudioView;
+  onChange: (v: StudioView) => void;
+}) {
+  const options: { id: StudioView; label: string }[] = [
+    { id: "pack", label: "Asset Pack" },
+    { id: "audit", label: "Cold Audit" },
+  ];
+  return (
+    <div
+      className="flex items-center"
+      style={{
+        gap: 2,
+        padding: 3,
+        borderRadius: 9,
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid var(--line)",
+      }}
+    >
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 12px",
+              borderRadius: 7,
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: "pointer",
+              border: "none",
+              color: active ? "var(--accent)" : "var(--text-3)",
+              background: active ? "var(--accent-soft)" : "transparent",
+            }}
+          >
+            {o.id === "audit" ? (
+              <Send size={12} strokeWidth={2} />
+            ) : (
+              <Sparkles size={12} strokeWidth={2} />
+            )}
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ColdEmptyState({ business }: { business: SavedBusiness }) {
+  return (
+    <div className="text-center" style={{ padding: "64px 20px", color: "var(--text-muted)" }}>
+      <div
+        className="grid place-items-center mx-auto"
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: "var(--accent-soft)",
+          color: "var(--accent)",
+          marginBottom: 20,
+        }}
+      >
+        <Send size={20} strokeWidth={1.75} />
+      </div>
+      <h3
+        style={{
+          margin: "0 0 8px",
+          fontSize: 18,
+          fontWeight: 700,
+          color: "var(--text)",
+          letterSpacing: "-0.015em",
+        }}
+      >
+        Cold-open audit
+      </h3>
+      <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, lineHeight: 1.55 }}>
+        A free, one-page mini-report for{" "}
+        <strong style={{ color: "var(--text)" }}>{business.name}</strong> — 3–5 specific things
+        quietly costing them customers, grounded in their real site speed, screenshot, and reviews,
+        with one soft, editable close. Send it before you pitch to earn the reply.
+      </p>
+    </div>
+  );
+}
+
+function ColdGeneratingState({ business }: { business: SavedBusiness | null }) {
+  return (
+    <div className="text-center" style={{ padding: "72px 20px", color: "var(--text-muted)" }}>
+      <div className="mx-auto" style={{ width: 22, marginBottom: 20 }}>
+        <Spinner />
+      </div>
+      <p style={{ fontSize: 14 }}>
+        Inspecting {business?.name ?? "the business"} for the sharpest, most specific findings…
+      </p>
+      <p style={{ fontSize: 12.5, color: "var(--text-subtle)", marginTop: 6 }}>
+        Measuring real site speed and reading their pages. This usually takes 15–40 seconds.
       </p>
     </div>
   );

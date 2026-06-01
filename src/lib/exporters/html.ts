@@ -6,7 +6,11 @@
 
 import type {
   AssetPack,
+  AssetSection,
   GrowthAuditFile,
+  LeadQualificationFile,
+  EmailNurtureFile,
+  SmsFollowUpFile,
   BookingSystemFile,
   AssetPackMeta,
   TechnicalUxSection,
@@ -695,4 +699,192 @@ export function renderFile5Html(pack: AssetPack): string {
   if (close) parts.push(section(next(), "Implementation Guide & Expected Impact", close));
 
   return shell(pack.meta, "Booking & Appointment System", parts.join("\n"));
+}
+
+// ── FILE 2 ───────────────────────────────────────────────────────────────────
+
+export function renderFile2Html(pack: AssetPack): string {
+  const f: LeadQualificationFile = pack.file2;
+  const parts: string[] = [];
+
+  let n = 0;
+  const next = () => ++n;
+
+  const overview = renderFramingOverview(f.framing);
+  if (overview) parts.push(section(next(), "Overview", overview));
+
+  parts.push(
+    section(
+      next(),
+      "Lead Qualification Form",
+      `<div class="hero-quote">${esc(f.formHeadline)}</div>${para(f.formSubheadline)}`
+    )
+  );
+
+  parts.push(
+    section(
+      next(),
+      "Intake Questions",
+      (f.questions ?? [])
+        .map(
+          (q, i) =>
+            `<div class="card"><h3>${i + 1}. ${esc(q.question)}</h3><p class="muted"><strong>Input.</strong> ${esc(
+              q.inputType
+            )}</p>${
+              q.options?.length
+                ? `<p class="muted"><strong>Options.</strong> ${esc(q.options.join(" · "))}</p>`
+                : ""
+            }<p><strong>Purpose.</strong> ${esc(q.purpose)}</p><p><strong>Scoring.</strong> ${esc(
+              q.scoringImpact
+            )}</p></div>`
+        )
+        .join("")
+    )
+  );
+
+  const ls = f.leadScoring;
+  parts.push(
+    section(
+      next(),
+      "Lead Scoring Model",
+      ls
+        ? `<div class="label">Rubric</div>${para(ls.rubric)}
+           <div class="label">Hot</div>${para(ls.hot)}
+           <div class="label">Warm</div>${para(ls.warm)}
+           <div class="label">Cold / nurture</div>${para(ls.cold)}`
+        : ""
+    )
+  );
+
+  parts.push(
+    section(
+      next(),
+      "Routing Logic",
+      f.routingLogic?.length
+        ? `<table><thead><tr><th>Tier</th><th>Timing</th><th>Action</th></tr></thead><tbody>${f.routingLogic
+            .map(
+              (r) =>
+                `<tr><td><strong>${esc(r.tier)}</strong></td><td>${esc(r.timing)}</td><td>${esc(
+                  r.action
+                )}</td></tr>`
+            )
+            .join("")}</tbody></table>`
+        : ""
+    )
+  );
+
+  parts.push(
+    section(
+      next(),
+      "Automation & Implementation",
+      `<div class="label">Automation workflow</div>${list(f.automationWorkflow)}
+       <div class="label">Thank-you page</div>${para(f.thankYouPage)}
+       <div class="label">CRM fields</div>${list(f.crmFields)}
+       <div class="label">Follow-up timing</div>${para(f.followUpTiming)}
+       <div class="label">Implementation</div>${list(f.implementation, true)}`
+    )
+  );
+
+  const close = renderFramingClose(f.framing);
+  if (close) parts.push(section(next(), "Implementation Guide & Expected Impact", close));
+
+  return shell(pack.meta, "Lead Qualification System", parts.join("\n"));
+}
+
+// ── FILE 3 ───────────────────────────────────────────────────────────────────
+
+export function renderFile3Html(pack: AssetPack): string {
+  const f: EmailNurtureFile = pack.file3;
+  const parts: string[] = [];
+
+  let n = 0;
+  const next = () => ++n;
+
+  const overview = renderFramingOverview(f.framing);
+  if (overview) parts.push(section(next(), "Overview", overview));
+
+  parts.push(
+    section(
+      next(),
+      "7-Day Email Nurture Sequence",
+      (f.emails ?? [])
+        .map(
+          (e) =>
+            `<div class="email"><div class="label">Email · Day ${esc(e.day)} · ${esc(
+              e.timing
+            )}${e.purpose ? ` · ${esc(e.purpose)}` : ""}</div><div class="subj">${esc(
+              e.subject
+            )}</div>${
+              e.subjectB ? `<p class="muted">A/B subject: ${esc(e.subjectB)}</p>` : ""
+            }${
+              e.previewText ? `<p class="muted">Preview: ${esc(e.previewText)}</p>` : ""
+            }${para(e.body)}${
+              e.cta ? `<div class="strategy-block">${esc(e.cta)}</div>` : ""
+            }</div>`
+        )
+        .join("")
+    )
+  );
+
+  const close = renderFramingClose(f.framing);
+  if (close) parts.push(section(next(), "Implementation Guide & Expected Impact", close));
+
+  return shell(pack.meta, "Email Nurture System", parts.join("\n"));
+}
+
+// ── FILE 4 ───────────────────────────────────────────────────────────────────
+
+export function renderFile4Html(pack: AssetPack): string {
+  const f: SmsFollowUpFile = pack.file4;
+  const parts: string[] = [];
+
+  let n = 0;
+  const next = () => ++n;
+
+  const overview = renderFramingOverview(f.framing);
+  if (overview) parts.push(section(next(), "Overview", overview));
+
+  parts.push(
+    section(
+      next(),
+      "SMS Follow-Up Sequence",
+      (f.messages ?? [])
+        .map(
+          (m) =>
+            `<div class="card"><div class="label">Message ${esc(m.order)} · send ${esc(
+              m.timing
+            )} · ${esc(m.charCount)} chars</div><p><strong>${esc(
+              m.message
+            )}</strong></p><p class="muted"><strong>Psychology.</strong> ${esc(
+              m.psychology
+            )}</p><p class="muted"><strong>On reply.</strong> ${esc(m.replyStrategy)}</p></div>`
+        )
+        .join("")
+    )
+  );
+
+  const close = renderFramingClose(f.framing);
+  if (close) parts.push(section(next(), "Implementation Guide & Expected Impact", close));
+
+  return shell(pack.meta, "SMS Follow-Up System", parts.join("\n"));
+}
+
+// ── Dispatcher ────────────────────────────────────────────────────────────────
+
+// Render any of the five files as a standalone, premium client-facing HTML
+// document — used by Studio to preview the *actual deliverable* (not the
+// in-app data view).
+export function renderFileHtml(pack: AssetPack, section: AssetSection): string {
+  switch (section) {
+    case "file1":
+      return renderFile1Html(pack);
+    case "file2":
+      return renderFile2Html(pack);
+    case "file3":
+      return renderFile3Html(pack);
+    case "file4":
+      return renderFile4Html(pack);
+    case "file5":
+      return renderFile5Html(pack);
+  }
 }

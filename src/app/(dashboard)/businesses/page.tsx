@@ -1,19 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Layers, MapPin, Pin, Trash2, X, Phone, Globe, ExternalLink, Sparkles } from "lucide-react";
+import { Layers, MapPin, Pin, Trash2, X, Phone, Globe, ExternalLink, Sparkles, ChevronDown } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { Surface, Stars } from "@/components/dashboard/os";
 import type { BusinessResult, SavedBusiness } from "@/types";
 
-const INDUSTRIES = [
-  "Day Spa", "Dental Practice", "Gym & Fitness", "HVAC", "Pet Grooming",
-  "Med Spa", "Auto Repair", "Roofing", "Landscaping", "Bakery",
-  "Salon & Barber", "Pest Control", "Law Firm", "Real Estate", "Chiropractor",
+// High-ticket local service niches — high customer lifetime value, so they can
+// support premium retainers for the acquisition systems we sell.
+const RECOMMENDED_INDUSTRIES = [
+  "Med Spa",
+  "Cosmetic Dentistry",
+  "Plastic Surgery",
+  "Law Firm",
+  "Roofing",
+  "HVAC",
+  "Solar Installation",
+  "Real Estate Team",
+  "Chiropractic",
+  "Pool & Outdoor Living",
+  "Fitness & Performance",
+  "Veterinary Clinic",
 ];
 
 // Opportunity score (0–100) derived from real Google Places signals. A weaker
@@ -53,7 +64,7 @@ export default function BusinessesPage() {
   const [city, setCity] = useState("");
   const [results, setResults] = useState<BusinessResult[]>([]);
   const [saved, setSaved] = useState<SavedBusiness[]>([]);
-  const [view, setView] = useState<"results" | "saved">("saved");
+  const [view, setView] = useState<"results" | "saved">("results");
   const [searching, setSearching] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [sort, setSort] = useState<"score" | "rating">("score");
@@ -215,7 +226,10 @@ export default function BusinessesPage() {
 
   return (
     <>
-      <TopBar title="Opportunities" subtitle={`${city} · ${industry}`} />
+      <TopBar
+        title="Opportunities"
+        subtitle={industry && city ? `${city} · ${industry}` : "Live from Google Places"}
+      />
       <div style={{ padding: "40px 56px 80px", maxWidth: 1280, margin: "0 auto" }}>
         {/* Editorial header */}
         <div className="rise" style={{ marginBottom: 32 }}>
@@ -242,24 +256,12 @@ export default function BusinessesPage() {
             overflow: "hidden",
           }}
         >
-          <SearchField
-            label="Industry"
-            value={industry}
-            onChange={setIndustry}
-            placeholder="Day Spa, Dental, HVAC…"
-            onSubmit={runSearch}
-            list="lg-industry-suggestions"
-          />
-          <datalist id="lg-industry-suggestions">
-            {INDUSTRIES.map((i) => (
-              <option key={i} value={i} />
-            ))}
-          </datalist>
+          <IndustryField value={industry} onChange={setIndustry} onSubmit={runSearch} />
           <SearchField
             label="City"
             value={city}
             onChange={setCity}
-            placeholder="Charleston, SC"
+            placeholder=""
             onSubmit={runSearch}
           />
           <div className="flex items-center" style={{ padding: "10px 12px" }}>
@@ -350,14 +352,12 @@ function SearchField({
   onChange,
   placeholder,
   onSubmit,
-  list,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   onSubmit: () => void;
-  list?: string;
 }) {
   return (
     <label
@@ -380,7 +380,6 @@ function SearchField({
         <input
           type="text"
           value={value}
-          list={list}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") onSubmit();
@@ -401,6 +400,188 @@ function SearchField({
         />
       </div>
     </label>
+  );
+}
+
+function IndustryField({
+  value,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState<{ top: number; left: number; width: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const openMenu = () => {
+    const el = wrapRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setMenu({ top: r.bottom + 6, left: r.left, width: r.width });
+    }
+    setOpen(true);
+  };
+
+  return (
+    <div
+      ref={wrapRef}
+      className="flex items-center"
+      style={{
+        position: "relative",
+        gap: 12,
+        padding: "14px 14px 14px 18px",
+        borderRight: "1px solid var(--line)",
+      }}
+    >
+      <Layers size={15} strokeWidth={1.6} style={{ color: "var(--text-3)", flex: "none" }} />
+      <label className="flex-1" style={{ minWidth: 0, cursor: "text" }}>
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 2 }}>Industry</div>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              setOpen(false);
+              onSubmit();
+            }
+          }}
+          placeholder=""
+          style={{
+            width: "100%",
+            padding: 0,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            fontSize: 14,
+            fontWeight: 500,
+            color: "var(--text)",
+            fontFamily: "var(--font-display)",
+            letterSpacing: "-0.005em",
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        aria-label="Recommended business types"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className="grid place-items-center flex-none"
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 7,
+          background: open ? "rgba(255,255,255,0.06)" : "transparent",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--text-3)",
+          transition: "background var(--t), color var(--t)",
+        }}
+        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text)")}
+        onMouseLeave={(e) =>
+          ((e.currentTarget as HTMLElement).style.color = "var(--text-3)")
+        }
+      >
+        <ChevronDown
+          size={15}
+          strokeWidth={1.8}
+          style={{
+            transition: "transform var(--t)",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        />
+      </button>
+
+      {open && menu && (
+        <div
+          role="listbox"
+          style={{
+            position: "fixed",
+            top: menu.top,
+            left: menu.left,
+            width: Math.max(menu.width, 240),
+            zIndex: 80,
+            background: "var(--surface)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: 12,
+            boxShadow: "0 18px 48px -12px rgba(0,0,0,0.55)",
+            padding: 6,
+            animation: "lg-fade-up 0.14s ease-out",
+            maxHeight: 360,
+            overflowY: "auto",
+          }}
+        >
+          <div
+            className="lg-mono"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--text-4)",
+              padding: "6px 10px 8px",
+            }}
+          >
+            Recommended target markets
+          </div>
+          {RECOMMENDED_INDUSTRIES.map((ind) => (
+            <button
+              key={ind}
+              type="button"
+              role="option"
+              aria-selected={value === ind}
+              onClick={() => {
+                onChange(ind);
+                setOpen(false);
+              }}
+              className="flex items-center w-full text-left"
+              style={{
+                gap: 10,
+                padding: "9px 10px",
+                fontSize: 13.5,
+                fontWeight: 500,
+                color: "var(--text-2)",
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "background var(--t), color var(--t)",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                (e.currentTarget as HTMLElement).style.color = "var(--text)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+                (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+              }}
+            >
+              <Layers size={14} strokeWidth={1.6} style={{ color: "var(--text-3)", flex: "none" }} />
+              {ind}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -7,7 +7,7 @@ export function Surface({
   children,
   style,
   hover,
-  padded = 20,
+  padded = 24,
   className,
   ...rest
 }: React.HTMLAttributes<HTMLDivElement> & { hover?: boolean; padded?: number }) {
@@ -25,11 +25,11 @@ export function Surface({
 /* ── Pill */
 type Tone = "neutral" | "accent" | "money" | "warn" | "danger";
 const PILL_TONE: Record<Tone, { c: string; bg: string; b: string }> = {
-  neutral: { c: "var(--text-2)", bg: "rgba(255,255,255,0.04)", b: "var(--line-strong)" },
-  accent: { c: "oklch(0.85 0.13 248)", bg: "var(--accent-soft)", b: "oklch(0.55 0.18 248 / 0.35)" },
-  money: { c: "oklch(0.85 0.13 158)", bg: "var(--money-soft)", b: "oklch(0.55 0.16 158 / 0.30)" },
-  warn: { c: "oklch(0.85 0.13 75)", bg: "var(--warn-soft)", b: "oklch(0.55 0.14 75 / 0.30)" },
-  danger: { c: "oklch(0.82 0.16 25)", bg: "var(--danger-soft)", b: "oklch(0.55 0.16 25 / 0.30)" },
+  neutral: { c: "var(--text-3)", bg: "rgba(255,255,255,0.035)", b: "transparent" },
+  accent: { c: "oklch(0.80 0.11 252)", bg: "var(--accent-soft)", b: "transparent" },
+  money: { c: "oklch(0.80 0.11 158)", bg: "var(--money-soft)", b: "transparent" },
+  warn: { c: "oklch(0.82 0.11 75)", bg: "var(--warn-soft)", b: "transparent" },
+  danger: { c: "oklch(0.78 0.14 25)", bg: "var(--danger-soft)", b: "transparent" },
 };
 
 export function Pill({
@@ -49,9 +49,10 @@ export function Pill({
       className="inline-flex items-center"
       style={{
         gap: 6,
-        padding: "3px 8px",
-        fontSize: 11,
+        padding: "4px 9px",
+        fontSize: 11.5,
         fontWeight: 600,
+        letterSpacing: "-0.005em",
         background: t.bg,
         color: t.c,
         border: `1px solid ${t.b}`,
