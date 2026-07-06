@@ -12,9 +12,10 @@ import {
   Target,
   Workflow,
   FileText,
-  Sparkles,
   Library,
   BookOpen,
+  PhoneCall,
+  CalendarDays,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -36,25 +37,28 @@ type NavItem = {
   primary?: boolean;
 };
 
+// Ordered by the actual deal workflow: start → find a prospect → build the
+// deliverable → reach out and close.
 const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   {
     heading: "Overview",
     items: [{ id: "dashboard", label: "Home", icon: Home, href: "/dashboard" }],
   },
   {
-    heading: "Sales",
+    heading: "Find & Build",
     items: [
-      { id: "businesses", label: "Opportunities", icon: Target, href: "/businesses", badgeKey: "opportunities", primary: true },
-      { id: "deals", label: "Pipeline", icon: Workflow, href: "/deals", badgeKey: "pipeline" },
-      { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", badgeKey: "proposals" },
+      { id: "businesses", label: "Opportunities", icon: Target, href: "/businesses", primary: true, badgeKey: "opportunities" },
+      { id: "library", label: "Library", icon: Library, href: "/library" },
     ],
   },
   {
-    heading: "Execution",
+    heading: "Sell & Close",
     items: [
-      { id: "studio", label: "Studio", icon: Sparkles, href: "/studio" },
-      { id: "library", label: "Library", icon: Library, href: "/library" },
+      { id: "call-queue", label: "Call Queue", icon: PhoneCall, href: "/call-queue" },
+      { id: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
       { id: "playbook", label: "Sales Playbook", icon: BookOpen, href: "/playbook" },
+      { id: "crm", label: "CRM", icon: Workflow, href: "/crm", badgeKey: "pipeline" },
+      { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", badgeKey: "proposals" },
     ],
   },
 ];

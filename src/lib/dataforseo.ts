@@ -51,6 +51,9 @@ export interface GbpProfile {
   available: boolean;
   category: string | null;
   hasHours: boolean;
+  /** Parsed from work_time: hours show closed on evenings AND weekends.
+   *  Conservative — false when work_time is missing or unparseable. */
+  limitedHours: boolean;
   hasWebsite: boolean;
   hasPhone: boolean;
   hasMenuLink: boolean;
@@ -75,6 +78,50 @@ interface DfsResult<T> {
   tasks?: { result?: { items?: T[] }[] }[];
 }
 
+// Parse DFS work_time into a "limited hours" signal: closed evenings AND
+// weekends. DFS returns work_time as { work_hours: { timetable: { monday:
+// [{ open:{hour,minute}, close:{hour,minute} }, ...], ..., sunday: null } } }.
+// Defensive: any shape we can't read returns false (never fires OBSERVED on a guess).
+function parseLimitedHours(workTime: unknown): boolean {
+  if (!workTime || typeof workTime !== "object") return false;
+  const timetable = (
+    workTime as { work_hours?: { timetable?: Record<string, unknown> } }
+  ).work_hours?.timetable;
+  if (!timetable || typeof timetable !== "object") return false;
+
+  const dayClosed = (day: unknown): boolean => {
+    // A day is "closed" if it's null/absent or an empty array.
+    if (day == null) return true;
+    if (Array.isArray(day)) return day.length === 0;
+    return false;
+  };
+
+  const latestClose = (day: unknown): number | null => {
+    if (!Array.isArray(day)) return null;
+    let latest: number | null = null;
+    for (const slot of day) {
+      const hour = (slot as { close?: { hour?: number } })?.close?.hour;
+      if (typeof hour === "number") latest = latest === null ? hour : Math.max(latest, hour);
+    }
+    return latest;
+  };
+
+  const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+  const weekend = ["saturday", "sunday"];
+
+  const weekendClosed = weekend.every((d) => dayClosed((timetable as Record<string, unknown>)[d]));
+  if (!weekendClosed) return false;
+
+  // Evenings closed = every OPEN weekday closes by 18:00 (6pm) or earlier.
+  const openWeekdayCloses = weekdays
+    .map((d) => latestClose((timetable as Record<string, unknown>)[d]))
+    .filter((h): h is number => h !== null);
+  if (openWeekdayCloses.length === 0) return false; // nothing parseable → don't fire
+  const eveningsClosed = openWeekdayCloses.every((h) => h <= 18);
+
+  return eveningsClosed;
+}
+
 const HIGH_VALUE_ATTRS = [
   "online_booking",
   "appointment_required",
@@ -94,6 +141,7 @@ export async function fetchGbpProfile(
     available: false,
     category: null,
     hasHours: false,
+    limitedHours: false,
     hasWebsite: false,
     hasPhone: false,
     hasMenuLink: false,
@@ -131,6 +179,7 @@ export async function fetchGbpProfile(
     available: true,
     category: item.category ?? null,
     hasHours: Boolean(item.work_time),
+    limitedHours: parseLimitedHours(item.work_time),
     hasWebsite: Boolean(item.url),
     hasPhone: Boolean(item.phone),
     hasMenuLink: Boolean(item.menu_url),
@@ -161,6 +210,9 @@ export interface DfsReviewIntel {
   trustGaps: string[]; // distilled trust-eroding patterns
   recentNegativeQuote: string | null;
   recentPositiveQuote: string | null;
+  /** Raw reviews (text + rating + timestamp) for leak-detection review-signal
+   *  matching and 90-day recency counting. Up to 20, newest first. */
+  reviews: DfsReview[];
 }
 
 interface DfsReviewItem {
@@ -221,6 +273,7 @@ export async function fetchDfsReviewIntel(
     trustGaps: [],
     recentNegativeQuote: null,
     recentPositiveQuote: null,
+    reviews: [],
   };
   if (!name || !dfsAuthHeader()) return empty;
 
@@ -303,6 +356,7 @@ export async function fetchDfsReviewIntel(
     trustGaps,
     recentNegativeQuote: trim(recentNegativeQuote),
     recentPositiveQuote: trim(recentPositiveQuote),
+    reviews,
   };
 }
 

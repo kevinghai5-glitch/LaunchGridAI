@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { searchBusinesses } from "@/lib/google-places";
+import { searchBusinesses, searchBusinessesByName } from "@/lib/google-places";
 import { businessSearchSchema } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { industry, city } = parsed.data;
-    const results = await searchBusinesses(industry, city);
+    const { mode, industry, city, name } = parsed.data;
+    const results =
+      mode === "name"
+        ? await searchBusinessesByName(name!.trim(), city?.trim())
+        : await searchBusinesses(industry!.trim(), city!.trim());
 
     return NextResponse.json({ results });
   } catch (error) {

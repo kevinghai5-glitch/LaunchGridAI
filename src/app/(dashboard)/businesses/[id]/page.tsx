@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { TopBar } from "@/components/dashboard/TopBar";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
 import type { AssetPack } from "@/types";
+import { STATUS_META, type LeadStatus } from "@/lib/call-queue";
 import {
   MapPin,
   Phone,
@@ -26,7 +27,24 @@ import {
   Target,
   Lightbulb,
   Rocket,
+  PhoneCall,
+  Check,
 } from "lucide-react";
+
+// Operator-selectable statuses for the manual record control.
+const RECORD_STATUSES: LeadStatus[] = [
+  "QUEUED",
+  "CALLBACK",
+  "WAITING",
+  "BOOKED_ZOOM",
+  "PROPOSAL",
+  "WON",
+  "DEAD",
+];
+
+function dispositionLabel(d: string): string {
+  return d.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}
 
 interface BusinessWithSystems {
   id: string;
@@ -48,40 +66,50 @@ interface BusinessWithSystems {
   suggestedOffer: string | null;
   generatedSystems: Array<{ id: string; type: string; content: unknown; createdAt: string }>;
   proposals: Array<{ id: string; title: string; status: string; monthlyPrice: number; createdAt: string }>;
+  // CRM record fields
+  status: string;
+  nextAction: string | null;
+  nextActionAt: string | null;
+  attemptCount: number;
+  notes: string | null;
+  lastActivityAt: string | null;
+  // Deliverable numbers (blank → benchmark mode)
+  avgClientValueCad: number | null;
+  monthlyLeadVolume: number | null;
+  monthlyAdSpendCad: number | null;
+  callLogs: Array<{
+    id: string;
+    disposition: string;
+    note: string | null;
+    durationSec: number | null;
+    calledAt: string;
+  }>;
 }
 
 export default function BusinessDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const id = params.id as string;
 
   const [business, setBusiness] = useState<BusinessWithSystems | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingSuggestions, setGeneratingSuggestions] = useState(false);
-  const [generatingAssets, setGeneratingAssets] = useState(false);
   const [favoriting, setFavoriting] = useState(false);
-  const autoGenTriggered = useRef(false);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  // Deliverable numbers card: local drafts (empty string = blank = benchmark)
+  const [numbersDraft, setNumbersDraft] = useState({
+    avgClientValueCad: "",
+    monthlyLeadVolume: "",
+    monthlyAdSpendCad: "",
+  });
+  const [savingNumbers, setSavingNumbers] = useState(false);
 
   useEffect(() => {
     loadBusiness();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  // Auto-trigger asset generation when arriving via "Generate Assets" (?generate=assets).
-  useEffect(() => {
-    if (
-      !loading &&
-      business &&
-      !autoGenTriggered.current &&
-      searchParams.get("generate") === "assets"
-    ) {
-      autoGenTriggered.current = true;
-      router.replace(`/businesses/${id}`);
-      handleGenerateAssets();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, business]);
 
   const loadBusiness = async () => {
     try {
@@ -93,10 +121,98 @@ export default function BusinessDetailPage() {
       }
       const data = await res.json();
       setBusiness(data.business);
+      setNotesDraft(data.business.notes ?? "");
+      setNumbersDraft({
+        avgClientValueCad: data.business.avgClientValueCad?.toString() ?? "",
+        monthlyLeadVolume: data.business.monthlyLeadVolume?.toString() ?? "",
+        monthlyAdSpendCad: data.business.monthlyAdSpendCad?.toString() ?? "",
+      });
     } catch {
       toast.error("Failed to load business");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (status: string) => {
+    if (!business || status === business.status) return;
+    setSavingStatus(true);
+    const before = business.status;
+    setBusiness((prev) => (prev ? { ...prev, status } : prev));
+    try {
+      const res = await fetch(`/api/businesses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        setBusiness((prev) => (prev ? { ...prev, status: before } : prev));
+        toast.error("Failed to update status");
+      } else {
+        toast.success("Status updated");
+      }
+    } catch {
+      setBusiness((prev) => (prev ? { ...prev, status: before } : prev));
+      toast.error("Failed to update status");
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!business || notesDraft === (business.notes ?? "")) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/businesses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesDraft }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to save notes");
+      } else {
+        setBusiness((prev) => (prev ? { ...prev, notes: notesDraft } : prev));
+        toast.success("Notes saved");
+      }
+    } catch {
+      toast.error("Failed to save notes");
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  // Persist the three deliverable numbers. Empty string → null (benchmark mode).
+  const handleSaveNumbers = async () => {
+    if (!business) return;
+    const toValue = (s: string): number | null => {
+      const t = s.trim();
+      if (!t) return null;
+      const n = Number(t);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+    };
+    const payload = {
+      avgClientValueCad: toValue(numbersDraft.avgClientValueCad),
+      monthlyLeadVolume: toValue(numbersDraft.monthlyLeadVolume),
+      monthlyAdSpendCad: toValue(numbersDraft.monthlyAdSpendCad),
+    };
+    setSavingNumbers(true);
+    try {
+      const res = await fetch(`/api/businesses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to save numbers");
+        return;
+      }
+      setBusiness(data.business);
+      toast.success("Deliverable numbers saved");
+    } catch {
+      toast.error("Failed to save numbers");
+    } finally {
+      setSavingNumbers(false);
     }
   };
 
@@ -140,28 +256,6 @@ export default function BusinessDetailPage() {
       toast.error("Failed to generate suggestions");
     } finally {
       setGeneratingSuggestions(false);
-    }
-  };
-
-  const handleGenerateAssets = async () => {
-    setGeneratingAssets(true);
-    try {
-      const res = await fetch("/api/generate/assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate assets");
-        return;
-      }
-      toast.success("Asset pack generated!");
-      await loadBusiness();
-    } catch {
-      toast.error("Failed to generate assets");
-    } finally {
-      setGeneratingAssets(false);
     }
   };
 
@@ -266,21 +360,14 @@ export default function BusinessDetailPage() {
             {/* Actions */}
             <div className="glass-card p-5 space-y-3">
               <h3 className="text-sm font-semibold text-white mb-2">Actions</h3>
-              <Button
-                variant="blue"
-                className="w-full"
-                onClick={handleGenerateAssets}
-                disabled={generatingAssets}
-              >
-                {generatingAssets ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
+              <Button variant="blue" className="w-full" asChild>
+                <Link href={`/library?businessId=${id}`}>
                   <Rocket className="h-4 w-4 mr-2" />
-                )}
-                {assetSystems.length > 0 ? "Regenerate Assets" : "Generate Assets"}
+                  Open in workspace
+                </Link>
               </Button>
               <p className="text-xs text-gray-500 -mt-1 mb-1">
-                Full growth pack: landing page, lead capture, 7-day emails, SMS &amp; booking copy.
+                Generate the growth pack, cold audit &amp; proposal from the Library control centre.
               </p>
               <Button variant="outline" size="sm" className="w-full" asChild>
                 <Link href={`/proposals/new?businessId=${id}`}>
@@ -288,6 +375,182 @@ export default function BusinessDetailPage() {
                   Create Proposal
                 </Link>
               </Button>
+            </div>
+
+            {/* CRM record: status + notes */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-white">Lead record</h3>
+
+              {/* status control */}
+              <div>
+                <div className="text-xs text-gray-400 mb-2">Status</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {RECORD_STATUSES.map((s) => {
+                    const active = business.status === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => handleStatusChange(s)}
+                        disabled={savingStatus}
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          padding: "5px 10px",
+                          borderRadius: 7,
+                          cursor: savingStatus ? "default" : "pointer",
+                          fontFamily: "inherit",
+                          color: active ? "var(--accent)" : "var(--text-3)",
+                          background: active ? "var(--accent-soft)" : "rgba(255,255,255,0.04)",
+                          border: `1px solid ${active ? "oklch(0.55 0.18 248 / 0.4)" : "var(--line)"}`,
+                        }}
+                      >
+                        {STATUS_META[s].label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {business.nextAction && (
+                  <div className="text-xs text-gray-500 mt-2.5">
+                    Next: {business.nextAction}
+                    {business.nextActionAt
+                      ? ` · ${new Date(business.nextActionAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                      : ""}
+                  </div>
+                )}
+              </div>
+
+              {/* notes */}
+              <div>
+                <div className="text-xs text-gray-400 mb-2">Notes</div>
+                <textarea
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  placeholder="Account notes, context, reminders…"
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    borderRadius: 8,
+                    border: "1px solid var(--line-strong)",
+                    background: "var(--bg-deep, #0b0d12)",
+                    color: "var(--text)",
+                    fontFamily: "inherit",
+                    fontSize: 13,
+                    padding: "9px 11px",
+                    outline: "none",
+                  }}
+                />
+                {notesDraft !== (business.notes ?? "") && (
+                  <div className="flex justify-end mt-2">
+                    <Button variant="blue" size="sm" onClick={handleSaveNotes} disabled={savingNotes}>
+                      {savingNotes ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                      Save notes
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Deliverable numbers: power REAL-mode math in D1–D4. Blank = benchmark. */}
+            <div className="glass-card p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Deliverable numbers</h3>
+                <p className="text-xs text-gray-500 mt-1" style={{ lineHeight: 1.5 }}>
+                  Optional. Fill these in and the paid deliverables run the client&apos;s real
+                  economics. Leave blank and they fall back to industry benchmarks.
+                </p>
+              </div>
+
+              {(() => {
+                const fields: Array<{
+                  key: keyof typeof numbersDraft;
+                  label: string;
+                  hint: string;
+                  prefix?: string;
+                }> = [
+                  { key: "avgClientValueCad", label: "Avg. customer value", hint: "one closed client", prefix: "$" },
+                  { key: "monthlyLeadVolume", label: "Monthly inquiries", hint: "inbound leads / mo" },
+                  { key: "monthlyAdSpendCad", label: "Monthly ad spend", hint: "paid media / mo", prefix: "$" },
+                ];
+                const stored = {
+                  avgClientValueCad: business.avgClientValueCad?.toString() ?? "",
+                  monthlyLeadVolume: business.monthlyLeadVolume?.toString() ?? "",
+                  monthlyAdSpendCad: business.monthlyAdSpendCad?.toString() ?? "",
+                };
+                const dirty =
+                  numbersDraft.avgClientValueCad !== stored.avgClientValueCad ||
+                  numbersDraft.monthlyLeadVolume !== stored.monthlyLeadVolume ||
+                  numbersDraft.monthlyAdSpendCad !== stored.monthlyAdSpendCad;
+                return (
+                  <>
+                    <div className="space-y-3">
+                      {fields.map((f) => (
+                        <div key={f.key}>
+                          <div className="flex items-baseline justify-between mb-1.5">
+                            <label className="text-xs text-gray-400">{f.label}</label>
+                            <span className="text-[11px] text-gray-600">{f.hint}</span>
+                          </div>
+                          <div style={{ position: "relative" }}>
+                            {f.prefix && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  left: 11,
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  color: "var(--text-3)",
+                                  fontSize: 13,
+                                  pointerEvents: "none",
+                                }}
+                              >
+                                {f.prefix}
+                              </span>
+                            )}
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={numbersDraft[f.key]}
+                              onChange={(e) =>
+                                setNumbersDraft((prev) => ({ ...prev, [f.key]: e.target.value }))
+                              }
+                              placeholder="—"
+                              style={{
+                                width: "100%",
+                                borderRadius: 8,
+                                border: "1px solid var(--line-strong)",
+                                background: "var(--bg-deep, #0b0d12)",
+                                color: "var(--text)",
+                                fontFamily: "inherit",
+                                fontSize: 13,
+                                padding: f.prefix ? "9px 11px 9px 22px" : "9px 11px",
+                                outline: "none",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-600">
+                        {business.avgClientValueCad || business.monthlyLeadVolume || business.monthlyAdSpendCad
+                          ? "Real-mode math active"
+                          : "Benchmark mode"}
+                      </span>
+                      {dirty && (
+                        <Button variant="blue" size="sm" onClick={handleSaveNumbers} disabled={savingNumbers}>
+                          {savingNumbers ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Check className="h-3 w-3 mr-1" />
+                          )}
+                          Save numbers
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -349,28 +612,74 @@ export default function BusinessDetailPage() {
             </div>
 
             {/* Generated Asset Pack */}
-            {(generatingAssets || latestAssetPack) && (
+            {latestAssetPack && (
               <div className="glass-card p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Rocket className="h-4 w-4 text-blue-400" />
                   <h3 className="text-sm font-semibold text-white">Generated Asset Pack</h3>
-                  {latestAssetPack && !generatingAssets && (
-                    <span className="text-xs text-gray-500">
-                      · {new Date(assetSystems[0].createdAt).toLocaleDateString()}
-                    </span>
-                  )}
+                  <span className="text-xs text-gray-500">
+                    · {new Date(assetSystems[0].createdAt).toLocaleDateString()}
+                  </span>
                 </div>
-                {generatingAssets ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-400 mb-4" />
-                    <p className="text-sm text-white">Analyzing {business.name}…</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Reading their website, services &amp; positioning, then writing custom assets.
-                    </p>
-                  </div>
-                ) : latestAssetPack ? (
-                  <AssetPackView pack={latestAssetPack} businessId={business.id} />
-                ) : null}
+                <AssetPackView pack={latestAssetPack} businessId={business.id} />
+              </div>
+            )}
+
+            {/* Call history timeline */}
+            {business.callLogs.length > 0 && (
+              <div className="glass-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <PhoneCall className="h-4 w-4 text-blue-400" />
+                  <h3 className="text-sm font-semibold text-white">Call history</h3>
+                  <span className="text-xs text-gray-500">
+                    · {business.attemptCount} attempt{business.attemptCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="space-y-0">
+                  {business.callLogs.map((log, i) => (
+                    <div key={log.id} className="flex gap-3">
+                      {/* rail */}
+                      <div className="flex flex-col items-center" style={{ width: 16 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 99,
+                            background: "var(--accent)",
+                            marginTop: 5,
+                            flex: "none",
+                          }}
+                        />
+                        {i < business.callLogs.length - 1 && (
+                          <span style={{ width: 1, flex: 1, background: "var(--line)", marginTop: 2 }} />
+                        )}
+                      </div>
+                      {/* entry */}
+                      <div style={{ paddingBottom: i < business.callLogs.length - 1 ? 16 : 0, flex: 1 }}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-white">
+                            {dispositionLabel(log.disposition)}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(log.calledAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            {new Date(log.calledAt).toLocaleTimeString(undefined, {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        {log.note && (
+                          <p className="text-xs text-gray-400 mt-1" style={{ lineHeight: 1.55 }}>
+                            {log.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -394,7 +703,7 @@ export default function BusinessDetailPage() {
                             {system.type === "LEAD"
                               ? "Lead Capture System"
                               : system.type === "ASSETS"
-                              ? "Growth Asset Pack"
+                              ? "Growth Infrastructure Pack"
                               : "Content Calendar System"}
                           </div>
                           <div className="text-xs text-gray-500">

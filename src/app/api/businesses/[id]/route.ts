@@ -26,6 +26,10 @@ export async function GET(
           orderBy: { createdAt: "desc" },
           select: { id: true, title: true, status: true, monthlyPrice: true, createdAt: true },
         },
+        callLogs: {
+          orderBy: { calledAt: "desc" },
+          select: { id: true, disposition: true, note: true, durationSec: true, calledAt: true },
+        },
       },
     });
 
@@ -60,9 +64,14 @@ export async function PATCH(
       );
     }
 
+    // A manual status move (board drag / record control) counts as a touch.
+    const data = parsed.data.status
+      ? { ...parsed.data, lastActivityAt: new Date() }
+      : parsed.data;
+
     const business = await prisma.business.updateMany({
       where: { id: params.id, userId: session.user.id },
-      data: parsed.data,
+      data,
     });
 
     if (business.count === 0) {

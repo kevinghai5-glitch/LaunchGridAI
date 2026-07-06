@@ -34,3 +34,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# Local sample deliverable output (gen:check)
+_samples/
+
+# Local Claude Code worktree checkouts (embedded repos — not project files)
+.claude/worktrees/

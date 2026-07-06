@@ -21,6 +21,7 @@ import {
   Edit3,
   Bell,
   Settings,
+  Bookmark,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ const ICONS: Record<string, LucideIcon> = {
   edit: Edit3,
   bell: Bell,
   settings: Settings,
+  bookmark: Bookmark,
 };
 
 export type LgIconName = keyof typeof ICONS;
@@ -74,15 +76,19 @@ export const LgButton = React.forwardRef<HTMLButtonElement, LgButtonProps>(
     const variantStyle: React.CSSProperties =
       variant === "primary"
         ? {
-            background: "var(--text)",
+            background: "linear-gradient(180deg, #ffffff 0%, oklch(0.93 0.002 270) 100%)",
             color: "var(--bg-deep)",
-            border: "1px solid var(--text)",
+            border: "1px solid rgba(255,255,255,0.9)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.7), 0 1px 2px rgba(0,0,0,0.3), 0 6px 18px -8px rgba(0,0,0,0.5)",
           }
         : variant === "secondary"
         ? {
-            background: "rgba(255,255,255,0.04)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
             color: "var(--text)",
             border: "1px solid var(--line-strong)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), var(--shadow-sm)",
           }
         : variant === "ghost"
         ? {

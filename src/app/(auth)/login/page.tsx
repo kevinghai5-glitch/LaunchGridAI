@@ -6,10 +6,30 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LgButton } from "@/components/ui/lg-button";
 import { Loader2, Mail } from "lucide-react";
+
+// Input styled to match the dashboard's token system (see Library search field).
+const fieldStyle: React.CSSProperties = {
+  width: "100%",
+  height: 44,
+  padding: "0 14px",
+  background: "var(--bg-deep)",
+  border: "1px solid var(--line)",
+  borderRadius: "var(--radius)",
+  color: "var(--text)",
+  fontSize: 14,
+  fontFamily: "inherit",
+  outline: "none",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: 7,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "var(--text-2)",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,31 +65,59 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0B0F] flex items-center justify-center relative overflow-hidden">
-      <div className="absolute inset-0 bg-grid opacity-30" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden"
+      style={{ background: "var(--bg-deep)" }}
+    >
+      <div className="absolute inset-0 bg-grid" style={{ opacity: 0.4 }} />
+      <div
+        className="absolute top-1/2 left-1/2 pointer-events-none"
+        style={{
+          transform: "translate(-50%, -50%)",
+          width: 520,
+          height: 520,
+          borderRadius: "50%",
+          background: "var(--accent-glow)",
+          filter: "blur(110px)",
+        }}
+      />
 
       <div className="relative w-full max-w-md px-4">
-        <div className="text-center mb-8">
+        <div className="text-center" style={{ marginBottom: 32 }}>
           <Link href="/" className="inline-flex justify-center">
             <Logo size="md" />
           </Link>
-          <h1 className="text-2xl font-bold text-white mt-6 mb-1">Welcome back</h1>
-          <p className="text-gray-400 text-sm">Sign in to your LaunchGrid account</p>
+          <h1
+            className="lg-display"
+            style={{
+              marginTop: 24,
+              marginBottom: 6,
+              fontSize: 26,
+              fontWeight: 700,
+              letterSpacing: "-0.03em",
+              color: "var(--text)",
+            }}
+          >
+            Welcome back
+          </h1>
+          <p style={{ fontSize: 13.5, color: "var(--text-3)" }}>
+            Sign in to your LaunchGrid account
+          </p>
         </div>
 
-        <div className="glass-card p-8">
+        <div className="panel" style={{ padding: 32 }}>
           {/* Google button */}
-          <Button
-            variant="outline"
-            className="w-full mb-6"
+          <LgButton
+            variant="secondary"
+            size="lg"
             onClick={handleGoogle}
             disabled={googleLoading}
+            style={{ width: "100%", marginBottom: 22 }}
           >
             {googleLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -77,18 +125,22 @@ export default function LoginPage() {
               </svg>
             )}
             Continue with Google
-          </Button>
+          </LgButton>
 
-          <div className="relative flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-xs text-gray-500">or continue with email</span>
-            <div className="flex-1 h-px bg-white/10" />
+          <div className="flex items-center" style={{ gap: 12, marginBottom: 22 }}>
+            <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+            <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+              or continue with email
+            </span>
+            <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
+          <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: 16 }}>
+            <div>
+              <label htmlFor="email" style={labelStyle}>
+                Email
+              </label>
+              <input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
@@ -96,11 +148,14 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                style={fieldStyle}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
+            <div>
+              <label htmlFor="password" style={labelStyle}>
+                Password
+              </label>
+              <input
                 id="password"
                 type="password"
                 placeholder="••••••••"
@@ -108,31 +163,36 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
+                style={fieldStyle}
               />
             </div>
-            <Button
+            <LgButton
               type="submit"
-              variant="blue"
-              className="w-full"
+              variant="primary"
+              size="lg"
               disabled={loading}
+              style={{ width: "100%", marginTop: 4 }}
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Signing in…
                 </>
               ) : (
                 <>
-                  <Mail className="mr-2 h-4 w-4" />
+                  <Mail className="h-4 w-4" strokeWidth={1.75} />
                   Sign in
                 </>
               )}
-            </Button>
+            </LgButton>
           </form>
 
-          <p className="text-center text-sm text-gray-400 mt-6">
+          <p
+            className="text-center"
+            style={{ marginTop: 22, fontSize: 13, color: "var(--text-3)" }}
+          >
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-blue-400 hover:text-blue-300">
+            <Link href="/signup" style={{ color: "var(--accent)", fontWeight: 600 }}>
               Sign up free
             </Link>
           </p>

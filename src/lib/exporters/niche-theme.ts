@@ -297,18 +297,27 @@ const DEFAULT_THEME: NicheTheme = {
  * Pass anything you have — both can be null. We try the more specific
  * one first, then fall back to the other, then to the default theme.
  */
+// Single fixed brand theme for the v2 deliverable engine: one premium dark/gold
+// system across every niche (no per-vertical palettes). The color tokens here
+// are not used by the v2 shell (it hardcodes the gold palette in :root); only
+// headingFont and eyebrow are read. Kept as a NicheTheme so existing consumers
+// keep type-checking.
+const BRAND_THEME: NicheTheme = {
+  accent: "#C9A96E",
+  accentSoft: "rgba(201,169,110,.14)",
+  gradientStart: "#D8BE86",
+  gradientEnd: "#9E7C44",
+  headingFont: "'Inter', system-ui, sans-serif",
+  eyebrow: "CONVERSION INTELLIGENCE",
+  mood: "premium",
+};
+
+// Neutralized (v2): always returns the single fixed brand theme. The per-niche
+// RULES/DEFAULT_THEME tables are retained above for reference but no longer drive
+// the palette — the deliverables use one consistent dark/gold identity.
 export function resolveNicheTheme(
-  industry: string | null | undefined,
-  category?: string | null | undefined
+  _industry?: string | null | undefined,
+  _category?: string | null | undefined
 ): NicheTheme {
-  const candidates = [industry, category].filter(Boolean).map(norm);
-  for (const cand of candidates) {
-    if (!cand) continue;
-    for (const rule of RULES) {
-      if (rule.match.some((kw) => cand.includes(kw))) {
-        return rule.theme;
-      }
-    }
-  }
-  return DEFAULT_THEME;
+  return BRAND_THEME;
 }

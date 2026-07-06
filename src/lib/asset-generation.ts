@@ -8,16 +8,33 @@
 // intelligence briefing.
 
 import { openai, ASSET_MODEL } from "./openai";
+import { PRODUCT_NAME } from "./brand";
 import type { AuditIntelligence } from "./audit-intelligence";
 import { intelligenceToPromptBlock } from "./audit-intelligence";
+import type { FiredLeak } from "./leak-detection";
+import { SCORECARD_AREAS, SCORECARD_DISPLAY_NAMES } from "./leak-detection";
+import type { ScorecardArea } from "./leak-taxonomy";
+import {
+  statGuard,
+  voiceLint,
+  sanitizeInventedOffers,
+  KICKOFF_VERIFICATION_LINE,
+  type LeakInput,
+} from "./leak-narrative";
 import type {
   AssetPack,
   AssetSection,
+  LeakAnalysisItem,
   GrowthAuditFile,
   LeadQualificationFile,
   EmailNurtureFile,
   SmsFollowUpFile,
   BookingSystemFile,
+  GrowthIntelligence,
+  AcquisitionInfrastructure,
+  SupportingAssets,
+  GrowthRoadmap,
+  LandingPageModule,
 } from "@/types";
 
 export interface BusinessProfile {
@@ -31,10 +48,36 @@ export interface BusinessProfile {
   description: string | null;
 }
 
+// Governance layer (Phases 1–5): the fired-leak taxonomy result threaded through
+// every deliverable so generation is grounded ONLY in leaks that actually fired,
+// graded deterministically, with a bounded allowed-number set for the stat guard.
+export interface LeakContext {
+  /** In-scope fired leaks, ranked desc (reportLeaks). */
+  report: FiredLeak[];
+  /** Cold-audit top-3 (selectColdAudit). */
+  coldAudit: FiredLeak[];
+  /** Out-of-scope fired flags → "Also worth knowing" only. */
+  outOfScope: FiredLeak[];
+  /** Deterministic 9-axis grades (gradeAreas, decision 2). */
+  grades: Record<ScorecardArea, number>;
+  /** Rendered "write ONLY from this" leak block (leakInputsToPromptBlock). */
+  promptBlock: string;
+  /** Every number the copy is permitted to print (allowedNumbersFor). */
+  allowedNumbers: number[];
+  /** Structured per-fired-leak inputs (buildLeakInputs) — drives deterministic
+   *  stamping of the leak analysis (identity, stats, math, kickoff line). */
+  inputs: LeakInput[];
+  /** Cold-audit headline leak (Part H1): the #1 ranked leak shown, plus its
+   *  pre-computed benchmark-mode monthly figure (null when it has no math). */
+  headline?: { leakName: string; benchmarkFrame: string | null } | null;
+}
+
 export interface GenerationContext {
   business: BusinessProfile;
   intel: AuditIntelligence;
   websiteText: string;
+  /** Present once the leak-detection pipeline has run for this business. */
+  leaks?: LeakContext;
 }
 
 // Maps PsiResult → the compact shape we ship in the deliverable JSON.
@@ -50,16 +93,34 @@ function shapePsi(
   };
 }
 
-const STYLE_RULES = `STYLE & QUALITY RULES (follow strictly):
-- You are a senior growth strategist at a high-end client-acquisition consultancy, not an AI copywriter. The deliverable must read like a paid audit a firm would charge $3,000–$15,000 for.
-- Frame everything as conversion infrastructure / acquisition systems / revenue recovery — never as "copywriting."
-- Be specific to THIS business type and THIS city. A Toronto med spa must not read like a Dallas roofer.
-- Use the real data provided. NEVER fabricate reviews, stats, results, or "data" insights. Where review/competitor data is absent, you may make a clearly strategic assumption — but never present an assumption as if it came from data.
-- Testimonials may be fictional but must be believable and locally grounded (real-sounding local names, neighborhoods, specific outcomes). No celebrity or generic names.
-- Tie recommendations to practical business impact (more booked appointments, better lead quality, higher trust, less wasted time, higher close rates). No exaggerated claims.
-- BANNED phrases/words: "unlock your potential", "supercharge", "revolutionary", "game-changing", "10x", "next-level", and obvious AI/guru filler.
-- Tone: clear, tactical, premium, direct, human. No hype, no corporate filler.
-- Return ONLY valid JSON matching the requested shape exactly. No commentary outside the JSON.`;
+const STYLE_RULES = `You are a senior client-acquisition strategist whose audits command premium fees. You have diagnosed hundreds of local service businesses and you know exactly where they leak revenue. You write like an expensive operator showing the client the receipts — not a marketer, blogger, or AI. The reader is a SKEPTICAL business OWNER who has seen generic "marketing audits" and hates them. The only things that earn their money: specificity they couldn't have written themselves, leaks quantified in dollars, and conclusions they can't argue with.
+
+BUSINESS MODEL (everything you write must fit this):
+- The client ALREADY gets leads (ads, SEO, referrals). The problem you solve is CONVERSION, not lead generation. They lose most leads before they become customers — slow response, no qualification, no follow-up, no-shows, weak on-page conversion. The promise: "You already pay to get leads. We make more of them turn into customers."
+- The offer has TWO parts: (1) a one-time DONE-FOR-YOU setup where WE implement the fixes — the client builds nothing; (2) a monthly QUALIFICATION RETAINER powered by ${PRODUCT_NAME} — the AI lead-qualification + routing engine that runs continuously. That recurring engine is ${PRODUCT_NAME}; name it.
+- The reader has NO team — solo owner or a couple of staff. Never assign work to a "Marketing Team", "Web Dev Team", "Sales Team", "CRM Specialist", or "IT Team".
+
+NON-NEGOTIABLE LAWS:
+1. GROUND EVERYTHING IN REAL DATA. Every quantitative claim traces to a provided input. Never invent a number, competitor, metric, or finding. If data is missing, cut the claim or mark it a stated assumption.
+2. CONVERSION-ONLY SCOPE. Diagnose/fix ONLY the lead→customer path: speed-to-lead, lead qualification, follow-up/nurture, booking, no-show recovery, on-page conversion/trust (hero, CTA, form, mobile speed). Do NOT prescribe lead generation — no paid ads, SEO, social growth, content marketing, "local authority", events, or referral programs. Only allowed exception: review-REQUEST automation after a job, framed as a post-sale trust asset, never a ranking campaign.
+3. DONE-FOR-YOU FRAMING. WE implement everything. Frame fixes as "here's what we deploy for you," not "here's what you should build." Owner is "us" for everything implemented; "you" ONLY for genuine human-judgment steps (showing up to the consult, answering a qualified lead, approving copy). Never assign tasks to roles a small local business does not have.
+4. POSITION THE RETAINER. The lead-qualification + routing layer IS ${PRODUCT_NAME}. Name it. Make clear it RUNS CONTINUOUSLY and is what the monthly retainer pays for — distinct from the one-time setup.
+5. USE ONLY THE PROVIDED FIGURES. Every dollar amount, percentage, and multiplier you print MUST come verbatim from the leak-analysis block supplied to you (its pre-computed math and allowed numbers). NEVER invent, derive, or estimate your own figure. If a leak has no supplied dollar figure, describe the leak qualitatively and spend-anchor it ("this is leaking a share of what you already pay per lead") — do NOT attach a fabricated revenue number. Pre-intake, make ZERO claims about the client's revenue; frame impact against their ad spend / industry cost-per-lead only. When a figure IS supplied, show it with the labeled math beside it.
+6. DEFENSIBLE SCORES ONLY. Every score shows its rubric and the specific real evidence behind it. Scores must MATCH the narrative — never score 70/100 while describing it as deficient.
+7. ZERO TAUTOLOGIES. Ban sentences true of every business ("CTAs guide users to act", "trust builds credibility", "following up increases conversion", "X is crucial for conversion"). Replace with what's true of THIS business using its real data and a named competitor's real numbers.
+8. LEAD WITH THE GUT-PUNCH. Open with the most damning, dollar-quantified CONVERSION finding — never a compliment ("strong reputation, 5-star rating").
+9. FRAME AGAINST REAL COMPETITORS where data allows — "them vs you" with the actual scraped competitors and their actual numbers.
+10. VOICE. Confident on the DIAGNOSIS (it's measured data — state it plainly), honest on projected OUTCOMES (never guarantee results). Kill hedge-soup — don't pile "may/could/potentially/likely/designed to" onto observed facts. Authoritative, concrete, short sentences, no hype, no emoji.
+11. NEVER PRINT THE SCAFFOLD. The field hints and analysis dimensions in this prompt are instructions for what to ANALYZE — they must NEVER appear verbatim in your output. Strings like "headline clarity / subheadline strength / CTA visibility / above-the-fold trust / local relevance / intent match" or "urgency & specificity — diagnose the intent mismatch" are scaffolding. Convert every checklist into actual prose findings about THIS business. If a slash-delimited list of analysis dimensions ever appears in a value you emit, that is a bug — replace it with real findings written as sentences.
+12. RECONCILE EVERY DOLLAR FIGURE. All dollar figures must be internally consistent across the whole pack. Compute each per-leak figure FIRST in the leak analysis, then make any executive-summary total equal the sum (or a clearly-stated subset) of those itemized leaks. The same leak shows the same number everywhere. Never let one section contradict another (e.g. the exec summary must not state a larger range for a leak than its own itemized analysis). State the rolled-up total explicitly when you give one.
+13. LABEL EVERY ASSUMPTION, INCLUDING VOLUME. Lead volume, visitor counts, and consult counts are usually NOT in the scraped data. Never present an invented volume as a derived fact (do not write "20 leads/mo based on online inquiries" when nothing was measured). If a volume is not from real data, label it an assumption every place it is used: "Assuming ~20 leads/mo — replace with your actual number to make this exact." Same rule for avg customer value (see below).
+
+CALCULATION RULES (use ONLY supplied figures — never fabricate):
+- Every percentage, multiplier, and dollar amount MUST come from the leak-analysis block supplied to you. Do NOT bring in remembered industry rules of thumb (conversion-drop percentages, response-time multipliers, no-show rates, etc.). If the block does not supply a number for a leak, keep the finding qualitative.
+- Do NOT invent an avg customer value or a monthly lead volume. Pre-intake, no such figures are known — do not present benchmarks or assumed volumes as facts, and make no claim about the client's revenue. Anchor impact to what the block provides (their ad spend / industry cost-per-lead), which is the only pre-intake dollar frame permitted.
+- When the block DOES supply a dollar figure or range for a leak, print it exactly as given, with the supplied inputs shown beside it. Never state a dollar figure without the supplied math beside it. RECONCILE: the same leak shows the same supplied number everywhere; any exec-summary total must equal the sum of the per-leak supplied figures (Law 12).
+
+OUTPUT: Return ONLY valid JSON matching the requested shape exactly. No commentary outside the JSON.`;
 
 // Shared 4-section framing every deliverable must carry. The "Actual
 // Deliverable" is the file's existing content; framing wraps it with an
@@ -95,15 +156,114 @@ function profileBlock(b: BusinessProfile, websiteText: string): string {
 }
 
 function contextHeader(ctx: GenerationContext): string {
-  return [
+  const parts = [
     profileBlock(ctx.business, ctx.websiteText),
     "",
     "AUDIT INTELLIGENCE BRIEFING (heuristically extracted — treat as ground truth where marked real, and respect the labelled assumptions):",
     intelligenceToPromptBlock(ctx.intel),
+  ];
+  if (ctx.leaks) {
+    parts.push("", "════════ GOVERNED LEAK SET ════════", ctx.leaks.promptBlock);
+    const routing = routingAppendix(ctx.leaks.report);
+    if (routing) parts.push(routing);
+    if (ctx.leaks.outOfScope.length) {
+      const names = ctx.leaks.outOfScope.map((f) => f.leak.name).join(" · ");
+      parts.push(
+        `OUT OF SCOPE (mention ONLY under an "Also worth knowing" aside — observed data + framing, NEVER as a core leak, NEVER with a dollar figure, and NEVER with a fix or recommendation attached): ${names}`
+      );
+    }
+  }
+  return parts.join("\n");
+}
+
+// DELIVERABLE_ROUTING (Phases 1–5): each fired leak carries a fixed fix identity —
+// which asset builds it, which roadmap phase it ships in, which pack items it
+// consumes. Surfacing it deterministically lets the roadmap, blueprint, and asset
+// pack place every fired leak into the SAME phase/asset across deliverables,
+// ordered by ranking score (highest-impact first), instead of the model guessing.
+const ROADMAP_PHASE_LABELS: Record<1 | 2 | 3 | 4, string> = {
+  1: "Foundation",
+  2: "Infrastructure",
+  3: "Launch",
+  4: "Optimization",
+};
+function routingAppendix(report: FiredLeak[]): string {
+  const rows = report
+    .filter((f) => f.leak.ghlFix)
+    .map((f) => {
+      const fix = f.leak.ghlFix!;
+      const items = fix.assetPackItems?.length ? ` — pack items: ${fix.assetPackItems.join(", ")}` : "";
+      return `- ${f.leak.name} → build "${fix.assetName}" in Phase ${fix.roadmapPhase} (${ROADMAP_PHASE_LABELS[fix.roadmapPhase]})${items}`;
+    });
+  if (!rows.length) return "";
+  return [
+    "FIX ROUTING (deterministic — place each fired leak's fix in exactly this phase/asset, ordered highest-impact first; do not invent other phases or assets):",
+    ...rows,
   ].join("\n");
 }
 
-async function generateJson<T>(prompt: string): Promise<T> {
+// ── Token-bucket rate limiter ────────────────────────────────────────────────
+// The asset pack fires nine large gpt-4o calls (~6–7k tokens each, ~58k total).
+// The org's gpt-4o tier caps at 30,000 tokens/minute, so firing them together —
+// even pooled — bursts past the cap and 429s the whole run. This limiter meters
+// outgoing token demand against a rolling 60s window so we stay under the ceiling
+// by construction; the SDK's own retries (maxRetries on the client) then absorb
+// any estimation drift. Tunable via env without a code change.
+const TPM_WINDOW_MS = 60_000;
+// Default to the model's typical tokens-per-minute ceiling so the bucket only
+// throttles when it actually needs to. gpt-4o-mini is ~200k TPM (nine calls fit
+// easily → no throttling, ~30s pack); gpt-4o on this account is ~30k. Override
+// with OPENAI_ASSET_TPM if your account's limits differ.
+const TPM_LIMIT = Number(
+  process.env.OPENAI_ASSET_TPM ?? (ASSET_MODEL.includes("mini") ? 200_000 : 30_000)
+);
+// Leave headroom: our per-call estimate can drift below OpenAI's own accounting,
+// and other calls (proposals, suggestions) may share the same minute.
+const TPM_BUDGET = Math.max(6_000, Math.floor(TPM_LIMIT * 0.85));
+
+let tpmWindowStart = Date.now();
+let tpmUsed = 0;
+// Serialize the check-and-reserve step so concurrent callers can't both pass the
+// budget check before either increments the counter.
+let tpmQueue: Promise<unknown> = Promise.resolve();
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Rough token estimate: ~4 chars/token for the prompt plus a reservation for the
+// JSON completion. Intentionally a slight over-estimate so we pace conservatively.
+function estimateTokens(prompt: string): number {
+  return Math.ceil(prompt.length / 4) + 2_000;
+}
+
+async function acquireTokenBudget(estimate: number): Promise<void> {
+  for (;;) {
+    const now = Date.now();
+    if (now - tpmWindowStart >= TPM_WINDOW_MS) {
+      tpmWindowStart = now;
+      tpmUsed = 0;
+    }
+    // A single call larger than the whole budget can never fit; let it through
+    // (clamped) rather than spin forever — the SDK retry is the backstop.
+    if (tpmUsed === 0 || tpmUsed + estimate <= TPM_BUDGET) {
+      tpmUsed += estimate;
+      return;
+    }
+    await sleep(TPM_WINDOW_MS - (now - tpmWindowStart) + 200);
+  }
+}
+
+function reserveTokens(estimate: number): Promise<void> {
+  const task = tpmQueue.then(() => acquireTokenBudget(estimate));
+  // Keep the queue alive even if a reservation's caller later rejects.
+  tpmQueue = task.then(
+    () => undefined,
+    () => undefined
+  );
+  return task;
+}
+
+async function rawGenerateJson<T>(prompt: string): Promise<T> {
+  await reserveTokens(estimateTokens(prompt));
   const response = await openai.chat.completions.create({
     model: ASSET_MODEL,
     messages: [{ role: "user", content: prompt }],
@@ -115,6 +275,71 @@ async function generateJson<T>(prompt: string): Promise<T> {
   return JSON.parse(content) as T;
 }
 
+// Deep-walk every string value in a parsed JSON graph (for the voice scan).
+function collectStringValues(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) for (const v of value) collectStringValues(v, out);
+  else if (value && typeof value === "object")
+    for (const v of Object.values(value)) collectStringValues(v, out);
+  return out;
+}
+
+// Part F1: EVERY generation call is voice-linted — including the email/SMS/booking
+// copy that used to bypass governance. A banned word anywhere in the returned JSON
+// triggers ONE corrective regeneration; we keep whichever draft is cleaner. This
+// is the banned-word half of the governance boundary applied universally; the
+// number/stat guard stays in generateGovernedJson where the allowed set is known.
+async function generateJson<T>(prompt: string): Promise<T> {
+  const out = await rawGenerateJson<T>(prompt);
+  const firstHits = voiceLint(collectStringValues(out).join("\n")).hits;
+  if (firstHits.length === 0) return out;
+
+  const corrective = `${prompt}
+
+════════ VOICE CORRECTION (your previous draft used banned words) ════════
+Your previous draft used these banned words/phrases: ${firstHits.join(", ")}.
+Rewrite it in plain, direct language WITHOUT any of them (and without other marketing filler like "streamline", "robust", "leverage", "optimize the/your", "empower", "unlock"). Return the same JSON shape.`;
+  const retry = await rawGenerateJson<T>(corrective);
+  const retryHits = voiceLint(collectStringValues(retry).join("\n")).hits;
+  return retryHits.length <= firstHits.length ? retry : out;
+}
+
+// Governance boundary (decision 2/4 + enforcement memory): after a deliverable is
+// generated, scan its prose for numbers outside the allowed set (stat guard) and
+// banned voice tics (voice lint). On violation, regenerate ONCE with a corrective
+// addendum naming the exact offenders, then return the cleaner of the two.
+// Purely additive: when no leak context is present the base generation is returned
+// untouched, so legacy/no-detection runs are unaffected.
+async function generateGovernedJson<T>(
+  prompt: string,
+  ctx: GenerationContext,
+  extractText: (v: T) => string
+): Promise<T> {
+  const out = await generateJson<T>(prompt);
+  if (!ctx.leaks) return out;
+  const check = (v: T) => {
+    const text = extractText(v);
+    const stat = statGuard(text, ctx.leaks!.allowedNumbers);
+    const voice = voiceLint(text);
+    return {
+      violations: [...stat.violations, ...voice.hits],
+      ok: stat.ok && voice.ok,
+    };
+  };
+  const first = check(out);
+  if (first.ok) return out;
+
+  const corrective = `${prompt}
+
+════════ GOVERNANCE CORRECTION (your previous draft violated the rules) ════════
+Your previous draft used disallowed content: ${first.violations.join(", ")}.
+Rewrite it WITHOUT any of those. Every number you print MUST come from the governed leak set / allowed figures above — invent no percentages, multipliers, or dollar amounts. Remove the banned words entirely. Return the same JSON shape.`;
+  const retry = await generateJson<T>(corrective);
+  const second = check(retry);
+  // Keep whichever draft has fewer violations; prefer the retry on a tie.
+  return second.violations.length <= first.violations.length ? retry : out;
+}
+
 // ── FILE 1: Growth Audit + Landing Page ──────────────────────────────────────
 
 async function generateFile1(ctx: GenerationContext): Promise<GrowthAuditFile> {
@@ -122,13 +347,16 @@ async function generateFile1(ctx: GenerationContext): Promise<GrowthAuditFile> {
   const hasPsi = Boolean(psi?.available);
   const visualsAvailable = Boolean(ctx.intel.screenshots?.available);
 
+  // Part B: measured performance may be SHOWN, but the engagement never
+  // prescribes a site-speed / redesign fix. No topFixes; the summary states the
+  // business consequence and defers the fix to whoever manages the site.
   const technicalUxSchema = `,
   "technicalUx": {
     "available": ${hasPsi ? "true" : "false"},
     "mobile": ${hasPsi && psi?.mobile ? "{score, lcpSeconds, cls, inpMs}" : "null"},
     "desktop": ${hasPsi && psi?.desktop ? "{score, lcpSeconds, cls, inpMs}" : "null"},
-    "businessImpactSummary": "${hasPsi ? "2-4 sentences translating the measured perf numbers into business impact (lost mobile conversions, bounce risk, perceived slowness, ad-spend efficiency). NO Lighthouse jargon." : "1-2 sentences noting perf is unmeasured and what assumption you're working from."}",
-    "topFixes": [${hasPsi ? '{"fix": "...", "businessImpact": "..."}' : ""}]
+    "businessImpactSummary": "${hasPsi ? "2-4 sentences translating the measured perf numbers into business consequence (lost mobile conversions, bounce risk, perceived slowness). State the consequence ONLY — do NOT recommend any technical fix (no 'reduce CSS', 'optimize images', 'redesign'); site performance is out of scope for this conversion engagement. NO Lighthouse jargon." : "1-2 sentences noting perf is unmeasured and what assumption you're working from."}",
+    "topFixes": []
   }`;
 
   const visualsSchema = `,
@@ -145,15 +373,15 @@ ${contextHeader(ctx)}
 TASK: Produce FILE 1 of the acquisition pack — a premium business growth audit AND a complete landing-page conversion blueprint for this ONE business. This is the flagship document; it must feel like a real consulting audit that diagnoses exactly where the business is losing leads, bookings, and revenue, then hands over the fix.
 
 ${hasPsi
-  ? "Include a 'Technical UX & Performance' section that translates the REAL measured PageSpeed numbers (provided above) into business consequences — slower mobile = lost calls, layout shifts = lower form completion, etc. The owner does not care about LCP/CLS; they care about money. Recommend the 2-4 highest-leverage fixes with their plain-English business impact."
+  ? "Include a 'Technical UX & Performance' section that translates the REAL measured PageSpeed numbers (provided above) into business consequences — slower mobile = lost calls, layout shifts = lower form completion, etc. The owner does not care about LCP/CLS; they care about money. State the consequence ONLY — do NOT recommend site-speed, image, CSS, or redesign fixes. Site performance is out of scope for this conversion engagement; it gets flagged, not fixed."
   : "Performance data is unavailable for this run — keep the Technical UX section short and label it as assumption-based."}
 ${visualsAvailable
   ? "Above-the-fold screenshots (target + nearby competitors, desktop + mobile) will be embedded into the final HTML deliverable. Write a short 'competitiveRead' that tells the buyer what the visual comparison reveals (hero clarity, CTA prominence, trust signals, mobile UX) — do not list URLs, just the strategic read."
   : ""}
 
-The audit must consider: weak positioning, unclear offer, weak CTAs, confusing customer journey, poor lead capture, missing qualification, weak booking flow, weak follow-up, lack of nurture, weak trust signals, poor use of reviews, outdated branding, weak mobile UX, weak local relevance, missed seasonal opportunities, lack of urgency, poor objection handling, poor perceived authority. Ground findings in the website signals + review + competitor intelligence above where present.
+CONVERSION-ONLY (Law 2): diagnose ONLY the lead→customer path for the leads they ALREADY get — never how to get more traffic/leads. The audit must consider: unclear offer/positioning on the page, weak CTAs, confusing customer journey, poor lead capture, missing qualification, weak booking flow, weak/absent follow-up, lack of nurture, slow speed-to-lead, no-show leakage, weak trust signals, poor use of existing reviews, weak mobile UX/page speed, lack of urgency, poor objection handling, weak perceived authority on the page. Do NOT prescribe paid ads, SEO, social growth, content marketing, "local authority" campaigns, events, or referral programs. Ground findings in the website signals + review + competitor intelligence above where present.
 
-Local market intelligence must be specific to the city and niche (customer psychology, buying behavior, trust expectations, competitive saturation, seasonal demand, price sensitivity, local credibility markers).
+Local market intelligence must be specific to the city and niche, framed around CONVERSION (customer psychology, buying behavior, trust expectations, price sensitivity, local credibility markers that make a visitor convert).
 
 The landing page copy must be clear, conversion-focused, locally relevant, niche-specific, believable, emotionally direct — not hypey, not generic.
 
@@ -207,7 +435,7 @@ Return JSON in EXACTLY this shape:
   }${technicalUxSchema}${visualsSchema}
 }
 
-Provide EXACTLY 5 items in revenueLeaks. Provide 4-7 findings, 3-5 conversionBottlenecks, 2-4 testimonials, 4-6 FAQ items.${hasPsi ? " Provide 2-4 topFixes in technicalUx." : ""}`;
+Provide EXACTLY 5 items in revenueLeaks. Provide 4-7 findings, 3-5 conversionBottlenecks, 2-4 testimonials, 4-6 FAQ items. Leave technicalUx.topFixes empty — site performance is flagged, never prescribed.`;
 
   const file = await generateJson<GrowthAuditFile>(prompt);
 
@@ -388,6 +616,465 @@ Provide 3 steps in threeStepBreakdown and 4-6 whatToExpect bullets.`;
   return generateJson<BookingSystemFile>(prompt);
 }
 
+// ── V2 STRATEGIC COMPONENT: Growth Leak Intelligence ─────────────────────────
+// Powers Deliverable 1 (Growth Leak Intelligence Report): a 9-metric scorecard,
+// a deep prioritized leak analysis, ranked revenue wins, an executive summary,
+// and consulting-grade strategic recommendations.
+
+// Decision 1: the nine scorecard axes are fixed by the taxonomy, in SCORECARD_AREAS
+// order. The model writes each axis's narrative; the numeric score is set
+// deterministically from gradeAreas afterward (decision 2), never model-invented.
+const NINE_AXIS_LIST = SCORECARD_AREAS.map(
+  (a, i) => `${i + 1}. ${SCORECARD_DISPLAY_NAMES[a]}`
+).join("\n");
+
+// Part D · per-axis diagnostic briefing. For each of the nine scorecard axes,
+// state deterministically whether a leak actually fired against it — so the
+// model conditions each axis's diagnosis on its OWN fired leaks (D2) and writes
+// a CLEAN axis as neutral/positive only, inventing no problem (D1). This is the
+// generation-side half of Part D; validate-pack enforces the same at output.
+function scorecardAreaBriefing(ctx: GenerationContext): string {
+  if (!ctx.leaks) return "";
+  const byArea = new Map<ScorecardArea, FiredLeak[]>();
+  for (const f of ctx.leaks.report) {
+    const area = f.leak.scorecardArea;
+    if (!area) continue;
+    (byArea.get(area) ?? byArea.set(area, []).get(area)!).push(f);
+  }
+  const lines = SCORECARD_AREAS.map((area, i) => {
+    const name = SCORECARD_DISPLAY_NAMES[area];
+    const fired = byArea.get(area) ?? [];
+    const grade = ctx.leaks!.grades[area];
+    if (!fired.length) {
+      return `${i + 1}. ${name} — CLEAN (grade ${grade}). NO leak fired here. Diagnosis MUST be neutral or positive: state it holds up / nothing is bleeding here. Invent NO problem, gap, or loss. Do NOT borrow another axis's leak.`;
+    }
+    const symptoms = fired.map((f) => f.leak.symptom).join(" · ");
+    return `${i + 1}. ${name} — LEAK(S) FIRED (grade ${grade}). Diagnose ONLY from these, which belong to THIS axis: ${symptoms}`;
+  });
+  return [
+    "════════ PER-AXIS DIAGNOSIS MAP (Part D — bind each axis's diagnosis to its OWN fired leaks) ════════",
+    "For each of the nine axes below, write its diagnosis ONLY from the leaks listed for that axis.",
+    "A CLEAN axis (no leak) gets neutral/positive copy — never a fabricated problem, never another axis's leak.",
+    "",
+    ...lines,
+  ].join("\n");
+}
+
+// Overwrite each metric's score with the deterministic grade and force the metric
+// set to the nine canonical axes, in order. The model supplies prose only.
+// A scorecard axis with no fired leak grades to exactly 95 (gradeAreas special-
+// cases zero-leak axes). Its diagnosis/cause/evidence must read neutral — the
+// model sometimes invents a problem there anyway (Part D). We detect the same
+// problem vocabulary the validator does and, when a clean axis trips it, replace
+// the offending prose with an honest neutral line so a 95 never asserts a leak.
+const CLEAN_AXIS_PROBLEM_VOCAB =
+  /\b(losing|lose|lost|bleed(?:ing)?|hemorrhag\w*|missing|missed|gap|weak(?:ness)?|leak(?:ing|s)?|broken|failing|fails|poor|hurting|costing|costs you|slipping|drop-?off|dropping|underperform\w*|deficien\w*|struggl\w*)\b/i;
+
+function applyDeterministicGrades(
+  intel: GrowthIntelligence,
+  grades: Record<ScorecardArea, number>
+): GrowthIntelligence {
+  const modelMetrics = intel.scorecard?.metrics ?? [];
+  const metrics = SCORECARD_AREAS.map((area, i) => {
+    const name = SCORECARD_DISPLAY_NAMES[area];
+    const m = modelMetrics[i] ?? modelMetrics.find((x) => x?.name === name);
+    const score = grades[area];
+    let diagnosis = m?.diagnosis ?? "";
+    let cause = m?.cause ?? "";
+    let evidence = m?.evidence ?? "";
+    // Clean axis (95 = no leak fired): purge any fabricated problem. Phrasing
+    // deliberately avoids every word in CLEAN_AXIS_PROBLEM_VOCAB.
+    if (score === 95) {
+      if (CLEAN_AXIS_PROBLEM_VOCAB.test(`${diagnosis} ${cause} ${evidence}`)) {
+        diagnosis = `${name} is performing in line with best-practice benchmarks — nothing on this axis needs attention right now.`;
+        cause = "";
+        // Keep evidence non-empty (Law 6) but strip the fabricated problem: a
+        // clean axis's evidence is simply that no conversion issue surfaced here.
+        if (CLEAN_AXIS_PROBLEM_VOCAB.test(evidence))
+          evidence = `No conversion issue surfaced on ${name} — it meets the benchmark for a business of this profile.`;
+      }
+    }
+    return {
+      name,
+      score,
+      rubric: m?.rubric ?? "",
+      evidence,
+      diagnosis,
+      whyItMatters: m?.whyItMatters ?? "",
+      cause,
+      expectedBenefit: m?.expectedBenefit ?? "",
+    };
+  });
+  return { ...intel, scorecard: { ...intel.scorecard, metrics } };
+}
+
+// ── Part I · deterministic leak-analysis stamping ────────────────────────────
+// Defects 1–4: the renderer only ever sees the persisted leakAnalysis, never the
+// LeakContext — so identity (leak name + axis), whitelisted stats WITH citations,
+// the computed benchmark/real math, the industry-pattern body, and the kickoff
+// line must be STAMPED onto each item here from the fired taxonomy, not trusted
+// from the model. We rebuild the list as exactly one item per FIRED IN-SCOPE leak
+// (out-of-scope leaks get no section), merging the model's prose by best match.
+
+function normLeak(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// Law 13 enforcement at the output boundary: a leadVolumeBasis that cites a
+// number MUST read as a labeled assumption, never an invented fact. The model is
+// inconsistent about this ("Assuming 20 inquiries/mo" vs a bare "20 inquiries/mo"),
+// so we stamp the label deterministically rather than trust it. Same prefix set
+// the validator recognizes (leading \b, no trailing boundary so "assum" catches
+// "assuming").
+const ASSUME_WORDS_RE =
+  /\b(assum|estimat|replace with|benchmark|typical|conservativ|industry)/i;
+function labelDollarImpact<T extends { leadVolumeBasis?: string } | undefined>(
+  d: T
+): T {
+  if (!d) return d;
+  const basis = d.leadVolumeBasis ?? "";
+  if (/\d/.test(basis) && !ASSUME_WORDS_RE.test(basis))
+    return { ...d, leadVolumeBasis: `Assuming ${basis.trim()}` };
+  return d;
+}
+
+function leakTokenOverlap(a: string, b: string): number {
+  const bs = new Set(normLeak(b).split(" ").filter((w) => w.length > 2));
+  return normLeak(a)
+    .split(" ")
+    .filter((w) => w.length > 2 && bs.has(w)).length;
+}
+
+function stampLeakAnalysis(
+  intel: GrowthIntelligence,
+  inputs: LeakInput[]
+): GrowthIntelligence {
+  // In-scope leaks only — an out-of-scope flag never earns its own leak section.
+  const inScope = inputs.filter((li) => li.scorecardArea);
+  if (!inScope.length) return intel;
+
+  const model = intel.leakAnalysis ?? [];
+  const used = new Set<number>();
+
+  // Cap dollar-bearing math frames at 2 per document (Defect 1: "≤2 per doc").
+  // Frames are consumed in fired-rank order, so the top leaks keep their dollars.
+  let dollarFramesLeft = 2;
+  const carriesDollar = (frame: string | null) =>
+    !!frame && /\$\s?\d/.test(frame) && /\/mo\b/.test(frame);
+
+  const items: LeakAnalysisItem[] = inScope.map((li) => {
+    // Best-effort match to a model item so we keep its richer prose.
+    let mi = -1;
+    let best = 0;
+    model.forEach((m, idx) => {
+      if (used.has(idx)) return;
+      const hay = `${m.area ?? ""} ${m.leakName ?? ""}`;
+      const overlap = leakTokenOverlap(hay, li.name);
+      const contains =
+        normLeak(hay).includes(normLeak(li.name)) ||
+        normLeak(li.name).includes(normLeak(hay));
+      const score = overlap + (contains ? 3 : 0);
+      if (score > best) {
+        best = score;
+        mi = idx;
+      }
+    });
+    const m = best > 0 && mi >= 0 ? model[mi] : undefined;
+    if (m) used.add(mi);
+
+    const areaLabel = li.scorecardArea
+      ? SCORECARD_DISPLAY_NAMES[li.scorecardArea as ScorecardArea] ??
+        li.scorecardArea
+      : "";
+
+    let mathFrame: string | undefined = li.mathFrame ?? undefined;
+    if (carriesDollar(li.mathFrame)) {
+      if (dollarFramesLeft > 0) dollarFramesLeft--;
+      else mathFrame = undefined; // drop the dollar figure beyond the 2nd leak
+    }
+
+    return {
+      // Identity is deterministic (Defect 2): title = taxonomy leak name.
+      area: li.name,
+      leakName: li.name,
+      scorecardArea: areaLabel,
+      evidenceTier: li.tier,
+      evidence: m?.evidence ?? li.evidence.join(" · "),
+      explanation: m?.explanation ?? li.revenueMechanism,
+      businessImpact: m?.businessImpact ?? li.symptom,
+      dollarImpact: labelDollarImpact(m?.dollarImpact),
+      difficulty: m?.difficulty ?? "medium",
+      priority: m?.priority ?? (li.tier === "OBSERVED" ? "high" : "medium"),
+      recommendedFix: m?.recommendedFix ?? "",
+      owner: m?.owner ?? "us",
+      // Deterministic quantification + pattern + kickoff (Defects 1, 3, 4).
+      allowedStats: li.allowedStats.length ? li.allowedStats : undefined,
+      mathFrame,
+      industryPattern: li.industryPattern ?? undefined,
+      kickoffLine: li.requiresKickoffLine ? KICKOFF_VERIFICATION_LINE : undefined,
+      // Quantifiable = the taxonomy actually gave this leak a stat or a surviving
+      // math frame. Uses the POST-cap `mathFrame` so a leak whose dollar figure we
+      // intentionally dropped for the ≤2 cap isn't later flagged as unquantified.
+      quantifiable: li.allowedStats.length > 0 || Boolean(mathFrame),
+    };
+  });
+
+  return { ...intel, leakAnalysis: items };
+}
+
+async function generateIntelligence(ctx: GenerationContext): Promise<GrowthIntelligence> {
+  const prompt = `${STYLE_RULES}
+
+${contextHeader(ctx)}
+
+TASK: Produce the GROWTH LEAK INTELLIGENCE layer — the diagnostic core of the report that diagnoses exactly where THIS business loses leads it ALREADY PAYS FOR on the way to becoming customers. CONVERSION ONLY (Law 2): never diagnose how to get more traffic/leads.
+
+${scorecardAreaBriefing(ctx)}
+
+Write a narrative for EACH of these NINE conversion-axis dimensions, in this exact order and with these exact names. For each, give its rubric (what it measures, relative to what good looks like) and the specific real evidence behind it (Law 6). DO NOT assign the numeric score yourself — leave "score" as 0; the score is computed deterministically from the fired-leak set and will be filled in for you. PART D DISCIPLINE — bind each axis to the PER-AXIS DIAGNOSIS MAP above: an axis's diagnosis/cause/evidence may reference ONLY the leak(s) listed under THAT axis; a CLEAN axis (no leak fired) MUST read neutral or positive — it holds up, nothing is bleeding there — and must NOT invent a problem, gap, or loss, nor borrow another axis's leak. The nine dimensions:
+${NINE_AXIS_LIST}
+Do NOT invent extra axes, rename these, or drop any.
+
+Then a deep GROWTH LEAK ANALYSIS across the conversion path only (speed-to-lead, lead capture, lead qualification, follow-up/nurture, booking friction, no-show recovery, on-page CTA, on-page form, on-page trust placement, mobile conversion). For EACH leak: concrete evidence (grounded in the signals), a strategic explanation, the business impact, a DOLLAR IMPACT with visible math (Law 5), implementation difficulty, priority, and who deploys the fix (almost always "us"). Open the executive summary with the single most damning dollar-quantified leak (Law 8) — never a compliment.
+
+Then rank the FASTEST REVENUE WINS by dollar impact ÷ effort. Then STRATEGIC RECOMMENDATIONS framed as the done-for-you scope ("What We Deploy") — name ${PRODUCT_NAME} as the ongoing qualification/routing engine (the retainer). No fluff, no fake statistics, no guarantees.
+
+For dollarImpact: populate it ONLY from a figure supplied in the leak-analysis block. leadVolumeBasis, effectSize, and avgValueBasis restate the supplied bases verbatim; monthlyLow/monthlyHigh are the supplied whole-dollar bounds; formula shows the supplied math. If the block supplies no dollar figure for a leak, omit dollarImpact for that leak rather than inventing one.
+
+Return JSON in EXACTLY this shape:
+{
+  "executiveSummary": {
+    "narrative": "Open with the #1 dollar-quantified conversion leak (the gut-punch), then the core problem and the single biggest recovery opportunity. 3-5 sentences. TIER DISCIPLINE (Part C3): an OBSERVED leak may be stated as fact; a BENCHMARK leak must be hedged (typically/most/if that holds here) and framed as an industry pattern, never asserted about this business. NEVER assert an internal response-time fact the scrape cannot see (e.g. 'you take 8 hours to reply', 'your calls go to voicemail') — the outside view can't measure that; frame it as the industry pattern to verify. If any dollar figure uses a benchmark customer value, note once that plugging in their real average customer value makes every figure exact.",
+    "biggestOpportunities": ["..."],
+    "biggestThreats": ["..."],
+    "mostUrgentFixes": ["..."],
+    "quickWins": ["..."]
+  },
+  "scorecard": {
+    "overallReadout": "2-4 sentence read on overall conversion health and where the biggest leaks are",
+    "metrics": [
+      {"name": "Speed to Lead", "score": 0, "rubric": "what this measures, relative to what good looks like", "evidence": "the specific real data behind the read", "diagnosis": "...", "whyItMatters": "...", "cause": "...", "expectedBenefit": "..."}
+    ]
+  },
+  "leakAnalysis": [
+    {"area": "Speed-to-Lead", "evidenceTier": "OBSERVED|EVIDENCED|BENCHMARK — copy the [tier: …] of this leak from the governed set above EXACTLY", "evidence": "...", "explanation": "...", "businessImpact": "...", "dollarImpact": {"leadVolumeBasis": "...", "effectSize": "...", "avgValueBasis": "...", "monthlyLow": 0, "monthlyHigh": 0, "formula": "...", "usesBenchmarkValue": true}, "difficulty": "low|medium|high", "priority": "critical|high|medium|low", "recommendedFix": "...", "owner": "us"}
+  ],
+  "fastestWins": [
+    {"opportunity": "...", "impact": "$ range + one phrase", "difficulty": "low|medium|high", "speed": "e.g. under a week"}
+  ],
+  "strategicRecommendations": ["what we deploy — done-for-you scope, ${PRODUCT_NAME} named as the ongoing retainer engine"]
+}
+
+Provide EXACTLY 9 scorecard metrics named and ordered as listed (score left at 0 — it is filled in deterministically). Provide leakAnalysis items covering ONLY the fired leaks from the governed set above, each with a dollarImpact ONLY where a figure was supplied. Provide 4-6 fastestWins and 4-6 strategicRecommendations.`;
+  const intel = await generateGovernedJson<GrowthIntelligence>(
+    prompt,
+    ctx,
+    intelligenceText
+  );
+  if (!ctx.leaks) return intel;
+  const graded = applyDeterministicGrades(intel, ctx.leaks.grades);
+  return stampLeakAnalysis(graded, ctx.leaks.inputs);
+}
+
+// Gather the free-text surfaces of the intelligence layer for the stat/voice guard.
+function intelligenceText(i: GrowthIntelligence): string {
+  const es = i.executiveSummary;
+  return [
+    es?.narrative,
+    ...(es?.biggestOpportunities ?? []),
+    ...(es?.biggestThreats ?? []),
+    ...(es?.mostUrgentFixes ?? []),
+    ...(es?.quickWins ?? []),
+    i.scorecard?.overallReadout,
+    ...(i.leakAnalysis ?? []).flatMap((l) => [
+      l.evidence,
+      l.explanation,
+      l.businessImpact,
+      l.recommendedFix,
+      l.dollarImpact?.formula,
+    ]),
+    ...(i.fastestWins ?? []).map((w) => w.impact),
+    ...(i.strategicRecommendations ?? []),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// ── V2 STRATEGIC COMPONENT: Acquisition Infrastructure ───────────────────────
+// Powers Deliverable 2 (Client Acquisition Infrastructure Blueprint): the
+// 6-stage CONVERSION-PATH funnel (Capture → Qualify → Speed-to-Lead → Nurture →
+// Book → Show-Up & No-Show Recovery) and the CRM-agnostic pipeline blueprint +
+// lead tiers. Conversion-only (Law 2): no traffic/lead-gen stages. Everything is
+// done-for-you (Law 3); the Qualify stage is LeadGate running continuously = the
+// retainer (Law 4).
+
+async function generateInfrastructure(ctx: GenerationContext): Promise<AcquisitionInfrastructure> {
+  const prompt = `${STYLE_RULES}
+
+${contextHeader(ctx)}
+
+TASK: Produce the CLIENT ACQUISITION INFRASTRUCTURE architecture for THIS business — the operating blueprint for how the leads they ALREADY get turn into booked, shown-up customers. CONVERSION PATH ONLY (Law 2): this is NOT about getting more traffic or leads. Do not include Traffic Sources, ads, SEO, social, content, or referral as stages. Everything below is DONE FOR YOU (Law 3) — frame each stage as what WE deploy, never as the owner's to-do list.
+
+Part A — the 6-stage conversion funnel, in this EXACT order:
+1. Capture — turn existing traffic/inquiries into captured leads (form, click-to-call, chat).
+2. Qualify (${PRODUCT_NAME}) — ${PRODUCT_NAME} scores and routes every lead automatically. THIS STAGE IS THE RETAINER: it runs continuously, set isRetainer=true. Name ${PRODUCT_NAME} explicitly.
+3. Speed-to-Lead / Instant Response — qualified leads get an instant first touch.
+4. Nurture — not-ready leads are kept warm with an automated sequence.
+5. Book — qualified, interested leads land on a booking flow.
+6. Show-Up & No-Show Recovery — reminders + recovery so booked consults actually show.
+For EACH stage: its role in the conversion path, the current break point (grounded in the real signals — be specific to THIS business), what WE deploy to fix it (done-for-you), the owner ("us" for everything we build; "you" ONLY for genuine human steps like answering a qualified lead or running the consult), whether it's the ongoing retainer (only stage 2 = true), and a KPI to track. Set owner="us" on every stage except where a human owner step is unavoidable.
+
+Part B — a CRM-agnostic pipeline blueprint WE configure for them, with these stages in order: New Lead, Contact Attempted, Qualified, Consultation Booked, Consultation Completed, Proposal Sent, Won, Lost, Nurture. For EACH: entry criteria, exit criteria, ownership (done-for-you — "Deployed by us"; the owner only handles the human consult/close steps), review process. Remain CRM-agnostic — do not assume specific software. Also define the 4 lead tiers: 90–100 Priority Lead, 70–89 Qualified Lead, 50–69 Nurture Lead, Below 50 Low Fit Lead — each with meaning, action, response time, owner (${PRODUCT_NAME} routes automatically; owner answers Priority), follow-up method.
+
+Return JSON in EXACTLY this shape:
+{
+  "funnel": {
+    "overview": "2-4 sentence read on how the conversion path should operate end-to-end for this business — from a captured lead to a shown-up customer, with ${PRODUCT_NAME} qualifying continuously",
+    "stages": [
+      {"stage": "Capture", "role": "...", "currentWeakness": "...", "whatWeDeploy": "...", "owner": "us", "isRetainer": false, "kpi": "..."}
+    ]
+  },
+  "crmPipeline": {
+    "overview": "2-3 sentence read on how the pipeline WE configure is operated and reviewed",
+    "stages": [
+      {"stage": "New Lead", "entryCriteria": "...", "exitCriteria": "...", "ownership": "Deployed by us", "reviewProcess": "..."}
+    ],
+    "leadTiers": [
+      {"tier": "Priority Lead", "range": "90–100", "meaning": "...", "action": "...", "responseTime": "...", "owner": "...", "followUpMethod": "..."}
+    ]
+  }
+}
+
+Provide EXACTLY 6 funnel stages (in the order above, Qualify = ${PRODUCT_NAME} with isRetainer=true), EXACTLY 9 pipeline stages, and EXACTLY 4 lead tiers (in the orders listed).`;
+  return generateJson<AcquisitionInfrastructure>(prompt);
+}
+
+// ── V2 STRATEGIC COMPONENT: Supporting Assets ────────────────────────────────
+// Net-new customer-facing assets for Deliverable 3 (Conversion Asset Pack):
+// a single post-job review-request message (Law 2 — the only permitted review
+// touch) and thank-you / next-step assets. (Landing, email, SMS, and booking
+// copy are reused from file1/3/4/5.)
+
+async function generateSupportingAssets(ctx: GenerationContext): Promise<SupportingAssets> {
+  const prompt = `${STYLE_RULES}
+
+${contextHeader(ctx)}
+
+TASK: Produce net-new customer-facing assets that SUPPORT the acquisition infrastructure for THIS business. These are not standalone — they plug into the systems. Human language, no spam, no "last chance" / "still interested" tactics.
+
+LAW 2 — FORBIDDEN: do NOT produce a "Review Generation" section, a review strategy, a set of review-request emails, or staff scripts. The ONLY permitted review touch is ONE review-request message that fires AUTOMATICALLY after a completed job.
+
+1. POST-JOB REVIEW REQUEST: exactly ONE short, warm SMS-length message that goes out automatically once a job/appointment is completed. Specific to this business type. Not a campaign — a single automated send.
+2. THANK-YOU ASSETS: thank-you page copy, next-step messaging, and a short post-purchase / post-booking sequence.
+
+Return JSON in EXACTLY this shape:
+{
+  "reviewAssets": {
+    "postJobRequest": "the single post-job review-request message"
+  },
+  "thankYouAssets": {
+    "thankYouPageCopy": "full thank-you page copy with the clear next step",
+    "nextStepMessaging": "the immediate next-step message after a booking/inquiry",
+    "postPurchaseSequence": ["2-4 short post-purchase/post-booking touch messages"]
+  }
+}
+
+Provide exactly ONE postJobRequest message and 2-4 postPurchaseSequence messages.`;
+  return generateJson<SupportingAssets>(prompt);
+}
+
+// ── V2 STRATEGIC COMPONENT: Implementation & Optimization Timeline ───────────
+// Powers Deliverable 4. WE implement everything (Law 3). Three phases: a one-time
+// Setup (scoped to THIS report's leaks, sequenced by $), a Stabilize phase, then
+// the ongoing-optimization retainer cadence (Law 4). "Done" = measurable
+// conversion outcomes, not activities.
+
+async function generateRoadmap(ctx: GenerationContext): Promise<GrowthRoadmap> {
+  const prompt = `${STYLE_RULES}
+
+${contextHeader(ctx)}
+
+TASK: Produce the IMPLEMENTATION & OPTIMIZATION TIMELINE for THIS business — how WE deploy the fixes and then run the ongoing engine. DONE FOR YOU (Law 3): every phase is what WE do, owner="us". Do NOT hand tasks to the owner's "team". The only thing the owner does is show up to genuine human steps (approve copy, answer Priority leads, run consults).
+
+CRITICAL: Phase 1 (Setup) must deploy ONLY the leaks THIS report actually surfaced — pull the specific conversion leaks from the data above (slow response, no qualification, no follow-up, no-shows, weak on-page conversion/trust). Sequence them by dollar impact, biggest leak first. Do not invent generic project tasks.
+
+Three phases, in this EXACT order:
+- Setup — Week 1–2 — we deploy the report's prioritized leak fixes (sequenced by $). isRetainerPhase=false.
+- Stabilize — Weeks 3–4 — we monitor the live system, fix edge cases, confirm the conversion fixes are holding. isRetainerPhase=false.
+- Ongoing Optimization — Monthly (ongoing) — the ${PRODUCT_NAME} retainer cadence: monitor lead quality, tune qualification thresholds, A/B-test copy, ship a monthly conversion report. isRetainerPhase=true. Name ${PRODUCT_NAME}.
+
+For EACH phase: objective, the concrete deploy actions WE take, owner ("us"), and a "done" definition stated as MEASURABLE CONVERSION OUTCOMES (e.g. "Median lead response time under 5 minutes", "No-show rate cut by half"), not activities.
+
+Return JSON in EXACTLY this shape:
+{
+  "overview": "2-3 sentence read on how the rollout runs — one-time setup then the ongoing retainer — and what 'done' looks like in conversion terms",
+  "phases": [
+    {"phase": "Setup", "window": "Week 1–2", "objective": "...", "deployActions": ["..."], "owner": "us", "doneDefinition": ["measurable conversion outcome"], "isRetainerPhase": false}
+  ]
+}
+
+Provide EXACTLY 3 phases in the order listed. 3-6 deployActions and 2-4 doneDefinition outcomes per phase. Setup's deployActions must map to the actual leaks in this report, sequenced by dollar impact.`;
+  return generateJson<GrowthRoadmap>(prompt);
+}
+
+// ── INTERNAL MODULE: Landing Page (diagnosis + assets) ───────────────────────
+// The old "Landing Page Growth Audit", absorbed into the package. Produces ONE
+// coherent unit so the diagnosis (which feeds Deliverable 1's "Landing Page
+// Conversion Intelligence" section) and the assets (which feed Deliverable 3's
+// "Landing Page Conversion Assets" section) describe the SAME recommended page.
+// LaunchGrid does NOT implement — every recommendation is framed as guidance the
+// client's own team executes.
+
+async function generateLandingModule(ctx: GenerationContext): Promise<LandingPageModule> {
+  const psi = ctx.intel.performance;
+  const hasPsi = Boolean(psi?.available);
+  const perfLine = hasPsi
+    ? `Real PageSpeed data IS available for this run — use it for the technical UX diagnosis. Mobile score: ${psi?.mobile?.performanceScore ?? "n/a"}, mobile LCP: ${psi?.mobile?.metrics.lcpSeconds ?? "n/a"}s, mobile CLS: ${psi?.mobile?.metrics.cls ?? "n/a"}. Translate these into conversion/booking consequences — NOT a Lighthouse or SEO report.`
+    : `No live PageSpeed data was captured — keep the technical UX diagnosis short and clearly assumption-based, tied to conversion behavior.`;
+
+  const prompt = `${STYLE_RULES}
+
+${contextHeader(ctx)}
+
+TASK: Produce the LANDING PAGE module for THIS business — diagnosing its landing page AS A CONVERSION SYSTEM and then handing over the actual conversion copy. This is the depth of a standalone landing-page growth audit, but it is delivered as part of a larger premium package: the DIAGNOSIS goes into the "Growth Leak Intelligence Report" and the ASSETS go into the "Conversion Asset Pack".
+
+CRITICAL LANGUAGE RULES (Law 10): be CONFIDENT on the DIAGNOSIS — it's measured data, so state observed facts plainly ("the form has no instant response", "LCP is 4.1s on mobile"). Do NOT pile hedge-words ("may/could/potentially/likely/designed to") onto things you can actually see. Hedge ONLY on projected OUTCOMES — never guarantee results there. Ground every claim in the website signals / performance / review / competitor data above. Where data is missing, say so plainly and frame the point as a stated assumption to verify.
+
+DIAGNOSIS must be a strategic, CONVERSION-focused diagnosis (Law 2) — NOT generic advice and NOT lead generation. Never write "make the CTA better" — explain the intent mismatch and what a high-intent ${ctx.business.industry ?? "local"} visitor in ${ctx.business.city ?? "this market"} actually needs as a next step to convert. ${perfLine}
+
+For the TRUST diagnosis and the ASSETS: NEVER invent fake testimonials, reviews, credentials, or metrics. If real proof is not present in the data, say the business should add it, and in copy use clearly-labelled placeholders like "[Insert verified client testimonial]".
+
+ASSETS must be specific to this niche and city. Avoid generic headlines like "Your Trusted Legal Partner" — make headlines sharper and intent-matched. The recommended structure is the page skeleton; the copy is what goes in it.
+
+Return JSON in EXACTLY this shape:
+{
+  "intelligence": {
+    "executiveDiagnosis": "4-6 sentences of REAL findings: where conversion friction exists on this page, what it is costing in booked calls/leads, what to fix first, and why it matters for THIS business/niche. State observed facts plainly; do not print analysis-dimension lists.",
+    "heroDiagnosis": {"problem": "ONE plain-prose finding about THIS hero (what it actually says/lacks above the fold). Do NOT emit a slash-list of dimensions — write the real diagnosis as a sentence.", "evidence": "grounded in observed signals", "whyItMatters": "...", "recommendedFix": "...", "expectedImprovement": "concrete projected outcome, no hedge-soup"},
+    "ctaDiagnosis": {"problem": "ONE plain-prose finding about THIS page's call-to-action (the actual intent mismatch). Do NOT emit a slash-list of dimensions.", "evidence": "...", "whyItMatters": "...", "recommendedFix": "...", "expectedImprovement": "..."},
+    "trustDiagnosis": {"problem": "ONE plain-prose finding about the proof on THIS page (what is missing or buried). Do NOT emit a slash-list of dimensions.", "evidence": "if proof is missing, say so", "whyItMatters": "...", "recommendedFix": "what proof to surface or add", "expectedImprovement": "..."},
+    "conversionBottlenecks": [{"stage": "name the real stage, e.g. 'Mobile visitor → CTA' or 'Form submission → follow-up'", "currentFriction": "...", "likelyVisitorBehavior": "what the visitor likely does", "businessImpact": "...", "recommendedFix": "...", "priority": "critical|high|medium|low"}],
+    "technicalUxDiagnosis": "3-5 sentences tying performance (mobile/desktop, LCP, CLS, perceived speed) to booking/inquiry behavior. Conversion-focused, not an SEO report.",
+    "fastestWins": [{"fix": "...", "whyItMatters": "...", "priority": "critical|high|medium|low", "difficulty": "low|medium|high", "expectedOutcome": "hedged outcome"}],
+    "trackingRecommendations": ["tool-agnostic, e.g. 'Inside the business's analytics or CRM platform, track CTA clicks...', covering CTA clicks, form submissions, booking-button clicks, phone clicks, scroll depth, service-page exits, mobile conversion rate, source-to-booking rate"]
+  },
+  "assets": {
+    "recommendedStructure": [{"name": "Hero section", "purpose": "...", "whatToCommunicate": "...", "implementationNote": "..."}],
+    "heroCopy": {"headlineOptions": ["3 sharp, intent-matched headline options"], "subheadlineOptions": ["3 subheadline options"], "primaryCta": "...", "secondaryCta": "...", "trustMicrocopy": "short reassurance line near the CTA", "aboveFoldProofLine": "one credible above-the-fold proof line (placeholder if no real proof)"},
+    "problemCopy": "visitor pain points, urgency framing, consequence of inaction, emotional + functional problem — professional and industry-appropriate",
+    "solutionCopy": "how the business solves it, why their approach is better, what makes them credible, what makes the next step easy",
+    "trustCopy": "review/reputation framing, experience framing, local proof framing, testimonial placement notes, credibility markers to add — use clearly-labelled placeholders for any proof not in the data",
+    "ctaOptions": [{"label": "actual CTA text", "type": "Primary|Secondary|Phone|Booking|Low-friction|Final", "whereToUse": "...", "whyItExists": "...", "expectedRole": "..."}],
+    "faq": [{"question": "a real buying objection as a question", "answer": "..."}],
+    "thankYouPageCopy": "confirmation message + what happens next + timeline expectation + preparation instructions + a secondary action — reduce anxiety, increase show-up quality",
+    "implementationNotes": ["where to place CTAs, where to place trust signals, what belongs above the fold, mobile-specific notes, what to test first, what not to overcomplicate"]
+  }
+}
+
+Provide 4-6 conversionBottlenecks, 4-6 fastestWins, 6-8 trackingRecommendations, EXACTLY 9 recommendedStructure sections (Hero, Problem, Trust, Service/value, Process, Proof, Objection handling / FAQ, Booking CTA, Final CTA), 6-8 ctaOptions, and 5-8 FAQ items.`;
+  return generateJson<LandingPageModule>(prompt);
+}
+
 // ── Orchestration ────────────────────────────────────────────────────────────
 
 const SECTION_LABELS: Record<AssetSection, string> = {
@@ -446,14 +1133,77 @@ export function buildMeta(ctx: GenerationContext) {
   };
 }
 
-export async function generateAssetPack(ctx: GenerationContext): Promise<AssetPack> {
-  const [file1, file2, file3, file4, file5] = await Promise.all([
-    generateFile1(ctx),
-    generateFile2(ctx),
-    generateFile3(ctx),
-    generateFile4(ctx),
-    generateFile5(ctx),
-  ]);
+// Reports real generation progress: fires once per deliverable as it actually
+// resolves, so the UI can show true completion instead of a guessed timer.
+export type AssetProgressFn = (completed: number, total: number, label: string) => void;
 
-  return { meta: buildMeta(ctx), file1, file2, file3, file4, file5 };
+// Number of parallel deliverable calls that make up a full pack.
+export const ASSET_PACK_PARTS = 10;
+
+// All nine deliverable calls fire in parallel. The token bucket in generateJson
+// keeps us under the model's TPM ceiling if it's ever tight; on gpt-4o-mini there
+// is ample headroom, so the pack completes in ~30s. When onProgress is provided,
+// each call reports the moment it lands so the client tracks real progress.
+export async function generateAssetPack(
+  ctx: GenerationContext,
+  onProgress?: AssetProgressFn
+): Promise<AssetPack> {
+  let completed = 0;
+  const track = <T>(label: string, p: Promise<T>): Promise<T> =>
+    p.then((r) => {
+      completed += 1;
+      onProgress?.(completed, ASSET_PACK_PARTS, label);
+      return r;
+    });
+
+  const [
+    file1,
+    file2,
+    file3,
+    file4,
+    file5,
+    intelligence,
+    infrastructure,
+    supportingAssets,
+    roadmap,
+    landing,
+  ] = (await Promise.all([
+    track("Growth audit & landing page", generateFile1(ctx)),
+    track("Lead qualification system", generateFile2(ctx)),
+    track("Email nurture sequence", generateFile3(ctx)),
+    track("SMS follow-up sequence", generateFile4(ctx)),
+    track("Booking & show-up system", generateFile5(ctx)),
+    track("Growth leak intelligence", generateIntelligence(ctx)),
+    track("Acquisition infrastructure", generateInfrastructure(ctx)),
+    track("Review & thank-you assets", generateSupportingAssets(ctx)),
+    track("90-day execution roadmap", generateRoadmap(ctx)),
+    track("Landing page conversion module", generateLandingModule(ctx)),
+  ])) as [
+    GrowthAuditFile,
+    LeadQualificationFile,
+    EmailNurtureFile,
+    SmsFollowUpFile,
+    BookingSystemFile,
+    GrowthIntelligence,
+    AcquisitionInfrastructure,
+    SupportingAssets,
+    GrowthRoadmap,
+    LandingPageModule,
+  ];
+
+  // Defect 5: scrub any fabricated "$N off" / "N% off" promotion across EVERY
+  // deliverable before the pack is returned — no invented offers ship.
+  return sanitizeInventedOffers({
+    meta: buildMeta(ctx),
+    file1,
+    file2,
+    file3,
+    file4,
+    file5,
+    intelligence,
+    infrastructure,
+    supportingAssets,
+    roadmap,
+    landing,
+  });
 }

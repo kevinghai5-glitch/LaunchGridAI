@@ -3,48 +3,116 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Sparkles, Check, ChevronDown, Send } from "lucide-react";
+import { Sparkles, Check, ChevronDown, Send, History } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
 import { ColdAuditView } from "@/components/businesses/ColdAuditView";
-import type { AssetPack, ColdAuditReport, SavedBusiness } from "@/types";
+import type { AssetPack, ColdAuditReport, SavedBusiness, DeliverableId } from "@/types";
 
 type StudioView = "pack" | "audit";
 
-const THINKING_STEPS = [
-  "Loading business profile",
-  "Reading their website copy",
-  "Analyzing positioning & gaps",
-  "Writing landing page + lead capture",
-  "Drafting emails, SMS & booking page",
+type GenProgress = { completed: number; total: number; label: string };
+
+// Local cache of the last generation per business, so the "View previous
+// generation" button reappears after every run without touching the Library.
+const lastPackKey = (id: string) => `studio:lastPack:${id}`;
+
+function readCachedPack(id: string): { pack: AssetPack; at: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(lastPackKey(id));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { pack: AssetPack; at: string };
+    return parsed?.pack ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPack(id: string, pack: AssetPack, at: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(lastPackKey(id), JSON.stringify({ pack, at }));
+  } catch {
+    /* quota / serialization — non-fatal, the button just won't persist */
+  }
+}
+
+// Same-day generations are treated as "still current" — they auto-open as the
+// live deliverable with no regenerate banner. Anything older surfaces the
+// regenerate prompt so the operator refreshes stale work before sending it.
+function isSameDayAsNow(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+// Staged labels for the cold-audit progress bar. The generate endpoint is a
+// single POST (not streamed), so we advance through these on a timer and snap to
+// 100% when the request resolves — mirroring the asset pack's progress UI.
+const COLD_AUDIT_STAGES = [
+  "Measuring live site speed",
+  "Reading their homepage & pages",
+  "Pulling recent Google reviews",
+  "Scanning nearby competitors",
+  "Finding the most expensive leaks",
+  "Writing your cold-open audit",
 ];
+
+// Flat surface card matching the opportunities search bar (no gradient/shadow).
+const flatCard: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--line)",
+  boxShadow: "none",
+};
 
 export default function StudioPage() {
   const router = useRouter();
   const params = useSearchParams();
   const businessId = params.get("businessId");
+  const restoreParam = params.get("restore"); // "pack" → auto-open the saved pack (from Library)
+  const viewParam = params.get("view"); // "audit" → open the Cold Audit view (from Library)
+  const deliverableParam = params.get("deliverable") as DeliverableId | null; // d1..d4 deep-link
 
   const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
   const [selected, setSelected] = useState<SavedBusiness | null>(null);
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [pack, setPack] = useState<AssetPack | null>(null);
-  const [activeStep, setActiveStep] = useState(-1);
+  const [genProgress, setGenProgress] = useState<GenProgress | null>(null);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
-  const [view, setView] = useState<StudioView>("pack");
+  const [view, setView] = useState<StudioView>(viewParam === "audit" ? "audit" : "pack");
+  const [saving, setSaving] = useState(false);
+  const [savedPack, setSavedPack] = useState(false);
   const [coldAudit, setColdAudit] = useState<ColdAuditReport | null>(null);
+  // Previously-saved generations, loaded but NOT auto-shown — Studio opens fresh.
+  // Surfaced behind an explicit "View previous generation" button instead.
+  const [archivedPack, setArchivedPack] = useState<AssetPack | null>(null);
+  const [archivedAt, setArchivedAt] = useState<string | null>(null);
+  const [archivedAudit, setArchivedAudit] = useState<ColdAuditReport | null>(null);
+  const [archivedAuditAt, setArchivedAuditAt] = useState<string | null>(null);
   const [coldRunning, setColdRunning] = useState(false);
-  const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // When set, the cold audit on screen is a restored older one — show its
+  // regenerate banner (parallels restoredAt for the asset pack).
+  const [coldRestoredAt, setColdRestoredAt] = useState<string | null>(null);
+  const [coldProgress, setColdProgress] = useState<GenProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const coldAbortRef = useRef<AbortController | null>(null);
+  const coldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initial business list — pick from URL, then last-used (localStorage), then first.
   useEffect(() => {
-    fetch("/api/businesses")
+    fetch("/api/businesses?deliverable=true")
       .then((r) => r.json())
       .then((data) => {
         const list: SavedBusiness[] = data.businesses ?? [];
@@ -73,18 +141,49 @@ export default function StudioPage() {
     setPack(null);
     setDone(false);
     setRestoredAt(null);
+    setSavedPack(false);
     setColdAudit(null);
+    setColdRestoredAt(null);
+    setArchivedPack(null);
+    setArchivedAt(null);
+    setArchivedAudit(null);
+    setArchivedAuditAt(null);
+    setGenProgress(null);
+    // Surface the last generation behind the "View previous generation" button
+    // without auto-showing it. Prefer the local cache (every run is cached here,
+    // saved or not); fall back to the last Library save if there's no cache yet.
+    // When arriving from the Library with ?restore=pack for THIS business, open
+    // the saved pack straight away instead of leaving it behind the button. We
+    // do this in the same effect that loads/resets the pack so there's no
+    // cross-effect race (StrictMode double-invoke was wiping a separate effect).
+    const shouldRestore = restoreParam === "pack" && selected.id === businessId;
+    // Open a saved pack into view. Same-day generations open with no banner (they
+    // read as the current deliverable); older ones pass their date so the
+    // regenerate banner shows. Auto-open when the last pack is from today, or
+    // always when arriving from the Library/Saved card (?restore=pack).
+    const openPack = (p: AssetPack, at: string | null) => {
+      setPack(p);
+      setRestoredAt(isSameDayAsNow(at) ? null : at);
+      setDone(true);
+      setSavedPack(true); // it came from the Library — already saved
+    };
+    const cached = readCachedPack(selected.id);
+    if (cached) {
+      setArchivedPack(cached.pack);
+      setArchivedAt(cached.at);
+      if (shouldRestore || isSameDayAsNow(cached.at)) openPack(cached.pack, cached.at);
+    }
     fetch(`/api/assets/latest?businessId=${encodeURIComponent(selected.id)}`, {
       cache: "no-store",
     })
       .then((r) => r.json())
       .then((data: { pack: AssetPack | null; generatedAt?: string }) => {
-        if (cancelled) return;
+        if (cancelled || cached) return; // local cache wins — it's the freshest
         if (data.pack) {
-          setPack(data.pack);
-          setDone(true);
-          setRestoredAt(data.generatedAt ?? null);
-          setActiveStep(THINKING_STEPS.length);
+          setArchivedPack(data.pack);
+          setArchivedAt(data.generatedAt ?? null);
+          if (shouldRestore || isSameDayAsNow(data.generatedAt))
+            openPack(data.pack, data.generatedAt ?? null);
         }
       })
       .catch(() => {})
@@ -95,21 +194,35 @@ export default function StudioPage() {
       cache: "no-store",
     })
       .then((r) => r.json())
-      .then((data: { audit: ColdAuditReport | null }) => {
+      .then((data: { audit: ColdAuditReport | null; generatedAt?: string }) => {
         if (cancelled) return;
-        if (data.audit) setColdAudit(data.audit);
+        if (data.audit) {
+          setArchivedAudit(data.audit);
+          setArchivedAuditAt(data.generatedAt ?? null);
+          // Same-day audit auto-opens as current; older stays behind the button.
+          // Arriving from the Library with ?view=audit always opens it straight away.
+          const openFromLibrary = viewParam === "audit" && selected.id === businessId;
+          if (openFromLibrary || isSameDayAsNow(data.generatedAt)) {
+            setColdAudit(data.audit);
+            setColdRestoredAt(
+              openFromLibrary && !isSameDayAsNow(data.generatedAt)
+                ? data.generatedAt ?? null
+                : null
+            );
+          }
+        }
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, businessId, restoreParam, viewParam]);
 
   useEffect(() => {
     return () => {
-      if (stepTimer.current) clearInterval(stepTimer.current);
       abortRef.current?.abort();
       coldAbortRef.current?.abort();
+      if (coldTimerRef.current) clearInterval(coldTimerRef.current);
     };
   }, []);
 
@@ -119,12 +232,60 @@ export default function StudioPage() {
 
   const reset = () => {
     abortRef.current?.abort();
-    if (stepTimer.current) clearInterval(stepTimer.current);
     setRunning(false);
     setPack(null);
     setDone(false);
     setRestoredAt(null);
-    setActiveStep(-1);
+    setGenProgress(null);
+  };
+
+  // Pull the last saved generation into view on demand (it's not shown by default).
+  const viewArchivedPack = () => {
+    if (!archivedPack) return;
+    setPack(archivedPack);
+    setRestoredAt(isSameDayAsNow(archivedAt) ? null : archivedAt);
+    setDone(true);
+    setSavedPack(true); // archived packs come from the Library — already saved
+  };
+
+  const saveToLibrary = async () => {
+    if (!selected || !pack || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/assets/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: selected.id, assetPack: pack }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to save");
+        return;
+      }
+      setSavedPack(true);
+      setArchivedPack(pack);
+      setArchivedAt(data.savedAt ?? new Date().toISOString());
+      toast.success("Saved to library");
+    } catch {
+      toast.error("Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const viewArchivedAudit = () => {
+    if (!archivedAudit) return;
+    setColdAudit(archivedAudit);
+    setColdRestoredAt(isSameDayAsNow(archivedAuditAt) ? null : archivedAuditAt);
+  };
+
+  const clearAudit = () => {
+    if (coldTimerRef.current) clearInterval(coldTimerRef.current);
+    coldAbortRef.current?.abort();
+    setColdRunning(false);
+    setColdAudit(null);
+    setColdRestoredAt(null);
+    setColdProgress(null);
   };
 
   const start = async () => {
@@ -134,14 +295,9 @@ export default function StudioPage() {
     setRunning(true);
     setDone(false);
     setPack(null);
-    setActiveStep(0);
-
-    // Animate the "thinking" steps while the real request is in flight.
-    let s = 0;
-    stepTimer.current = setInterval(() => {
-      s++;
-      if (s < THINKING_STEPS.length - 1) setActiveStep(s);
-    }, 1600);
+    setSavedPack(false);
+    // Real progress streamed from the server. Starts at 0/10 ("gathering data").
+    setGenProgress({ completed: 0, total: 10, label: "Gathering live site & market data" });
 
     try {
       const res = await fetch("/api/generate/assets", {
@@ -150,15 +306,72 @@ export default function StudioPage() {
         body: JSON.stringify({ businessId: selected.id }),
         signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) {
+      // Early errors (auth / validation / not-found) come back as plain JSON.
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
         toast.error(data.error || "Failed to generate assets");
         setRunning(false);
-        setActiveStep(-1);
+        setGenProgress(null);
         return;
       }
-      setPack(data.assetPack as AssetPack);
-      setActiveStep(THINKING_STEPS.length);
+
+      // Stream of newline-delimited JSON progress events + a final pack.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fresh: AssetPack | null = null;
+      let streamError: string | null = null;
+
+      for (;;) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let msg: {
+            type: string;
+            completed?: number;
+            total?: number;
+            label?: string;
+            error?: string;
+            assetPack?: AssetPack;
+          };
+          try {
+            msg = JSON.parse(trimmed);
+          } catch {
+            continue;
+          }
+          if (msg.type === "progress") {
+            setGenProgress({
+              completed: msg.completed ?? 0,
+              total: msg.total ?? 10,
+              label: msg.label ?? "",
+            });
+          } else if (msg.type === "error") {
+            streamError = msg.error ?? "Failed to generate assets";
+          } else if (msg.type === "done") {
+            fresh = msg.assetPack ?? null;
+          }
+        }
+      }
+
+      if (streamError || !fresh) {
+        toast.error(streamError || "Failed to generate assets");
+        setGenProgress(null);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      setGenProgress({ completed: 10, total: 10, label: "Done" });
+      setPack(fresh);
+      // Cache locally so the "View previous generation" button persists across
+      // selection changes and reloads — independent of saving to the Library.
+      writeCachedPack(selected.id, fresh, now);
+      setArchivedPack(fresh);
+      setArchivedAt(now);
       setDone(true);
       toast.success("Asset pack generated");
     } catch (err) {
@@ -167,9 +380,8 @@ export default function StudioPage() {
       } else {
         toast.error("Failed to generate assets");
       }
-      setActiveStep(-1);
+      setGenProgress(null);
     } finally {
-      if (stepTimer.current) clearInterval(stepTimer.current);
       abortRef.current = null;
       setRunning(false);
     }
@@ -180,6 +392,27 @@ export default function StudioPage() {
     const controller = new AbortController();
     coldAbortRef.current = controller;
     setColdRunning(true);
+    setColdAudit(null);
+    setColdRestoredAt(null);
+
+    // Simulated progress — the endpoint is a single POST, so we walk through the
+    // staged labels on a timer (capped one short of done) and snap to 100% once
+    // the request resolves.
+    const total = COLD_AUDIT_STAGES.length;
+    setColdProgress({ completed: 0, total, label: COLD_AUDIT_STAGES[0] });
+    let step = 0;
+    if (coldTimerRef.current) clearInterval(coldTimerRef.current);
+    coldTimerRef.current = setInterval(() => {
+      step = Math.min(step + 1, total - 1);
+      setColdProgress({ completed: step, total, label: COLD_AUDIT_STAGES[step] });
+    }, 3500);
+    const stopTimer = () => {
+      if (coldTimerRef.current) {
+        clearInterval(coldTimerRef.current);
+        coldTimerRef.current = null;
+      }
+    };
+
     try {
       const res = await fetch("/api/generate/cold-audit", {
         method: "POST",
@@ -190,11 +423,20 @@ export default function StudioPage() {
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Failed to generate cold audit");
+        stopTimer();
+        setColdProgress(null);
         return;
       }
+      stopTimer();
+      setColdProgress({ completed: total, total, label: "Done" });
       setColdAudit(data.coldAudit as ColdAuditReport);
+      const now = new Date().toISOString();
+      setArchivedAudit(data.coldAudit as ColdAuditReport);
+      setArchivedAuditAt(now);
       toast.success("Cold audit ready");
     } catch (err) {
+      stopTimer();
+      setColdProgress(null);
       if (err instanceof DOMException && err.name === "AbortError") {
         toast("Generation cancelled");
       } else {
@@ -211,34 +453,43 @@ export default function StudioPage() {
 
   return (
     <>
-      <TopBar title="Studio" subtitle={selected ? selected.name : "AI generation lab"} />
+      <TopBar title="Workspace" subtitle={selected ? selected.name : "Generate & preview deliverables"} />
       <div style={{ padding: "40px 56px 80px", maxWidth: 1500, margin: "0 auto" }}>
         <header
           className="flex justify-between items-end"
           style={{ marginBottom: 32 }}
         >
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 6 }}>Studio · for</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 6 }}>Workspace · for</div>
             <h1
               className="lg-display"
               style={{
                 margin: 0,
                 fontSize: 26,
-                fontWeight: 500,
-                letterSpacing: "-0.025em",
+                fontWeight: 700,
+                letterSpacing: "-0.03em",
                 color: "var(--text)",
               }}
             >
               {selected ? selected.name : "Save a business to begin"}
             </h1>
             <p style={{ margin: "8px 0 0", color: "var(--text-3)", fontSize: 13 }}>
-              Generates 5 full, business-specific documents — a Growth Asset Pack you can sell.
+              Builds 4 consulting-grade deliverables — diagnosis, infrastructure, assets, and a
+              90-day plan. You deliver the strategy; the client&apos;s team implements it.
             </p>
           </div>
-          {done && selected && (
+          {done && selected && !isAudit && pack && (
             <div className="flex" style={{ gap: 8 }}>
               <LgButton
-                variant="primary"
+                variant={savedPack ? "ghost" : "primary"}
+                icon={savedPack ? "check" : "bookmark"}
+                onClick={saveToLibrary}
+                disabled={saving || savedPack}
+              >
+                {saving ? "Saving…" : savedPack ? "Saved to library" : "Save to library"}
+              </LgButton>
+              <LgButton
+                variant={savedPack ? "primary" : "ghost"}
                 icon="file"
                 onClick={() => router.push(`/proposals/new?businessId=${selected.id}`)}
               >
@@ -251,7 +502,7 @@ export default function StudioPage() {
         <div className="grid" style={{ gridTemplateColumns: "340px 1fr", gap: 20 }}>
           {/* LEFT: configuration */}
           <div className="flex flex-col" style={{ gap: 16 }}>
-            <LgCard padded={false}>
+            <LgCard padded={false} style={flatCard}>
               <div
                 style={{
                   padding: "16px 20px 12px",
@@ -270,7 +521,7 @@ export default function StudioPage() {
               </div>
             </LgCard>
 
-            <LgCard padded={false}>
+            <LgCard padded={false} style={flatCard}>
               <div
                 style={{
                   padding: "16px 20px 12px",
@@ -281,11 +532,11 @@ export default function StudioPage() {
               </div>
               <div className="flex flex-col" style={{ padding: 16, gap: 10 }}>
                 {[
-                  "Landing page copy (hero, offer, CTAs, trust signals)",
-                  "Lead capture + qualification + scoring",
-                  "7-day email nurture sequence",
-                  "SMS follow-up system",
-                  "Booking page + objection handling",
+                  "Growth Leak Intelligence Report — website audit, visual competitor comparison, landing page conversion intelligence, technical UX, growth leak scorecard, revenue leak analysis",
+                  "Client Acquisition Infrastructure Blueprint — funnel, qualification, follow-up & CRM",
+                  "Conversion Asset Pack — landing page copy, CTA options, email, SMS, booking, review & thank-you assets",
+                  "90-Day Growth Execution Roadmap — phased, owned plan",
+                  "Strategy & architecture you hand off — client's team executes",
                 ].map((line) => (
                   <div
                     key={line}
@@ -311,7 +562,7 @@ export default function StudioPage() {
               </div>
             </LgCard>
 
-            <LgCard padded={false}>
+            <LgCard padded={false} style={flatCard}>
               <div
                 style={{
                   padding: "16px 20px 12px",
@@ -332,7 +583,7 @@ export default function StudioPage() {
                   <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 6 }}>Setup fee</div>
                   <div
                     className="lg-display tnum"
-                    style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--text)" }}
+                    style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--text)" }}
                   >
                     $6,500
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>one-time</span>
@@ -349,7 +600,7 @@ export default function StudioPage() {
                   <div style={{ fontSize: 11.5, color: "oklch(0.78 0.10 158)", marginBottom: 6 }}>Monthly retainer</div>
                   <div
                     className="lg-display tnum"
-                    style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--money)" }}
+                    style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--money)" }}
                   >
                     $1k–$2k
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>/mo</span>
@@ -364,7 +615,7 @@ export default function StudioPage() {
               </div>
             </LgCard>
 
-            <LgCard padded={false}>
+            <LgCard padded={false} style={flatCard}>
               <div style={{ padding: 16 }}>
                 <div className="relative">
                   {!busy && (
@@ -446,79 +697,13 @@ export default function StudioPage() {
                 </div>
               </div>
             </LgCard>
-
-            {!isAudit && (running || done) && (
-              <LgCard padded={false}>
-                <div
-                  className="flex justify-between items-center"
-                  style={{
-                    padding: "14px 20px 10px",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
-                  <Eyebrow>Thinking</Eyebrow>
-                  {done && <LgBadge tone="success">complete</LgBadge>}
-                </div>
-                <div className="flex flex-col" style={{ padding: 16, gap: 10 }}>
-                  {THINKING_STEPS.map((s, i) => {
-                    const isDone = i < activeStep || done;
-                    const isActive = i === activeStep && !done;
-                    return (
-                      <div
-                        key={i}
-                        className="flex items-center"
-                        style={{
-                          gap: 10,
-                          opacity: i > activeStep && !done ? 0.4 : 1,
-                        }}
-                      >
-                        {isDone ? (
-                          <div
-                            className="grid place-items-center flex-none"
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 99,
-                              background: "var(--success)",
-                              color: "white",
-                            }}
-                          >
-                            <Check size={10} strokeWidth={3} />
-                          </div>
-                        ) : isActive ? (
-                          <Spinner small />
-                        ) : (
-                          <div
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 99,
-                              border: "1.5px solid var(--border-strong)",
-                              flex: "none",
-                            }}
-                          />
-                        )}
-                        <span
-                          style={{
-                            fontSize: 13,
-                            color: isActive ? "var(--text)" : "var(--text-muted)",
-                            fontWeight: isActive ? 600 : 500,
-                          }}
-                        >
-                          {s}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </LgCard>
-            )}
           </div>
 
           {/* RIGHT: output */}
           <LgCard
             padded={false}
             style={{
+              ...flatCard,
               minHeight: 640,
               display: "flex",
               flexDirection: "column",
@@ -606,24 +791,42 @@ export default function StudioPage() {
                   className="text-center"
                   style={{ padding: "64px 20px", color: "var(--text-muted)", fontSize: 14 }}
                 >
-                  Save a business first to use AI Studio.
+                  Save a business first to generate deliverables.
                 </div>
               )}
 
               {/* ── COLD AUDIT VIEW ── */}
               {selected && isAudit && coldRunning && (
-                <ColdGeneratingState business={selected} />
+                <ColdGeneratingState business={selected} progress={coldProgress} />
               )}
               {selected && isAudit && !coldRunning && !coldAudit && (
-                <ColdEmptyState business={selected} />
+                <ColdEmptyState
+                  business={selected}
+                  hasArchived={!!archivedAudit}
+                  onViewArchived={viewArchivedAudit}
+                />
               )}
               {selected && isAudit && !coldRunning && coldAudit && (
-                <ColdAuditView report={coldAudit} businessId={selected.id} />
+                <>
+                  <RegenBanner
+                    label={coldRestoredAt ? "Previous cold audit" : "Cold audit ready"}
+                    at={coldRestoredAt}
+                    onRegenerate={startCold}
+                    onClear={clearAudit}
+                    busy={coldRunning}
+                  />
+                  <ColdAuditView report={coldAudit} businessId={selected.id} />
+                </>
               )}
 
               {/* ── ASSET PACK VIEW ── */}
               {selected && !isAudit && !running && !done && !restoring && (
-                <EmptyState business={selected} />
+                <EmptyState
+                  business={selected}
+                  hasArchived={!!archivedPack}
+                  archivedAt={archivedAt}
+                  onViewArchived={viewArchivedPack}
+                />
               )}
               {selected && !isAudit && !running && !done && restoring && (
                 <div
@@ -633,74 +836,30 @@ export default function StudioPage() {
                   Checking for a saved deliverable…
                 </div>
               )}
-              {!isAudit && running && <GeneratingState business={selected} />}
+              {!isAudit && running && (
+                <GeneratingState business={selected} progress={genProgress} />
+              )}
               {!isAudit && done && pack && selected && (
                 <>
                   {restoredAt && !running && (
-                    <div
-                      style={{
-                        margin: "0 0 18px",
-                        padding: "10px 14px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 10,
-                        background: "rgba(255,255,255,0.02)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                        fontSize: 12.5,
-                        color: "var(--text-3)",
-                      }}
-                    >
-                      <span>
-                        Restored from your last session ·{" "}
-                        <span className="lg-mono tnum" style={{ color: "var(--text-2)" }}>
-                          {new Date(restoredAt).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </span>
-                      <div className="flex items-center" style={{ gap: 8 }}>
-                        <button
-                          onClick={start}
-                          disabled={running}
-                          style={{
-                            background: "transparent",
-                            border: "1px solid var(--line)",
-                            color: "var(--text-2)",
-                            padding: "5px 12px",
-                            borderRadius: 999,
-                            fontSize: 11.5,
-                            fontWeight: 600,
-                            cursor: running ? "default" : "pointer",
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          Regenerate
-                        </button>
-                        <button
-                          onClick={reset}
-                          style={{
-                            background: "transparent",
-                            border: "1px solid var(--line)",
-                            color: "var(--text-3)",
-                            padding: "5px 12px",
-                            borderRadius: 999,
-                            fontSize: 11.5,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
+                    <RegenBanner
+                      label="Previous generation"
+                      at={restoredAt}
+                      onRegenerate={start}
+                      onClear={reset}
+                      busy={running}
+                    />
                   )}
-                  <AssetPackView pack={pack} businessId={selected.id} onUpdate={setPack} />
+                  <AssetPackView
+                    pack={pack}
+                    businessId={selected.id}
+                    onUpdate={setPack}
+                    initialTab={
+                      deliverableParam && selected.id === businessId
+                        ? deliverableParam
+                        : undefined
+                    }
+                  />
                 </>
               )}
             </div>
@@ -764,7 +923,7 @@ function BusinessPicker({
         style={{
           padding: 12,
           background: "var(--surface)",
-          border: "1px solid var(--border-strong)",
+          border: "1px solid var(--line)",
           borderRadius: "var(--radius)",
           fontSize: 13,
           color: "var(--text-muted)",
@@ -784,7 +943,7 @@ function BusinessPicker({
           gap: 12,
           padding: 12,
           background: "var(--surface)",
-          border: "1px solid var(--border-strong)",
+          border: "1px solid var(--line)",
           borderRadius: "var(--radius)",
           cursor: disabled ? "not-allowed" : "pointer",
           fontFamily: "inherit",
@@ -836,7 +995,7 @@ function BusinessPicker({
             marginTop: 4,
             zIndex: 10,
             background: "var(--surface)",
-            border: "1px solid var(--border)",
+            border: "1px solid var(--line)",
             borderRadius: "var(--radius)",
             boxShadow: "var(--shadow-lg)",
             maxHeight: 280,
@@ -898,7 +1057,17 @@ function BusinessPicker({
   );
 }
 
-function EmptyState({ business }: { business: SavedBusiness }) {
+function EmptyState({
+  business,
+  hasArchived,
+  archivedAt,
+  onViewArchived,
+}: {
+  business: SavedBusiness;
+  hasArchived: boolean;
+  archivedAt: string | null;
+  onViewArchived: () => void;
+}) {
   return (
     <div className="text-center" style={{ padding: "64px 20px", color: "var(--text-muted)" }}>
       <div
@@ -926,26 +1095,230 @@ function EmptyState({ business }: { business: SavedBusiness }) {
         Ready to generate
       </h3>
       <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, lineHeight: 1.55 }}>
-        A complete growth asset pack for <strong style={{ color: "var(--text)" }}>{business.name}</strong> —
-        landing page copy, lead capture, a 7-day email sequence, SMS follow-ups, and booking page
-        positioning, written from their real website and Places data.
+        Four consulting-grade deliverables for <strong style={{ color: "var(--text)" }}>{business.name}</strong> —
+        a growth-leak intelligence report, acquisition infrastructure blueprint, conversion asset
+        pack, and 90-day execution roadmap, built from their real website and Places data.
       </p>
+      {hasArchived && (
+        <ArchiveLink
+          onClick={onViewArchived}
+          label="View previous generation"
+          at={archivedAt}
+        />
+      )}
     </div>
   );
 }
 
-function GeneratingState({ business }: { business: SavedBusiness | null }) {
+// Subtle, opt-in link to pull a previously-saved generation back into view.
+function ArchiveLink({
+  onClick,
+  label,
+  at,
+}: {
+  onClick: () => void;
+  label: string;
+  at?: string | null;
+}) {
   return (
-    <div className="text-center" style={{ padding: "72px 20px", color: "var(--text-muted)" }}>
-      <div className="mx-auto" style={{ width: 22, marginBottom: 20 }}>
-        <Spinner />
+    <button
+      onClick={onClick}
+      className="mx-auto flex items-center"
+      style={{
+        marginTop: 24,
+        gap: 7,
+        padding: "7px 14px",
+        background: "transparent",
+        border: "1px solid var(--line)",
+        borderRadius: 999,
+        color: "var(--text-2)",
+        fontSize: 12.5,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      <History size={13} strokeWidth={2} style={{ color: "var(--text-subtle)" }} />
+      {label}
+      {at && (
+        <span className="lg-mono tnum" style={{ color: "var(--text-subtle)", fontWeight: 500 }}>
+          ·{" "}
+          {new Date(at).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Inline banner shown above a restored/ready deliverable, with regenerate +
+// clear actions. Shared by the asset pack and the cold audit so both surfaces
+// expose the same regenerate affordance.
+function RegenBanner({
+  label,
+  at,
+  onRegenerate,
+  onClear,
+  busy,
+}: {
+  label: string;
+  at: string | null;
+  onRegenerate: () => void;
+  onClear: () => void;
+  busy: boolean;
+}) {
+  const pill = (tone: "regen" | "clear"): React.CSSProperties => ({
+    background: "transparent",
+    border: "1px solid var(--line)",
+    color: tone === "regen" ? "var(--text-2)" : "var(--text-3)",
+    padding: "5px 12px",
+    borderRadius: 999,
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: busy ? "default" : "pointer",
+    fontFamily: "inherit",
+  });
+  return (
+    <div
+      style={{
+        margin: "0 0 18px",
+        padding: "10px 14px",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.02)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        fontSize: 12.5,
+        color: "var(--text-3)",
+      }}
+    >
+      <span>
+        {label}
+        {at && (
+          <>
+            {" · "}
+            <span className="lg-mono tnum" style={{ color: "var(--text-2)" }}>
+              {new Date(at).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          </>
+        )}
+      </span>
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <button onClick={onRegenerate} disabled={busy} style={pill("regen")}>
+          Regenerate
+        </button>
+        <button onClick={onClear} style={pill("clear")}>
+          Clear
+        </button>
       </div>
-      <p style={{ fontSize: 14 }}>
-        Analyzing {business?.name ?? "the business"} and writing custom assets…
-      </p>
-      <p style={{ fontSize: 12.5, color: "var(--text-subtle)", marginTop: 6 }}>
-        This usually takes 15–40 seconds.
-      </p>
+    </div>
+  );
+}
+
+// Sleek progress bar with the percentage inside — shared by the asset pack
+// (real streamed progress) and the cold audit (simulated staged progress).
+function ProgressMeter({ progress }: { progress: GenProgress | null }) {
+  const completed = progress?.completed ?? 0;
+  const total = progress?.total ?? 10;
+  const pct = Math.max(2, Math.min(100, Math.round((completed / total) * 100)));
+  const label = progress?.label || "Working…";
+  return (
+    <>
+      <div
+        style={{
+          position: "relative",
+          height: 26,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid var(--line)",
+          overflow: "hidden",
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,0.3)",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: `${pct}%`,
+            borderRadius: 999,
+            background:
+              "linear-gradient(90deg, oklch(0.66 0.17 250), oklch(0.62 0.20 286))",
+            boxShadow: "0 0 16px oklch(0.64 0.18 266 / 0.55)",
+            transition: "width 0.45s cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
+        />
+        {/* moving sheen */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: `${pct}%`,
+            borderRadius: 999,
+            background:
+              "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+            backgroundSize: "200% 100%",
+            animation: "lg-shimmer-x 1.6s linear infinite",
+            transition: "width 0.45s cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
+        />
+        <div
+          className="absolute inset-0 flex items-center"
+          style={{ justifyContent: "flex-end", paddingRight: 12 }}
+        >
+          <span
+            className="lg-mono tnum"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: pct > 52 ? "white" : "var(--text)",
+              textShadow: pct > 52 ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {pct}%
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="flex items-center justify-between"
+        style={{ marginTop: 12, fontSize: 12.5 }}
+      >
+        <span style={{ color: "var(--text-2)" }}>{label}</span>
+        <span className="lg-mono tnum" style={{ color: "var(--text-subtle)" }}>
+          {Math.min(completed, total)}/{total}
+        </span>
+      </div>
+    </>
+  );
+}
+
+function GeneratingState({
+  business,
+  progress,
+}: {
+  business: SavedBusiness | null;
+  progress: GenProgress | null;
+}) {
+  return (
+    <div style={{ padding: "60px 24px", maxWidth: 560, margin: "0 auto" }}>
+      <div className="flex items-center" style={{ gap: 10, marginBottom: 14 }}>
+        <Spinner small />
+        <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 600 }}>
+          Building {business?.name ?? "the business"}&apos;s acquisition pack
+        </span>
+      </div>
+      <ProgressMeter progress={progress} />
     </div>
   );
 }
@@ -1006,7 +1379,15 @@ function ViewToggle({
   );
 }
 
-function ColdEmptyState({ business }: { business: SavedBusiness }) {
+function ColdEmptyState({
+  business,
+  hasArchived,
+  onViewArchived,
+}: {
+  business: SavedBusiness;
+  hasArchived: boolean;
+  onViewArchived: () => void;
+}) {
   return (
     <div className="text-center" style={{ padding: "64px 20px", color: "var(--text-muted)" }}>
       <div
@@ -1039,20 +1420,30 @@ function ColdEmptyState({ business }: { business: SavedBusiness }) {
         quietly costing them customers, grounded in their real site speed, screenshot, and reviews,
         with one soft, editable close. Send it before you pitch to earn the reply.
       </p>
+      {hasArchived && (
+        <ArchiveLink onClick={onViewArchived} label="View previous cold audit" />
+      )}
     </div>
   );
 }
 
-function ColdGeneratingState({ business }: { business: SavedBusiness | null }) {
+function ColdGeneratingState({
+  business,
+  progress,
+}: {
+  business: SavedBusiness | null;
+  progress: GenProgress | null;
+}) {
   return (
-    <div className="text-center" style={{ padding: "72px 20px", color: "var(--text-muted)" }}>
-      <div className="mx-auto" style={{ width: 22, marginBottom: 20 }}>
-        <Spinner />
+    <div style={{ padding: "60px 24px", maxWidth: 560, margin: "0 auto" }}>
+      <div className="flex items-center" style={{ gap: 10, marginBottom: 14 }}>
+        <Spinner small />
+        <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 600 }}>
+          Inspecting {business?.name ?? "the business"} for the sharpest findings
+        </span>
       </div>
-      <p style={{ fontSize: 14 }}>
-        Inspecting {business?.name ?? "the business"} for the sharpest, most specific findings…
-      </p>
-      <p style={{ fontSize: 12.5, color: "var(--text-subtle)", marginTop: 6 }}>
+      <ProgressMeter progress={progress} />
+      <p style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 12 }}>
         Measuring real site speed and reading their pages. This usually takes 15–40 seconds.
       </p>
     </div>

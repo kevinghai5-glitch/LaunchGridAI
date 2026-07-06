@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { saveBusinessSchema } from "@/lib/validations";
 import { checkPlanLimit } from "@/lib/limits";
+import { DELIVERABLE_STATUSES } from "@/lib/crm";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,24 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const favoritedOnly = url.searchParams.get("favorited") === "true";
+    // Studio asks for ?deliverable=true so its picker only lists leads in
+    // deliverable production (booked a Zoom or beyond) plus any lead with
+    // existing generated work — never raw cold prospects.
+    const deliverableOnly = url.searchParams.get("deliverable") === "true";
 
     const businesses = await prisma.business.findMany({
       where: {
         userId: session.user.id,
         ...(favoritedOnly ? { favorited: true } : {}),
+        ...(deliverableOnly
+          ? {
+              OR: [
+                { status: { in: DELIVERABLE_STATUSES } },
+                { generatedSystems: { some: { type: { in: ["ASSETS", "COLD_AUDIT"] } } } },
+                { proposals: { some: {} } },
+              ],
+            }
+          : {}),
       },
       orderBy: { createdAt: "desc" },
     });

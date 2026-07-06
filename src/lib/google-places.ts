@@ -85,21 +85,15 @@ async function resolvePhotoUrl(
   }
 }
 
-export async function searchBusinesses(
-  industry: string,
-  city: string,
-  maxResults = 60
+// Shared Text Search runner. Google Places Text Search returns up to 20 per page
+// and a maximum of 60 total across 3 pages (hard API cap). Walk the
+// nextPageToken chain until we hit the cap, the requested max, or run out of
+// pages, then hydrate each place (incl. a key-free photo URL).
+async function runTextSearch(
+  query: string,
+  apiKey: string,
+  maxResults: number
 ): Promise<PlaceResult[]> {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  if (!apiKey) {
-    throw new Error("GOOGLE_PLACES_API_KEY not configured");
-  }
-
-  const query = `${industry} in ${city}`;
-
-  // Google Places Text Search returns up to 20 per page and a maximum of 60
-  // total across 3 pages (hard API cap). Walk the nextPageToken chain until we
-  // hit the cap, the requested max, or run out of pages.
   const collected: PlacesApiPlace[] = [];
   let pageToken: string | undefined;
 
@@ -165,6 +159,34 @@ export async function searchBusinesses(
       };
     })
   );
+}
+
+export async function searchBusinesses(
+  industry: string,
+  city: string,
+  maxResults = 60
+): Promise<PlaceResult[]> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    throw new Error("GOOGLE_PLACES_API_KEY not configured");
+  }
+  return runTextSearch(`${industry} in ${city}`, apiKey, maxResults);
+}
+
+// Search for a specific business by name. City is optional but, when given,
+// disambiguates between locations/chains. Returns every matching place so the
+// operator can pick the exact one and generate an asset pack for it.
+export async function searchBusinessesByName(
+  name: string,
+  city?: string,
+  maxResults = 60
+): Promise<PlaceResult[]> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    throw new Error("GOOGLE_PLACES_API_KEY not configured");
+  }
+  const query = city && city.trim() ? `${name} ${city}` : name;
+  return runTextSearch(query, apiKey, maxResults);
 }
 
 // Fetch up to 5 of a place's most relevant Google reviews (text + rating).

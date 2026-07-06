@@ -1,48 +1,11 @@
-import { prisma } from "@/lib/prisma";
-
 export type LimitFeature = "businessSaves" | "generations" | "proposals";
 
+// This is a single-operator product with no tiers or billing — nothing is
+// metered. Every feature is unlimited for everyone. The signature is kept so
+// existing callers don't need to change.
 export async function checkPlanLimit(
-  userId: string,
-  feature: LimitFeature
+  _userId: string,
+  _feature: LimitFeature
 ): Promise<{ allowed: boolean; current: number; limit: number; plan: string }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { plan: true },
-  });
-
-  const plan = user?.plan ?? "free";
-
-  if (plan === "pro") {
-    return { allowed: true, current: 0, limit: Infinity, plan };
-  }
-
-  // Free plan limits
-  const limits: Record<LimitFeature, number> = {
-    businessSaves: 10,
-    generations: 5,
-    proposals: 3,
-  };
-
-  const limit = limits[feature];
-  let current = 0;
-
-  switch (feature) {
-    case "businessSaves":
-      current = await prisma.business.count({ where: { userId } });
-      break;
-    case "generations":
-      current = await prisma.generatedSystem.count({ where: { userId } });
-      break;
-    case "proposals":
-      current = await prisma.proposal.count({ where: { userId } });
-      break;
-  }
-
-  return {
-    allowed: current < limit,
-    current,
-    limit,
-    plan,
-  };
+  return { allowed: true, current: 0, limit: Infinity, plan: "unlimited" };
 }

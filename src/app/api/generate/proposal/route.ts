@@ -1,11 +1,19 @@
+// Builds a ready-to-edit conversion proposal for a business, grounded in its
+// stored audit (saved AssetPack leak analysis → ColdAudit findings). Deterministic
+// and conservative: it never invents proof or dollar figures — when no audit is on
+// file it returns clearly-labelled assumptions for the operator to confirm.
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { openai, DEFAULT_MODEL } from "@/lib/openai";
 import { generateProposalSchema } from "@/lib/validations";
+import { buildProposalDefaults } from "@/lib/proposal-defaults";
+import { runColdAuditPipeline } from "@/lib/cold-audit-pipeline";
+import type { AssetPack, ColdAuditReport } from "@/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,59 +31,54 @@ export async function POST(req: NextRequest) {
     const business = await prisma.business.findFirst({
       where: { id: parsed.data.businessId, userId: session.user.id },
     });
-
     if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
-    const { monthlyPrice, systemsIncluded } = parsed.data;
-    const systemsText = systemsIncluded.length > 0
-      ? `Systems included: ${systemsIncluded.join(", ")}`
-      : "General AI systems package";
+    // Pull the richest stored audit signal for this business.
+    const [packRow, auditRow] = await Promise.all([
+      prisma.generatedSystem.findFirst({
+        where: { businessId: business.id, userId: session.user.id, type: "ASSETS" },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      }),
+      prisma.generatedSystem.findFirst({
+        where: { businessId: business.id, userId: session.user.id, type: "COLD_AUDIT" },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      }),
+    ]);
 
-    const prompt = `You are a professional digital agency proposal writer.
+    const pack = (packRow?.content as unknown as AssetPack) ?? null;
+    const audit = (auditRow?.content as unknown as ColdAuditReport) ?? null;
 
-Client Business: "${business.name}"
-Industry: ${business.industry ?? "local business"}
-City: ${business.city ?? "local area"}
-Monthly Price: $${monthlyPrice}/month
-${systemsText}
+    let proposalData = buildProposalDefaults(business, { pack, audit });
 
-Write a compelling, professional proposal for this SPECIFIC business. Use their name throughout.
-
-Return ONLY valid JSON with this exact structure:
-{
-  "title": "Proposal title (e.g., 'AI-Powered Growth System for [Business Name]')",
-  "packageOverview": "2-3 sentence overview of what you're offering and why it matters for this specific business",
-  "deliverables": [
-    "Specific deliverable 1",
-    "Specific deliverable 2",
-    "Specific deliverable 3",
-    "Specific deliverable 4",
-    "Specific deliverable 5"
-  ],
-  "monthlyPrice": ${monthlyPrice},
-  "benefits": [
-    "Benefit 1 with specific outcome",
-    "Benefit 2",
-    "Benefit 3",
-    "Benefit 4"
-  ],
-  "nextSteps": "Clear next steps for the business owner to move forward (2-3 sentences)",
-  "emailMessage": "A professional, friendly email message to send with this proposal (3-4 sentences, personalized to the business)"
-}`;
-
-    const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    });
-
-    const content = response.choices[0].message.content;
-    if (!content) throw new Error("No content from AI");
-
-    const proposalData = JSON.parse(content);
+    // If the stored audit data couldn't dollarize the leak (no audit on file, or
+    // an older/weak pack with no per-leak figures), run a fresh grounded
+    // cold-audit on the fly so the proposal shows real diagnosed numbers instead
+    // of conservative placeholders. Persist it so it's reusable next time, and
+    // rebuild from the fresh audit alone so its figures take precedence. If the
+    // pipeline fails (missing keys, nothing to read), keep the placeholders.
+    if (!proposalData.roi.recovered && business.website) {
+      try {
+        const fresh = await runColdAuditPipeline(business);
+        const rebuilt = buildProposalDefaults(business, { audit: fresh });
+        if (rebuilt.roi.recovered) {
+          await prisma.generatedSystem.create({
+            data: {
+              businessId: business.id,
+              userId: session.user.id,
+              type: "COLD_AUDIT",
+              content: fresh as unknown as object,
+            },
+          });
+          proposalData = rebuilt;
+        }
+      } catch (auditError) {
+        console.error("Inline cold-audit for proposal failed:", auditError);
+      }
+    }
 
     return NextResponse.json({ proposalData });
   } catch (error) {

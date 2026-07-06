@@ -1,0 +1,914 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  Phone,
+  Star,
+  Gauge,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  PhoneCall,
+  X,
+  SkipForward,
+} from "lucide-react";
+import { TopBar } from "@/components/dashboard/TopBar";
+import { DateNav, isSameDay, startOfDay } from "@/components/dashboard/DateNav";
+import {
+  QUICK_DISPOSITIONS,
+  SECONDARY_DISPOSITIONS,
+  STATUS_META,
+  QUEUE_LIMIT,
+  type Disposition,
+  type LeadStatus,
+  type Urgency,
+} from "@/lib/call-queue";
+
+// Row shape returned by GET /api/call-queue (dates are ISO strings).
+interface QueueLead {
+  id: string;
+  name: string;
+  phone: string | null;
+  website: string | null;
+  city: string | null;
+  industry: string | null;
+  status: string;
+  nextAction: string | null;
+  nextActionAt: string | null;
+  followUpUntil: string | null;
+  attemptCount: number;
+  urgency: Urgency;
+  enrichment: {
+    rating: number | null;
+    reviewCount: number | null;
+    mapsUrl: string | null;
+    painPoint: string | null;
+    outreachAngle: string | null;
+    topLeak: string | null;
+    headlineCost: string | null;
+    mobileScore: number | null;
+  };
+  lastCall: { id: string; disposition: string; note: string | null; calledAt: string } | null;
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+const NEEDS_TIME = new Set<Disposition>(
+  QUICK_DISPOSITIONS.filter((d) => d.needsTime).map((d) => d.id)
+);
+
+function urgencyColor(u: Urgency): string {
+  switch (u) {
+    case "overdue":
+      return "var(--danger, #f87171)";
+    case "due":
+      return "oklch(0.82 0.14 85)";
+    case "booked":
+      return "var(--money)";
+    case "dead":
+      return "var(--text-4)";
+    default:
+      return "var(--line-strong)";
+  }
+}
+
+function relativeDue(iso: string | null): string {
+  if (!iso) return "";
+  const due = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 86_400_000;
+  const dueDay = new Date(due);
+  dueDay.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((dueDay.getTime() - startOfToday.getTime()) / dayMs);
+  const time = due.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (diffDays < 0) return `${Math.abs(diffDays)}d overdue`;
+  if (diffDays === 0) return `Today ${time}`;
+  if (diffDays === 1) return `Tomorrow ${time}`;
+  return due.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ` ${time}`;
+}
+
+function toneColor(tone: string): { fg: string; bg: string } {
+  switch (tone) {
+    case "success":
+      return { fg: "var(--money)", bg: "rgba(74,222,128,0.10)" };
+    case "accent":
+      return { fg: "var(--accent)", bg: "var(--accent-soft)" };
+    case "danger":
+      return { fg: "var(--danger, #f87171)", bg: "rgba(248,113,113,0.10)" };
+    case "muted":
+      return { fg: "var(--text-4)", bg: "rgba(255,255,255,0.04)" };
+    default:
+      return { fg: "var(--text-3)", bg: "rgba(255,255,255,0.05)" };
+  }
+}
+
+// ── page ────────────────────────────────────────────────────────────────────
+
+// Format a Date as YYYY-MM-DD in local time (for the ?date= API param).
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export default function CallQueuePage() {
+  const [leads, setLeads] = useState<QueueLead[]>([]);
+  const [calledToday, setCalledToday] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [note, setNote] = useState("");
+  const [armed, setArmed] = useState<Disposition | null>(null);
+  const [callbackTime, setCallbackTime] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  // The selected day's relation to today decides the slice + interactivity.
+  const today = new Date();
+  const isToday = isSameDay(selectedDate, today);
+  const isPast = startOfDay(selectedDate).getTime() < startOfDay(today).getTime();
+  const view: "today" | "upcoming" | "past" = isToday ? "today" : isPast ? "past" : "upcoming";
+
+  const dateKey = ymd(selectedDate);
+
+  // Fetch the selected day's slice. Returns a cancel flag so the mount effect can
+  // ignore stale responses; also callable on demand (e.g. after an undo) to resync.
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/call-queue?date=${dateKey}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed (${res.status})`);
+        const data = (await res.json()) as { leads: QueueLead[]; calledToday?: number };
+        setLeads(data.leads ?? []);
+        setCalledToday(data.calledToday ?? 0);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [dateKey]
+  );
+
+  useEffect(() => {
+    setActiveIndex(0);
+    load();
+  }, [load]);
+
+  const activeLead = leads[activeIndex] ?? null;
+
+  // Reset the per-lead input state and focus the note whenever the active lead
+  // changes. In history view, prefill the note with the logged call's note so it
+  // can be edited rather than retyped.
+  useEffect(() => {
+    setNote(isPast && activeLead?.lastCall?.note ? activeLead.lastCall.note : "");
+    setArmed(null);
+    setCallbackTime("");
+    setExpanded(false);
+    noteRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLead?.id]);
+
+  // Undo a logged call: deletes the last CallLog server-side (reverts status +
+  // attemptCount + the "called today" count) and resyncs. Wired to the Undo toast.
+  const undo = useCallback(
+    async (businessId: string) => {
+      try {
+        const res = await fetch("/api/call-queue", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessId }),
+        });
+        if (!res.ok) {
+          toast.error("Couldn't undo");
+          return;
+        }
+        toast.success("Call reverted");
+        await load({ silent: true });
+      } catch {
+        toast.error("Couldn't undo");
+      }
+    },
+    [load]
+  );
+
+  const submit = useCallback(
+    async (d: Disposition, time?: string) => {
+      if (!activeLead || submitting) return;
+      setSubmitting(true);
+      const targetId = activeLead.id;
+      try {
+        const res = await fetch("/api/call-queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            businessId: targetId,
+            disposition: d,
+            note: note.trim() || undefined,
+            callbackTime: time || undefined,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Failed to log call");
+          return;
+        }
+        // Dispositioned leads leave today's queue → remove and auto-advance.
+        setLeads((prev) => prev.filter((l) => l.id !== targetId));
+        setActiveIndex((i) => (i >= leads.length - 1 ? Math.max(0, leads.length - 2) : i));
+        toast.success(`Logged: ${d.replace(/_/g, " ").toLowerCase()}`, {
+          action: { label: "Undo", onClick: () => undo(targetId) },
+        });
+      } catch {
+        toast.error("Failed to log call");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [activeLead, submitting, note, leads.length, undo]
+  );
+
+  // History view: re-pick a disposition to CHANGE the logged call in place (edits
+  // the CallLog row, re-advances the lead) — the spreadsheet-style "redo".
+  const editDisposition = useCallback(
+    async (logId: string, d: Disposition) => {
+      if (submitting) return;
+      setSubmitting(true);
+      try {
+        const res = await fetch("/api/call-queue", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "editLog",
+            logId,
+            disposition: d,
+            note: note.trim() || undefined,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Failed to update");
+          return;
+        }
+        toast.success(`Updated: ${d.replace(/_/g, " ").toLowerCase()}`);
+        await load({ silent: true });
+      } catch {
+        toast.error("Failed to update");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [submitting, note, load]
+  );
+
+  // Remove a company from the call queue WITHOUT destroying it. Reverts the lead
+  // to a prospect (SUGGESTED) and keeps its call history — so it disappears from
+  // the queue but still shows in your Saved list / CRM and can be re-added later.
+  // Non-destructive, so no scary confirm.
+  const removeLead = useCallback(
+    async (id: string) => {
+      const before = leads;
+      const idx = leads.findIndex((l) => l.id === id);
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+      setActiveIndex((i) => (idx <= i && i > 0 ? i - 1 : i));
+      try {
+        const res = await fetch("/api/call-queue", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessId: id, action: "remove" }),
+        });
+        if (!res.ok) {
+          setLeads(before);
+          toast.error("Failed to remove");
+          return;
+        }
+        toast.success("Removed from queue — still saved");
+      } catch {
+        setLeads(before);
+        toast.error("Failed to remove");
+      }
+    },
+    [leads]
+  );
+
+  // Skip a lead WITHOUT logging a call — defers it to tomorrow. Optimistically
+  // removes it and auto-advances, mirroring the disposition flow.
+  const skip = useCallback(
+    async (id: string) => {
+      if (submitting) return;
+      const before = leads;
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+      setActiveIndex((i) => (i >= leads.length - 1 ? Math.max(0, leads.length - 2) : i));
+      try {
+        const res = await fetch("/api/call-queue", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessId: id, action: "skip" }),
+        });
+        if (!res.ok) {
+          setLeads(before);
+          toast.error("Failed to skip");
+          return;
+        }
+        toast.success("Skipped to tomorrow");
+      } catch {
+        setLeads(before);
+        toast.error("Failed to skip");
+      }
+    },
+    [leads, submitting]
+  );
+
+  // Fire a quick disposition. In history view, re-picking edits the existing call
+  // in place (no time picker). Otherwise: time-based ones arm the picker, the rest
+  // log immediately.
+  const fire = useCallback(
+    (d: Disposition) => {
+      if (isPast && activeLead?.lastCall) {
+        editDisposition(activeLead.lastCall.id, d);
+        return;
+      }
+      if (NEEDS_TIME.has(d)) {
+        setArmed(d);
+        return;
+      }
+      submit(d);
+    },
+    [submit, editDisposition, isPast, activeLead]
+  );
+
+  const confirmArmed = useCallback(() => {
+    if (!armed) return;
+    if (NEEDS_TIME.has(armed) && !callbackTime) {
+      toast.error("Pick a time first");
+      return;
+    }
+    submit(armed, callbackTime || undefined);
+  }, [armed, callbackTime, submit]);
+
+  // Global keyboard: digits 1–6 disposition when not typing in the note; the note's
+  // own handler covers the empty-note fast path + Cmd/Ctrl+Enter.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!activeLead || submitting) return;
+      const target = e.target as HTMLElement | null;
+      const inNote = target === noteRef.current;
+      const inField =
+        target?.tagName === "INPUT" ||
+        (target?.tagName === "TEXTAREA" && !inNote);
+      if (inField) return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (armed) confirmArmed();
+        return;
+      }
+      // "s" skips the active lead to tomorrow (today's list only), when not mid-note.
+      if ((e.key === "s" || e.key === "S") && isToday && !(inNote && note.length > 0)) {
+        e.preventDefault();
+        skip(activeLead.id);
+        return;
+      }
+      const hit = QUICK_DISPOSITIONS.find((q) => q.key === e.key);
+      if (hit) {
+        // In the note, only intercept a digit when the note is empty.
+        if (inNote && note.length > 0) return;
+        e.preventDefault();
+        fire(hit.id);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [activeLead, submitting, note, armed, fire, confirmArmed, skip, isToday]);
+
+  const dueCount = useMemo(
+    () => leads.filter((l) => l.urgency === "overdue" || l.urgency === "due").length,
+    [leads]
+  );
+
+  return (
+    <>
+      <TopBar title="Call Queue" subtitle="Who to call right now" />
+      <div style={{ width: "100%", padding: "40px 56px 80px", maxWidth: 1080, margin: "0 auto" }}>
+        {/* header */}
+        <div className="rise" style={{ marginBottom: 18 }}>
+          <h1
+            className="lg-display"
+            style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.032em", color: "var(--text)" }}
+          >
+            {view === "today" ? "Today's call list" : view === "upcoming" ? "Scheduled ahead" : "Call history"}
+          </h1>
+          <p style={{ marginTop: 6, fontSize: 13.5, color: "var(--text-3)" }}>
+            {loading
+              ? "Loading…"
+              : view === "today"
+                ? `${leads.length} lead${leads.length === 1 ? "" : "s"} queued · ${dueCount} due now`
+                : view === "upcoming"
+                  ? `${leads.length} follow-up${leads.length === 1 ? "" : "s"} scheduled`
+                  : `${leads.length} recently called`}
+          </p>
+        </div>
+
+        {/* date navigator + today's burn-down ring */}
+        <div
+          className="flex flex-wrap items-center"
+          style={{ gap: 14, marginBottom: 18, justifyContent: "space-between" }}
+        >
+          <DateNav date={selectedDate} onChange={setSelectedDate} />
+          {isToday && <ProgressRing done={calledToday} total={QUEUE_LIMIT} />}
+        </div>
+
+        {/* legend */}
+        {!loading && leads.length > 0 && (
+          <div
+            className="flex flex-wrap items-center"
+            style={{ gap: 14, marginBottom: 16, fontSize: 11.5, color: "var(--text-subtle)" }}
+          >
+            <Legend color={urgencyColor("overdue")} label="Overdue" />
+            <Legend color={urgencyColor("due")} label="Due now" />
+            <Legend color={urgencyColor("booked")} label="Booked" />
+            <Legend color={urgencyColor("queued")} label="Queued" />
+            <span style={{ marginLeft: "auto" }}>
+              {isPast ? (
+                <>
+                  Press <Kbd>1</Kbd>–<Kbd>6</Kbd> to change a logged call
+                </>
+              ) : (
+                <>
+                  Press <Kbd>1</Kbd>–<Kbd>6</Kbd> to log · <Kbd>s</Kbd> to skip · <Kbd>⌘↵</Kbd> to confirm
+                </>
+              )}
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <div className="panel p-5 text-sm" style={{ color: "var(--danger, #f87171)" }}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && leads.length === 0 && (
+          <div
+            className="panel"
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              border: "1px solid var(--line)",
+              borderRadius: "var(--radius-lg)",
+            }}
+          >
+            <PhoneCall
+              size={26}
+              strokeWidth={1.6}
+              style={{ color: "var(--text-4)", margin: "0 auto 12px" }}
+            />
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+              {view === "today" ? "Queue clear" : view === "upcoming" ? "Nothing scheduled" : "No calls yet"}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "var(--text-3)" }}>
+              {view === "today"
+                ? "Nothing due right now. Save more businesses or check back when follow-ups resurface."
+                : view === "upcoming"
+                  ? "No future callbacks or Zooms booked. Schedule one from today's list."
+                  : "Logged calls will appear here as you work the queue."}
+            </div>
+          </div>
+        )}
+
+        {/* rows */}
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          {leads.map((lead, i) => {
+            const active = i === activeIndex;
+            const dead = lead.urgency === "dead";
+            const border = urgencyColor(lead.urgency);
+            const status = STATUS_META[lead.status as LeadStatus];
+            const st = status ? toneColor(status.tone) : toneColor("neutral");
+            return (
+              <div
+                key={lead.id}
+                onClick={() => !active && setActiveIndex(i)}
+                style={{
+                  borderRadius: "var(--radius)",
+                  border: `1px solid ${active ? "var(--line-strong)" : "var(--line)"}`,
+                  borderLeft: `3px solid ${border}`,
+                  background: active ? "var(--surface-2, rgba(255,255,255,0.03))" : "var(--surface)",
+                  padding: active ? "14px 16px" : "11px 16px",
+                  cursor: active ? "default" : "pointer",
+                  boxShadow: active ? "var(--shadow-sm)" : "none",
+                  transition: "background var(--t), border-color var(--t)",
+                }}
+              >
+                {/* one-line summary */}
+                <div className="flex items-center" style={{ gap: 12 }}>
+                  <span
+                    className="lg-mono tnum"
+                    style={{ fontSize: 11, color: "var(--text-4)", width: 18, flex: "none" }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: dead ? "var(--text-4)" : "var(--text)",
+                        textDecoration: dead ? "line-through" : "none",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {lead.name}
+                    </div>
+                    <div
+                      className="flex items-center"
+                      style={{ gap: 10, marginTop: 2, fontSize: 11.5, color: "var(--text-3)" }}
+                    >
+                      {lead.phone && (
+                        <span className="flex items-center" style={{ gap: 4 }}>
+                          <Phone size={11} strokeWidth={1.9} /> {lead.phone}
+                        </span>
+                      )}
+                      {lead.city && <span>{lead.city}</span>}
+                      {lead.enrichment.rating != null && (
+                        <span className="flex items-center" style={{ gap: 3 }}>
+                          <Star size={11} strokeWidth={1.9} style={{ color: "oklch(0.82 0.14 85)" }} />
+                          {lead.enrichment.rating}
+                          {lead.enrichment.reviewCount != null && (
+                            <span style={{ color: "var(--text-4)" }}> ({lead.enrichment.reviewCount})</span>
+                          )}
+                        </span>
+                      )}
+                      {lead.enrichment.mobileScore != null && (
+                        <span className="flex items-center" style={{ gap: 3 }}>
+                          <Gauge size={11} strokeWidth={1.9} /> {lead.enrichment.mobileScore}
+                        </span>
+                      )}
+                      {lead.attemptCount > 0 && (
+                        <span style={{ color: "var(--text-4)" }}>
+                          {lead.attemptCount} attempt{lead.attemptCount === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* status + due */}
+                  <div className="flex items-center" style={{ gap: 10, flex: "none" }}>
+                    {lead.nextActionAt && (
+                      <span
+                        className="lg-mono"
+                        style={{
+                          fontSize: 11,
+                          color: lead.urgency === "overdue" ? border : "var(--text-3)",
+                        }}
+                      >
+                        {relativeDue(lead.nextActionAt)}
+                      </span>
+                    )}
+                    {status && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: 999,
+                          color: st.fg,
+                          background: st.bg,
+                        }}
+                      >
+                        {status.label}
+                      </span>
+                    )}
+                    {active && isToday && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          skip(lead.id);
+                        }}
+                        aria-label="Skip to tomorrow"
+                        title="Skip to tomorrow (s)"
+                        className="grid place-items-center"
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 6,
+                          background: "transparent",
+                          border: "1px solid var(--line)",
+                          color: "var(--text-4)",
+                          cursor: "pointer",
+                          flex: "none",
+                        }}
+                      >
+                        <SkipForward size={13} strokeWidth={1.7} />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeLead(lead.id);
+                      }}
+                      aria-label="Remove from queue"
+                      title="Remove from queue (stays saved)"
+                      className="grid place-items-center"
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
+                        background: "transparent",
+                        border: "1px solid var(--line)",
+                        color: "var(--text-4)",
+                        cursor: "pointer",
+                        flex: "none",
+                      }}
+                    >
+                      <X size={13} strokeWidth={1.7} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* active controls */}
+                {active && (
+                  <div style={{ marginTop: 12 }}>
+                    {/* talking-point peek */}
+                    {(lead.enrichment.topLeak ||
+                      lead.enrichment.painPoint ||
+                      lead.enrichment.headlineCost) && (
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid var(--line)",
+                        }}
+                      >
+                        <button
+                          onClick={() => setExpanded((v) => !v)}
+                          className="flex items-center w-full text-left"
+                          style={{
+                            gap: 6,
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "var(--text-2)",
+                            fontFamily: "inherit",
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          <AlertTriangle size={12} strokeWidth={2} style={{ color: "oklch(0.82 0.14 85)" }} />
+                          <span style={{ flex: 1 }}>
+                            {lead.enrichment.topLeak || lead.enrichment.painPoint || "Talking points"}
+                            {lead.enrichment.headlineCost && (
+                              <span style={{ color: "var(--money)", marginLeft: 8 }}>
+                                {lead.enrichment.headlineCost}
+                              </span>
+                            )}
+                          </span>
+                          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        {expanded && (
+                          <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)", lineHeight: 1.55 }}>
+                            {lead.enrichment.painPoint && <p>{lead.enrichment.painPoint}</p>}
+                            {lead.enrichment.outreachAngle && (
+                              <p style={{ marginTop: 6 }}>
+                                <span style={{ color: "var(--text-4)" }}>Angle: </span>
+                                {lead.enrichment.outreachAngle}
+                              </p>
+                            )}
+                            {lead.lastCall && (
+                              <p style={{ marginTop: 6 }}>
+                                <span style={{ color: "var(--text-4)" }}>Last call: </span>
+                                {lead.lastCall.disposition.replace(/_/g, " ").toLowerCase()}
+                                {lead.lastCall.note ? ` — ${lead.lastCall.note}` : ""}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* note */}
+                    <textarea
+                      ref={noteRef}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          if (armed) confirmArmed();
+                        }
+                      }}
+                      placeholder="[objection] | [detail] | [commitment]  ·  press 1–6, or type then ⌘↵"
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        resize: "none",
+                        borderRadius: 8,
+                        border: "1px solid var(--line-strong)",
+                        background: "var(--bg-deep, #0b0d12)",
+                        color: "var(--text)",
+                        fontFamily: "inherit",
+                        fontSize: 13,
+                        padding: "9px 11px",
+                        outline: "none",
+                      }}
+                    />
+
+                    {/* disposition buttons */}
+                    <div className="flex flex-wrap items-center" style={{ gap: 7, marginTop: 10 }}>
+                      {QUICK_DISPOSITIONS.map((q) => {
+                        const isCurrent =
+                          isPast && activeLead?.lastCall?.disposition === q.id;
+                        const isArmed = armed === q.id || isCurrent;
+                        return (
+                          <button
+                            key={q.id}
+                            onClick={() => fire(q.id)}
+                            disabled={submitting}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              borderRadius: 8,
+                              padding: "7px 11px",
+                              fontSize: 12.5,
+                              fontWeight: 600,
+                              fontFamily: "inherit",
+                              cursor: submitting ? "default" : "pointer",
+                              color: isArmed ? "var(--accent)" : "var(--text-2)",
+                              background: isArmed ? "var(--accent-soft)" : "rgba(255,255,255,0.04)",
+                              border: `1px solid ${isArmed ? "oklch(0.55 0.18 248 / 0.4)" : "var(--line-strong)"}`,
+                              opacity: submitting ? 0.6 : 1,
+                            }}
+                          >
+                            <span
+                              className="lg-mono"
+                              style={{
+                                fontSize: 10,
+                                padding: "1px 4px",
+                                borderRadius: 4,
+                                background: "rgba(255,255,255,0.07)",
+                                color: "var(--text-4)",
+                              }}
+                            >
+                              {q.key}
+                            </span>
+                            {q.label}
+                          </button>
+                        );
+                      })}
+                      {/* secondary dispositions */}
+                      {SECONDARY_DISPOSITIONS.map((q) => (
+                        <button
+                          key={q.id}
+                          onClick={() => fire(q.id)}
+                          disabled={submitting}
+                          style={{
+                            borderRadius: 8,
+                            padding: "7px 11px",
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            fontFamily: "inherit",
+                            cursor: submitting ? "default" : "pointer",
+                            color: "var(--text-3)",
+                            background: "transparent",
+                            border: "1px solid var(--line)",
+                            opacity: submitting ? 0.6 : 1,
+                          }}
+                        >
+                          {q.label}
+                        </button>
+                      ))}
+                      {submitting && (
+                        <Loader2 size={15} className="animate-spin" style={{ color: "var(--text-3)" }} />
+                      )}
+                    </div>
+
+                    {/* time picker for armed time-based dispositions */}
+                    {armed && NEEDS_TIME.has(armed) && (
+                      <div
+                        className="flex items-center"
+                        style={{ gap: 8, marginTop: 10 }}
+                      >
+                        <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                          {armed === "BOOKED" ? "Zoom time" : "Call back at"}
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={callbackTime}
+                          onChange={(e) => setCallbackTime(e.target.value)}
+                          style={{
+                            borderRadius: 7,
+                            border: "1px solid var(--line-strong)",
+                            background: "var(--bg-deep, #0b0d12)",
+                            color: "var(--text)",
+                            fontFamily: "inherit",
+                            fontSize: 12.5,
+                            padding: "6px 9px",
+                            outline: "none",
+                          }}
+                        />
+                        <button
+                          onClick={confirmArmed}
+                          disabled={submitting || !callbackTime}
+                          style={{
+                            borderRadius: 7,
+                            padding: "7px 13px",
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            fontFamily: "inherit",
+                            cursor: !callbackTime || submitting ? "default" : "pointer",
+                            color: "var(--accent)",
+                            background: "var(--accent-soft)",
+                            border: "1px solid oklch(0.55 0.18 248 / 0.4)",
+                            opacity: !callbackTime || submitting ? 0.6 : 1,
+                          }}
+                        >
+                          Confirm
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Compact burn-down ring: how many of today's batch have been called.
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  const pct = total > 0 ? Math.min(1, done / total) : 0;
+  const size = 30;
+  const stroke = 3;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const complete = done >= total && total > 0;
+  return (
+    <div className="flex items-center" style={{ gap: 9 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-strong)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={complete ? "var(--money)" : "var(--accent)"}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct)}
+          style={{ transition: "stroke-dashoffset var(--t)" }}
+        />
+      </svg>
+      <div style={{ lineHeight: 1.2 }}>
+        <div className="lg-mono tnum" style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+          {done} / {total}
+        </div>
+        <div style={{ fontSize: 10.5, color: "var(--text-4)" }}>called today</div>
+      </div>
+    </div>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center" style={{ gap: 5 }}>
+      <span style={{ width: 9, height: 9, borderRadius: 2, background: color }} />
+      {label}
+    </span>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="lg-mono"
+      style={{
+        fontSize: 10.5,
+        padding: "1px 5px",
+        borderRadius: 4,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid var(--line)",
+        color: "var(--text-3)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}

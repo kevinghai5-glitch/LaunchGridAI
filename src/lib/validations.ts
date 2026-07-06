@@ -13,10 +13,40 @@ export const loginSchema = z.object({
 });
 
 // Business
-export const businessSearchSchema = z.object({
-  industry: z.string().min(2, "Industry must be at least 2 characters"),
-  city: z.string().min(2, "City must be at least 2 characters"),
-});
+// Two search modes: by industry+city (discovery) or by a specific business name.
+export const businessSearchSchema = z
+  .object({
+    mode: z.enum(["industry", "name"]).default("industry"),
+    industry: z.string().optional(),
+    city: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.mode === "name") {
+      if (!data.name || data.name.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Business name must be at least 2 characters",
+          path: ["name"],
+        });
+      }
+    } else {
+      if (!data.industry || data.industry.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Industry must be at least 2 characters",
+          path: ["industry"],
+        });
+      }
+      if (!data.city || data.city.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "City must be at least 2 characters",
+          path: ["city"],
+        });
+      }
+    }
+  });
 
 export const saveBusinessSchema = z.object({
   googlePlaceId: z.string().optional(),
@@ -36,11 +66,46 @@ export const saveBusinessSchema = z.object({
   photoUrl: z.string().optional(),
 });
 
+// Lead lifecycle statuses (mirror LeadStatus in src/lib/call-queue.ts). Kept as a
+// literal enum here to avoid importing runtime code into the validation layer.
+const LEAD_STATUSES = [
+  "SUGGESTED",
+  "DECLINED",
+  "QUEUED",
+  "CALLED",
+  "NO_ANSWER",
+  "CALLBACK",
+  "BOOKED_ZOOM",
+  "ZOOM_NO_SHOW",
+  "ZOOM_OPEN",
+  "WAITING",
+  "PROPOSAL",
+  "WON",
+  "CLOSED",
+  "DEAD",
+] as const;
+
 export const updateBusinessSchema = z.object({
   favorited: z.boolean().optional(),
   painPoint: z.string().optional(),
   outreachAngle: z.string().optional(),
   suggestedOffer: z.string().optional(),
+  // CRM record edits — manual status moves on the board + freeform notes.
+  status: z.enum(LEAD_STATUSES).optional(),
+  // Inline-editable scheduling: CRM "next action" cell + calendar drag-to-reschedule.
+  nextAction: z.string().nullable().optional(),
+  nextActionAt: z.coerce.date().nullable().optional(),
+  notes: z.string().optional(),
+  // Deliverable numbers — manually entered; blank/null → BENCHMARK mode.
+  // Nullable so the operator can clear a field back to benchmark math.
+  avgClientValueCad: z.coerce.number().int().positive().nullable().optional(),
+  monthlyLeadVolume: z.coerce.number().int().positive().nullable().optional(),
+  monthlyAdSpendCad: z.coerce.number().int().nonnegative().nullable().optional(),
+});
+
+// Zoom outcome — recorded at the end of the "On the Zoom" runner.
+export const zoomOutcomeSchema = z.object({
+  outcome: z.enum(["CLOSED", "OPEN", "NO_SHOW", "LOST"]),
 });
 
 // Generate
@@ -65,25 +130,71 @@ export const generateColdAuditSchema = z.object({
 
 export const generateProposalSchema = z.object({
   businessId: z.string().cuid(),
-  monthlyPrice: z.number().int().positive(),
-  systemsIncluded: z.array(z.string()),
 });
 
 export const generateSuggestionsSchema = z.object({
   businessId: z.string().cuid(),
 });
 
-// Proposal
+// Proposal — ONE bespoke, two-part conversion engagement.
+const proposalLeakSchema = z.object({
+  title: z.string(),
+  monthlyCost: z.string(),
+  detail: z.string(),
+});
+
+const proposalComponentSchema = z.object({
+  name: z.string(),
+  addresses: z.string(),
+  detail: z.string(),
+  isRetainer: z.boolean(),
+});
+
+const proposalProblemSchema = z.object({
+  summary: z.string(),
+  basis: z.string(),
+  leaks: z.array(proposalLeakSchema),
+});
+
+const proposalRoiSchema = z.object({
+  summary: z.string(),
+  recovered: z.string(),
+  points: z.array(z.string()),
+});
+
+const proposalScopeSchema = z.object({
+  included: z.array(z.string()),
+  excluded: z.array(z.string()),
+});
+
+const proposalPhaseSchema = z.object({
+  label: z.string(),
+  detail: z.string(),
+});
+
+const proposalProofSchema = z.object({
+  note: z.string(),
+  testimonials: z.array(z.object({ quote: z.string(), attribution: z.string() })),
+});
+
+const proposalFaqSchema = z.object({ q: z.string(), a: z.string() });
+
 export const createProposalSchema = z.object({
   businessId: z.string().cuid(),
   title: z.string().min(1, "Title is required"),
-  packageOverview: z.string().min(1, "Package overview is required"),
-  deliverables: z.array(z.string()),
+  agencyName: z.string().optional(),
+  packageOverview: z.string().min(1, "Overview is required"),
+  setupFee: z.number().int().positive(),
   monthlyPrice: z.number().int().positive(),
-  benefits: z.array(z.string()),
+  deliverables: z.array(proposalComponentSchema),
+  problem: proposalProblemSchema,
+  roi: proposalRoiSchema,
+  scope: proposalScopeSchema,
+  timeline: z.array(proposalPhaseSchema),
+  proof: proposalProofSchema,
+  faq: z.array(proposalFaqSchema),
   nextSteps: z.string().optional(),
   emailMessage: z.string().optional(),
-  systemsIncluded: z.array(z.string()).default([]),
 });
 
 export const updateProposalSchema = createProposalSchema.partial();

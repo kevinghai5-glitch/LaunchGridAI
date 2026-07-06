@@ -124,7 +124,7 @@ export default async function ProposalsPage() {
         <div className="rise" style={{ marginBottom: 32 }}>
           <h1
             className="lg-display"
-            style={{ margin: 0, fontSize: 32, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--text)" }}
+            style={{ margin: 0, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--text)" }}
           >
             Proposals
           </h1>
@@ -262,7 +262,7 @@ function ProposalRow({
       <div className="grid items-stretch" style={{ gridTemplateColumns: "160px 1fr auto" }}>
         {/* thumbnail */}
         <Link
-          href={`/proposals/${id}`}
+          href={`/proposals/new?id=${id}`}
           style={{
             position: "relative",
             overflow: "hidden",
@@ -305,7 +305,7 @@ function ProposalRow({
 
         {/* body */}
         <Link
-          href={`/proposals/${id}`}
+          href={`/proposals/new?id=${id}`}
           style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0, textDecoration: "none", color: "inherit" }}
         >
           <div className="flex items-center" style={{ gap: 8, flexWrap: "wrap" }}>

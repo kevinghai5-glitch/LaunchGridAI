@@ -73,7 +73,7 @@ export default function DealsPage() {
         <div className="rise" style={{ marginBottom: 32 }}>
           <h1
             className="lg-display"
-            style={{ margin: 0, fontSize: 32, fontWeight: 500, letterSpacing: "-0.025em", color: "var(--text)" }}
+            style={{ margin: 0, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--text)" }}
           >
             Pipeline
           </h1>

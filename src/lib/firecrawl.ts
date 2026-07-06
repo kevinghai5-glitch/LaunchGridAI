@@ -36,6 +36,10 @@ export interface FirecrawlPage {
   url: string;
   markdown: string;
   html: string;
+  /** Full post-JS-rendered DOM incl. script/iframe tags. Cleaned `html` strips
+   *  these, hiding GTM-injected widgets (chat/booking) — signal detection must
+   *  fingerprint over rawHtml, not html. */
+  rawHtml: string;
   title: string;
   description: string;
   links: string[];
@@ -68,7 +72,7 @@ async function scrapeOne(url: string): Promise<FirecrawlPage | null> {
       },
       body: JSON.stringify({
         url,
-        formats: ["markdown", "html", "links"],
+        formats: ["markdown", "html", "rawHtml", "links"],
         onlyMainContent: false,
         waitFor: 1500,
         timeout: 20000,
@@ -82,6 +86,7 @@ async function scrapeOne(url: string): Promise<FirecrawlPage | null> {
       data?: {
         markdown?: string;
         html?: string;
+        rawHtml?: string;
         links?: string[];
         metadata?: { title?: string; description?: string; sourceURL?: string };
       };
@@ -90,12 +95,14 @@ async function scrapeOne(url: string): Promise<FirecrawlPage | null> {
 
     const md = data.data.markdown ?? "";
     const html = data.data.html ?? "";
+    const rawHtml = data.data.rawHtml ?? "";
     if (!md && !html) return null;
 
     return {
       url: data.data.metadata?.sourceURL ?? url,
       markdown: md,
       html,
+      rawHtml,
       title: data.data.metadata?.title ?? "",
       description: data.data.metadata?.description ?? "",
       links: Array.isArray(data.data.links) ? data.data.links : [],

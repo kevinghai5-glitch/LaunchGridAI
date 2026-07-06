@@ -152,7 +152,7 @@ export default async function DashboardPage() {
     });
   }
   for (const g of recentGenerations) {
-    const label = g.type === "ASSETS" ? "Growth Asset Pack" : g.type === "LEAD" ? "Lead system" : "Content system";
+    const label = g.type === "ASSETS" ? "Growth Infrastructure Pack" : g.type === "LEAD" ? "Lead system" : "Content system";
     events.push({
       kind: "generated",
       tone: "accent",
@@ -227,7 +227,7 @@ export default async function DashboardPage() {
   // ---- Real recent generations list ----
   const wonBizIds = new Set(allDeals.filter((d) => d.stage === "WON").map((d) => d.businessId));
   const generations = recentGenerations.slice(0, 4).map((g) => {
-    const label = g.type === "ASSETS" ? "Growth Asset Pack" : g.type === "LEAD" ? "Lead system" : "Content system";
+    const label = g.type === "ASSETS" ? "Growth Infrastructure Pack" : g.type === "LEAD" ? "Lead system" : "Content system";
     return {
       title: label,
       sub: g.business?.name ?? "—",

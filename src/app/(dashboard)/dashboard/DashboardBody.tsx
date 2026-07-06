@@ -97,9 +97,9 @@ export function DashboardBody({
           style={{
             margin: 0,
             fontSize: 38,
-            fontWeight: 500,
-            letterSpacing: "-0.025em",
-            lineHeight: 1.15,
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
+            lineHeight: 1.12,
             maxWidth: 640,
             color: "var(--text)",
           }}
@@ -372,10 +372,10 @@ function MetricCard({
       <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>{label}</div>
       <div
         className="lg-display tnum"
-        style={{ fontSize: 44, fontWeight: 500, letterSpacing: "-0.035em", lineHeight: 1, color: "var(--text)" }}
+        style={{ fontSize: 44, fontWeight: 680, letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text)" }}
       >
         {value}
-        <span style={{ fontSize: 16, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>{unit}</span>
+        <span style={{ fontSize: 16, color: "var(--text-3)", fontWeight: 500, marginLeft: 4 }}>{unit}</span>
       </div>
       <div className="flex items-end justify-between" style={{ gap: 12 }}>
         <div>

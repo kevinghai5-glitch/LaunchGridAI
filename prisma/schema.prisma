@@ -32,6 +32,7 @@ model User {
   generatedSystems  GeneratedSystem[]
   proposals         Proposal[]
   deals             Deal[]
+  callLogs          CallLog[]
 }
 
 model Account {
@@ -95,18 +96,50 @@ model Business {
   suggestedOffer String?
   createdAt     DateTime @default(now())
 
+  // --- Daily Call Queue (call-tracking) ---
+  status        String    @default("QUEUED") // see LeadStatus in src/lib/call-queue.ts
+  nextAction    String?                       // e.g. "Send audit", "Call back"
+  nextActionAt  DateTime?                     // when the next action is due
+  followUpUntil DateTime?                     // WAITING resurface date (hide until then)
+  attemptCount  Int       @default(0)
+  closedReason  String?                       // see ClosedReason; set on CLOSED/DEAD
+
+  // --- CRM / daily-prospecting ---
+  source         String    @default("MANUAL") // "MANUAL" (hand-saved) | "DAILY" (auto-sourced)
+  notes          String?                       // freeform CRM notes on the contact record
+  lastActivityAt DateTime?                     // last touch (call/status change) — powers "rotting" view
+  declinedAt     DateTime?                     // when declined from a daily batch (resurface after a window)
+
+  // --- Deliverable numbers (manually entered; power REAL-mode math in D1–D4) ---
+  // All optional: blank → deliverables render in BENCHMARK mode (industry math),
+  // provided → REAL mode ("based on the numbers you provided").
+  avgClientValueCad Int?                        // average value of one closed customer, CAD
+  monthlyLeadVolume Int?                        // inbound inquiries per month
+  monthlyAdSpendCad Int?                        // monthly ad spend, CAD
+
+  // --- PageSpeed snapshot (Part H3) ---
+  // Measured once per business, then reused verbatim across every artifact (cold
+  // audit + all deliverables) so PSI numbers never diverge between runs.
+  psiSnapshot   Json?                           // serialized PsiBundle
+  psiSnapshotAt DateTime?                        // when the snapshot was taken (TTL refresh)
+
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedSystems GeneratedSystem[]
   proposals        Proposal[]
   deals            Deal[]
+  callLogs         CallLog[]
 }
 
 model GeneratedSystem {
   id         String   @id @default(cuid())
   businessId String
   userId     String
-  type       String   // 'LEAD' | 'CONTENT' | 'ASSETS'
+  type       String   // 'LEAD' | 'CONTENT' | 'ASSETS' | 'COLD_AUDIT'
   content    Json
+  // Public share id — used to host a cold-audit teaser at /a/[publicId] so the
+  // pre-zoom GHL email can link the audit. Present on every row; only COLD_AUDIT
+  // rows have a public page.
+  publicId   String   @unique @default(cuid())
   createdAt  DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -118,12 +151,23 @@ model Proposal {
   userId           String
   businessId       String
   title            String
+  agencyName       String?
   packageOverview  String
-  deliverables     Json
-  monthlyPrice     Int
-  benefits         Json
+  // Two-part bespoke investment: one-time done-for-you setup + monthly retainer.
+  setupFee         Int      @default(6500)
+  monthlyPrice     Int      @default(700)
+  // Structured conversion-proposal sections (see ProposalContent in types).
+  deliverables     Json     // ProposalComponent[] — what we deploy, tied to leaks
+  problem          Json?    // ProposalProblem — diagnosed leaks + dollar cost
+  roi              Json?    // ProposalRoi
+  scope            Json?    // ProposalScope (included / excluded)
+  timeline         Json?    // ProposalPhase[]
+  proof            Json?    // ProposalProof (testimonials placeholder)
+  faq              Json?    // ProposalFaq[]
   nextSteps        String?
   emailMessage     String?
+  // Legacy column retained for back-compat with older rows.
+  benefits         Json     @default("[]")
   publicId         String   @unique @default(cuid())
   status           String   @default("DRAFT") // 'DRAFT' | 'SENT' | 'VIEWED' | 'ACCEPTED' | 'REJECTED'
   systemsIncluded  Json     @default("[]")
@@ -149,4 +193,22 @@ model Deal {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   proposal Proposal? @relation(fields: [proposalId], references: [id])
+}
+
+// Append-only log of every call attempt against a lead (Business). One row per
+// attempt; never updated. Powers attemptCount + the "last outcome" peek.
+model CallLog {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String
+  disposition String   // see Disposition in src/lib/call-queue.ts
+  note        String?  // convention: "[objection] | [detail] | [commitment]"
+  durationSec Int?
+  calledAt    DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([userId])
 }

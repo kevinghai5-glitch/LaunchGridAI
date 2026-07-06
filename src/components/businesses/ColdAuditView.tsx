@@ -10,12 +10,18 @@ import {
   Pencil,
   MessageSquare,
 } from "lucide-react";
-import { renderColdAuditHtml } from "@/lib/exporters/cold-audit-html";
+import {
+  renderColdAuditHtml,
+  enforceColdAuditLaws,
+} from "@/lib/exporters/cold-audit-html";
 import type { ColdAuditReport } from "@/types";
 
 // Plain-text version of the audit — what you'd paste into an email or DM when
-// sending the cold open. Mirrors the HTML deliverable's content order.
-function toPlainText(r: ColdAuditReport): string {
+// sending the cold open. Mirrors the HTML deliverable's content order. Runs the
+// same law enforcement as the HTML render so the copied text can never ship a
+// forbidden CTA (Law 10) either.
+function toPlainText(report: ColdAuditReport): string {
+  const r = enforceColdAuditLaws(report);
   const lines: string[] = [];
   lines.push(r.headline);
   lines.push("");
@@ -23,7 +29,15 @@ function toPlainText(r: ColdAuditReport): string {
     lines.push(r.intro);
     lines.push("");
   }
-  lines.push("What I noticed:");
+  if (r.headlineCost) {
+    lines.push(r.headlineCost);
+    const leakCount = (r.findings ?? []).length;
+    if (leakCount > 1) {
+      lines.push(`(Just one of ${leakCount} leaks below — the most expensive of them.)`);
+    }
+    lines.push("");
+  }
+  lines.push("What's leaking right now:");
   lines.push("");
   (r.findings ?? []).forEach((f, i) => {
     lines.push(`${i + 1}. ${f.title}`);
@@ -31,6 +45,12 @@ function toPlainText(r: ColdAuditReport): string {
     lines.push(`What it's costing you: ${f.whyItCosts}`);
     lines.push("");
   });
+  const questions = (r.deeperLeakQuestions ?? []).filter(Boolean);
+  if (questions.length) {
+    lines.push("And the leaks I can't see from out here:");
+    questions.forEach((q) => lines.push(`- ${q}`));
+    lines.push("");
+  }
   if (r.closingCta?.message) {
     lines.push(r.closingCta.message);
   }
@@ -258,7 +278,7 @@ export function ColdAuditView({
             height: "72vh",
             minHeight: 560,
             border: "none",
-            background: "#f4f5f8",
+            background: "#FBFAF7",
           }}
         />
       </div>

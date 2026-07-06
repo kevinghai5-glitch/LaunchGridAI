@@ -16,7 +16,7 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [wonDeals, pipelineDeals, opportunityCount, pipelineCount, proposalCount] =
+  const [wonDeals, pipelineDeals, pipelineCount, proposalCount, opportunityCount] =
     await Promise.all([
       prisma.deal.findMany({
         where: { userId: session.user.id, stage: "WON" },
@@ -29,12 +29,16 @@ export default async function DashboardLayout({
         },
         select: { monthlyValue: true },
       }),
-      prisma.business.count({ where: { userId: session.user.id } }),
       prisma.deal.count({
         where: { userId: session.user.id, stage: { notIn: ["WON", "LOST"] } },
       }),
       prisma.proposal.count({
         where: { userId: session.user.id, status: { notIn: ["ACCEPTED", "REJECTED"] } },
+      }),
+      // Un-triaged generated batch — the SUGGESTED prospects awaiting approve/decline.
+      // Clearing Opportunities hard-deletes these raw suggestions, so this drops to 0.
+      prisma.business.count({
+        where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY" },
       }),
     ]);
   const totalMRR = wonDeals.reduce((s, d) => s + d.monthlyValue, 0);

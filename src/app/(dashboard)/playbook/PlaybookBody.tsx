@@ -16,10 +16,7 @@ import {
   Check,
   ArrowRight,
   Clock,
-  Zap,
   FileText,
-  Mail,
-  Phone,
   Calendar,
   TrendingUp,
   Quote,
@@ -42,7 +39,7 @@ type SectionId =
 
 const SECTIONS: { id: SectionId; label: string; icon: LucideIcon; blurb: string }[] = [
   { id: "overview", label: "The Offer", icon: Package, blurb: "What you sell, in one frame" },
-  { id: "deliverables", label: "The 5 Deliverables", icon: Layers, blurb: "Each asset & how to sell it" },
+  { id: "deliverables", label: "The 4 Deliverables", icon: Layers, blurb: "Each asset & how to sell it" },
   { id: "economics", label: "Pricing & ROI", icon: DollarSign, blurb: "What to charge + the math" },
   { id: "process", label: "Sales Process", icon: Route, blurb: "Outreach → Zoom → close" },
   { id: "scripts", label: "Scripts & Talk Tracks", icon: MessageSquare, blurb: "Copy-paste outreach & pitch" },
@@ -66,9 +63,9 @@ export function PlaybookBody() {
           style={{
             margin: "16px 0 0",
             fontSize: 34,
-            fontWeight: 500,
-            letterSpacing: "-0.028em",
-            lineHeight: 1.15,
+            fontWeight: 700,
+            letterSpacing: "-0.032em",
+            lineHeight: 1.12,
             maxWidth: 720,
             color: "var(--text)",
           }}
@@ -186,7 +183,7 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
       </div>
       <h2
         className="lg-display"
-        style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.022em", color: "var(--text)" }}
+        style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.025em", color: "var(--text)" }}
       >
         {title}
       </h2>
@@ -290,7 +287,7 @@ function Overview({ onJump }: { onJump: (s: SectionId) => void }) {
       />
 
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-        <StatTile value="5" label="Done-for-you assets" sub="Audit, lead capture, email, SMS, booking" />
+        <StatTile value="4" label="Done-for-you deliverables" sub="Diagnosis, blueprint, asset pack, rollout" />
         <StatTile value="$6.5k" label="Setup fee" sub="One-time build" accent="var(--text)" />
         <StatTile value="$1–2k" label="Monthly retainer" sub="Run + optimize" accent="var(--money)" />
       </div>
@@ -374,7 +371,7 @@ function StatTile({
     <Surface padded={0} style={{ padding: "20px 22px" }}>
       <div
         className="lg-display tnum"
-        style={{ fontSize: 30, fontWeight: 500, letterSpacing: "-0.03em", color: accent, lineHeight: 1 }}
+        style={{ fontSize: 30, fontWeight: 680, letterSpacing: "-0.03em", color: accent, lineHeight: 1 }}
       >
         {value}
       </div>
@@ -399,52 +396,42 @@ const DELIVERABLES: {
   {
     n: 1,
     icon: FileText,
-    file: "landing-page-growth-audit.html",
-    title: "Landing Page Growth Audit",
-    what: "A forensic teardown of their site and funnel — real PageSpeed scores, above-the-fold screenshots, prioritized revenue leaks, competitor positioning, and a completely rewritten high-converting landing page.",
-    solves: "Their site looks fine to them but quietly leaks leads: slow load, weak hero, no clear next step, missing trust signals.",
-    outcome: "A page engineered to convert the traffic they already get into booked calls — usually the single biggest lever on revenue.",
-    sell: "I pulled your real load times and put your homepage next to your top competitor. Here's exactly where you're losing customers — and the rewritten page that fixes it.",
+    file: "01-growth-leak-intelligence-report.html",
+    title: "Growth Leak Intelligence Report",
+    what: "The diagnosis: a 7-axis conversion scorecard, dollar-quantified revenue leaks ranked by impact, a landing-page teardown with real PageSpeed scores and above-the-fold screenshots vs. local competitors — all reconciled to a single recoverable-revenue total.",
+    solves: "Their site 'looks fine,' but paid leads quietly die between landing, follow-up, and booking — and they have no idea where the money is leaking or how much.",
+    outcome: "A clear, dollar-ranked map of exactly where revenue is escaping and which leak to fix first — the case that makes the whole engagement obvious.",
+    sell: "I pulled your real load times, put your homepage next to your top competitor, and put a dollar figure on each leak. Here's exactly where you're losing customers — and what it's worth to fix.",
   },
   {
     n: 2,
-    icon: Zap,
-    file: "lead-qualification-system.pdf",
-    title: "Lead Qualification System",
-    what: "A 7-question intake form with a built-in lead-scoring rubric and routing logic that sorts hot, warm, and cold leads automatically.",
-    solves: "They burn hours on tire-kickers while real buyers go cold — there's no system to triage who's actually ready.",
-    outcome: "Their team only spends time on leads ready to buy, and no high-intent lead slips through the cracks.",
-    sell: "Instead of every form hitting your inbox the same way, this scores each lead the second it lands — so you call the $5k job back in 5 minutes, not 5 hours.",
+    icon: Route,
+    file: "02-client-acquisition-infrastructure-blueprint.html",
+    title: "Client Acquisition Infrastructure Blueprint",
+    what: "The architecture we build: a 6-stage conversion path — Capture, Qualify, Speed-to-Lead, Nurture, Book, No-Show Recovery — plus a CRM-agnostic pipeline and lead tiers, with LeadGate qualifying every lead continuously.",
+    solves: "Leads land in an inbox with no system — no scoring, no instant response, no nurture, no recovery. The $5k job and the tire-kicker get treated exactly the same.",
+    outcome: "One connected system that catches, scores, and follows up on every lead automatically, so high-intent buyers get an instant response and nothing slips through.",
+    sell: "Right now every lead hits your inbox the same way and you call back when you can. This is the system that scores each one the second it lands and gets the big job an instant response — not a next-day callback.",
   },
   {
     n: 3,
-    icon: Mail,
-    file: "email-nurture-system.docx",
-    title: "Email Nurture System",
-    what: "A 7-email plug-and-play sequence with A/B-tested subject lines, preview text, and CTAs — written in their voice for their market.",
-    solves: "Leads who aren't ready to buy today get forgotten. No follow-up means no staying top-of-mind.",
-    outcome: "Cold and warm leads get nurtured automatically until they book, recovering revenue that would otherwise evaporate.",
-    sell: "Most of your leads aren't ready to buy the day they find you. This 7-email sequence keeps you in front of them so when they ARE ready, they call you — not the competitor.",
+    icon: Layers,
+    file: "03-conversion-asset-pack.html",
+    title: "Conversion Asset Pack",
+    what: "Every customer-facing asset that runs the system — the rewritten high-converting landing page, the email nurture sequence, the SMS follow-up sequence, booking and reminder flows, and a post-job review request — written in their voice for their market.",
+    solves: "Even with a system in place, the words have to convert. Generic copy and missing follow-up messaging let interested leads go cold before they ever book.",
+    outcome: "Done-for-you copy and messaging engineered to move people from interested to booked — the actual words that run on the infrastructure.",
+    sell: "These are the exact words that do the work — the rewritten page, the emails, the texts — written for your market so an interested lead actually turns into a booking instead of drifting off.",
   },
   {
     n: 4,
-    icon: Phone,
-    file: "sms-follow-up-system.txt",
-    title: "SMS Follow-Up System",
-    what: "A 6-message text sequence with precise timing, the psychology behind each message, and a reply-handling strategy.",
-    solves: "Email gets ignored; texts get read in minutes. Most local businesses never text their leads at all.",
-    outcome: "Far faster response and re-engagement on the highest-open-rate channel there is — done right and compliant.",
-    sell: "Texts get a 98% open rate. This is the exact 6-message sequence that gets a no-show to rebook or a quiet lead to reply — without sounding like spam.",
-  },
-  {
-    n: 5,
     icon: Calendar,
-    file: "booking-appointment-system.html",
-    title: "Booking & Appointment System",
-    what: "A conversion-optimized booking page plus the full confirmation, reminder, and no-show recovery email + SMS flows.",
-    solves: "They lose booked revenue to no-shows and scheduling friction, with no system to recover it.",
-    outcome: "More booked appointments actually show up — and the ones that don't get pulled back automatically.",
-    sell: "Getting the booking is half the battle. This handles confirmations, reminders, and no-show recovery so the calendar you fill actually turns into revenue.",
+    file: "04-implementation-optimization-timeline.html",
+    title: "Implementation & Optimization Timeline",
+    what: "The execution plan: a one-time Setup phase scoped to this report's leaks and sequenced by dollar impact, a Stabilize phase, then the ongoing optimization retainer cadence — all done-for-you.",
+    solves: "A diagnosis and assets are worthless if nothing gets deployed. Owners have no time to implement and no plan for what happens after launch.",
+    outcome: "A sequenced rollout where we deploy everything in priority order, then keep improving it month over month — the work that justifies the retainer.",
+    sell: "You don't lift a finger. Here's the exact order we deploy everything — biggest revenue leak first — then how we keep testing and tightening it every month so it compounds.",
   },
 ];
 
@@ -452,9 +439,9 @@ function Deliverables() {
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
       <SectionHead
-        eyebrow="The 5 Deliverables"
+        eyebrow="The 4 Deliverables"
         title="Know every asset cold — and the line that sells it"
-        sub="Each file in the pack solves one expensive, specific problem. Lead with the problem, show the asset, then frame the outcome. Use the 'Say this' line verbatim on calls."
+        sub="Each deliverable in the pack solves one expensive, specific problem. Lead with the problem, show the asset, then frame the outcome. Use the 'Say this' line verbatim on calls."
       />
       {DELIVERABLES.map((d) => {
         const Icon = d.icon;
@@ -562,8 +549,8 @@ function Economics() {
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <Block title="Setup fee — $6,500 one-time" accent="var(--text)">
           <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
-            This is the <strong style={{ color: "var(--text)" }}>build of the infrastructure</strong> — five
-            assets engineered from their real data. Frame it as an asset they own, not a fee.
+            This is the <strong style={{ color: "var(--text)" }}>build of the infrastructure</strong> — four
+            deliverables engineered from their real data. Frame it as an asset they own, not a fee.
           </p>
           <div className="flex flex-col" style={{ gap: 9 }}>
             <Point>Bill 50% upfront, 50% on delivery to de-risk it for both sides.</Point>
@@ -586,7 +573,7 @@ function Economics() {
         <div className="flex items-end" style={{ gap: 8, flexWrap: "wrap" }}>
           <span
             className="lg-display tnum"
-            style={{ fontSize: 38, fontWeight: 500, letterSpacing: "-0.03em", color: "var(--money)", lineHeight: 1 }}
+            style={{ fontSize: 38, fontWeight: 680, letterSpacing: "-0.035em", color: "var(--money)", lineHeight: 1 }}
           >
             $18,500&nbsp;–&nbsp;$30,500
           </span>

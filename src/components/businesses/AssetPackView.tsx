@@ -3,39 +3,47 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  Layout,
-  Target,
-  Mail,
-  MessageSquare,
-  CalendarCheck,
+  Activity,
+  Network,
+  FileText,
+  CalendarRange,
   Download,
   RefreshCw,
   Loader2,
   ExternalLink,
 } from "lucide-react";
-import { renderFileHtml } from "@/lib/exporters/html";
-import type { AssetPack, AssetSection } from "@/types";
+import { DELIVERABLES, renderDeliverableHtml } from "@/lib/exporters/deliverables";
+import type { AssetPack, DeliverableId } from "@/types";
 
-const TABS: { id: AssetSection; label: string; icon: typeof Layout; file: string }[] = [
-  { id: "file1", label: "Growth Audit", icon: Layout, file: "landing-page-growth-audit.html" },
-  { id: "file2", label: "Lead Qualification", icon: Target, file: "lead-qualification-system.pdf" },
-  { id: "file3", label: "Email Nurture", icon: Mail, file: "email-nurture-system.docx" },
-  { id: "file4", label: "SMS Follow-Up", icon: MessageSquare, file: "sms-follow-up-system.txt" },
-  { id: "file5", label: "Booking System", icon: CalendarCheck, file: "booking-appointment-system.html" },
-];
+const TAB_ICONS: Record<DeliverableId, typeof Activity> = {
+  d1: Activity,
+  d2: Network,
+  d3: FileText,
+  d4: CalendarRange,
+};
+
+const TABS = DELIVERABLES.map((d) => ({
+  id: d.id,
+  label: d.title,
+  subtitle: d.subtitle,
+  file: d.filename,
+  icon: TAB_ICONS[d.id],
+}));
 
 export function AssetPackView({
   pack: initialPack,
   businessId,
   onUpdate,
+  initialTab = "d1",
 }: {
   pack: AssetPack;
   businessId: string;
   onUpdate?: (pack: AssetPack) => void;
+  initialTab?: DeliverableId;
 }) {
   const [pack, setPack] = useState<AssetPack>(initialPack);
-  const [tab, setTab] = useState<AssetSection>("file1");
-  const [regenerating, setRegenerating] = useState<AssetSection | null>(null);
+  const [tab, setTab] = useState<DeliverableId>(initialTab);
+  const [regenerating, setRegenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   // Older packs (pre-upgrade) won't have meta/file1. Render an empty doc in
@@ -44,7 +52,7 @@ export function AssetPackView({
 
   // The actual client-facing deliverable, rendered exactly as exported.
   const docHtml = useMemo(
-    () => (usable ? renderFileHtml(pack, tab) : ""),
+    () => (usable ? renderDeliverableHtml(pack, tab) : ""),
     [pack, tab, usable]
   );
 
@@ -57,14 +65,14 @@ export function AssetPackView({
     );
   }
 
-  const regenerate = async (section: AssetSection) => {
+  const regenerate = async () => {
     if (regenerating) return;
-    setRegenerating(section);
+    setRegenerating(true);
     try {
       const res = await fetch("/api/generate/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId, section }),
+        body: JSON.stringify({ businessId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -73,11 +81,11 @@ export function AssetPackView({
       }
       setPack(data.assetPack);
       onUpdate?.(data.assetPack);
-      toast.success("Section regenerated");
+      toast.success("Deliverables regenerated");
     } catch {
       toast.error("Failed to regenerate");
     } finally {
-      setRegenerating(null);
+      setRegenerating(false);
     }
   };
 
@@ -95,7 +103,7 @@ export function AssetPackView({
       const res = await fetch("/api/export/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId }),
+        body: JSON.stringify({ businessId, assetPack: pack }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -107,12 +115,12 @@ export function AssetPackView({
       const a = document.createElement("a");
       a.href = url;
       const cd = res.headers.get("Content-Disposition") ?? "";
-      a.download = /filename="(.+?)"/.exec(cd)?.[1] ?? "acquisition-pack.zip";
+      a.download = /filename="(.+?)"/.exec(cd)?.[1] ?? "growth-infrastructure.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success("Exported 5 deliverables");
+      toast.success("Exported 4 deliverables");
     } catch {
       toast.error("Export failed");
     } finally {
@@ -184,15 +192,15 @@ export function AssetPackView({
         </button>
       </div>
 
-      {/* Live preview note + per-section regenerate */}
+      {/* Live preview note + full-pack regenerate */}
       <div className="flex items-center justify-between gap-2 mb-3">
         <span style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
           Live preview of the deliverable your client receives ·{" "}
-          <span style={{ color: "var(--text-3)" }}>{activeTab.file}</span>
+          <span style={{ color: "var(--text-3)" }}>{activeTab.subtitle}</span>
         </span>
         <button
-          onClick={() => regenerate(tab)}
-          disabled={!!regenerating}
+          onClick={regenerate}
+          disabled={regenerating}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -207,12 +215,12 @@ export function AssetPackView({
             opacity: regenerating ? 0.6 : 1,
           }}
         >
-          {regenerating === tab ? (
+          {regenerating ? (
             <Loader2 size={13} className="animate-spin" />
           ) : (
             <RefreshCw size={13} strokeWidth={2} />
           )}
-          Regenerate this section
+          Regenerate pack
         </button>
       </div>
 
@@ -287,7 +295,7 @@ export function AssetPackView({
             height: "72vh",
             minHeight: 560,
             border: "none",
-            background: "#f4f5f8",
+            background: "#07090d",
           }}
         />
       </div>

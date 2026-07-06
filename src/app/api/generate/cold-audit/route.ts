@@ -4,16 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateColdAuditSchema } from "@/lib/validations";
 import { checkPlanLimit } from "@/lib/limits";
-import { fetchWebsitePage } from "@/lib/website-analyzer";
-import { fetchPlaceReviews, findCompetitors } from "@/lib/google-places";
-import { buildAuditIntelligence } from "@/lib/audit-intelligence";
-import { firecrawlSite } from "@/lib/firecrawl";
-import { buildBusinessFacts } from "@/lib/business-facts";
-import { runPageSpeed } from "@/lib/pagespeed";
-import { runDataForSeo } from "@/lib/dataforseo";
-import { buildScreenshotBundle } from "@/lib/screenshotone";
-import { generateColdAudit } from "@/lib/cold-audit";
-import type { GenerationContext } from "@/lib/asset-generation";
+import { runColdAuditPipeline } from "@/lib/cold-audit-pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -53,80 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
-    // Same enrichment as the full pack — the audit lives or dies on real signals.
-    const [page, reviews, competitors, scrape, psi, dfs] = await Promise.all([
-      fetchWebsitePage(business.website),
-      fetchPlaceReviews(business.googlePlaceId),
-      findCompetitors(
-        business.industry ?? business.category,
-        business.city,
-        business.googlePlaceId
-      ),
-      firecrawlSite(business.website),
-      runPageSpeed(business.website),
-      runDataForSeo(business.name, business.address),
-    ]);
-
-    const verifiedFacts = buildBusinessFacts({
-      scrape,
-      fallbackText: page.text,
-      places: {
-        name: business.name,
-        phone: business.phone,
-        address: business.address,
-        website: business.website,
-      },
-    });
-
-    const screenshots = buildScreenshotBundle({
-      target: { url: business.website, label: `${business.name} (Target)` },
-      competitors: competitors.map((c) => ({
-        url: c.website ?? null,
-        label: `Competitor: ${c.name}`,
-      })),
-    });
-
-    const websiteTextForPrompt =
-      scrape.used && scrape.homepage
-        ? [scrape.homepage.markdown, ...scrape.subpages.map((s) => s.markdown)]
-            .filter(Boolean)
-            .join("\n\n---\n\n")
-            .slice(0, 18000)
-        : page.text;
-
-    const websiteHtmlForSignals =
-      scrape.used && scrape.homepage
-        ? scrape.homepage.html || page.html
-        : page.html;
-
-    const intel = buildAuditIntelligence({
-      websiteHtml: websiteHtmlForSignals,
-      hasWebsiteUrl: Boolean(business.website),
-      reviews,
-      competitors,
-      self: { rating: business.rating, reviewCount: business.reviewCount },
-      verifiedFacts,
-      performance: psi,
-      dataForSeo: dfs,
-      screenshots,
-    });
-
-    const ctx: GenerationContext = {
-      business: {
-        name: business.name,
-        industry: business.industry,
-        category: business.category,
-        city: business.city,
-        rating: business.rating,
-        reviewCount: business.reviewCount,
-        website: business.website,
-        description: business.description,
-      },
-      intel,
-      websiteText: websiteTextForPrompt,
-    };
-
-    const report = await generateColdAudit(ctx);
+    const report = await runColdAuditPipeline(business);
 
     const system = await prisma.generatedSystem.create({
       data: {

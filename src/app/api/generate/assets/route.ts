@@ -9,15 +9,23 @@ import { fetchPlaceReviews, findCompetitors } from "@/lib/google-places";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
 import { firecrawlSite } from "@/lib/firecrawl";
 import { buildBusinessFacts } from "@/lib/business-facts";
-import { runPageSpeed } from "@/lib/pagespeed";
+import { resolvePsiSnapshot } from "@/lib/psi-snapshot";
 import { runDataForSeo } from "@/lib/dataforseo";
 import { buildScreenshotBundle } from "@/lib/screenshotone";
 import {
   generateAssetPack,
   generateOneSection,
   buildMeta,
+  ASSET_PACK_PARTS,
   type GenerationContext,
+  type LeakContext,
 } from "@/lib/asset-generation";
+import { detectLeaks } from "@/lib/leak-detection";
+import {
+  buildLeakInputs,
+  leakInputsToPromptBlock,
+  allowedNumbersFor,
+} from "@/lib/leak-narrative";
 import type { AssetPack } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +80,7 @@ export async function POST(req: NextRequest) {
         business.googlePlaceId
       ),
       firecrawlSite(business.website),
-      runPageSpeed(business.website),
+      resolvePsiSnapshot(business),
       runDataForSeo(business.name, business.address),
     ]);
 
@@ -104,8 +112,14 @@ export async function POST(req: NextRequest) {
           .slice(0, 18000)
       : page.text;
 
+    // Signal detection runs over the FULL post-JS DOM (rawHtml) across every
+    // scraped page — GTM-injected chat/booking widgets and forms behind a click
+    // only surface in rawHtml, and only on the subpage that hosts them.
     const websiteHtmlForSignals = scrape.used && scrape.homepage
-      ? scrape.homepage.html || page.html
+      ? [scrape.homepage, ...scrape.subpages]
+          .map((p) => p.rawHtml || p.html)
+          .filter(Boolean)
+          .join("\n\n") || page.html
       : page.html;
 
     const intel = buildAuditIntelligence({
@@ -120,6 +134,55 @@ export async function POST(req: NextRequest) {
       screenshots,
     });
 
+    // ── Governance: run the closed leak taxonomy over the real research so every
+    // deliverable is grounded ONLY in leaks that actually fired, graded
+    // deterministically, with a bounded allowed-number set (Phases 1–5).
+    // Deliverable numbers (manually entered on the Business record) drive REAL-mode
+    // math in D1–D4. Blank → intake stays undefined → the deliverables render in
+    // BENCHMARK mode. We map the operator's inquiry count onto both lead- and
+    // call-volume slots (inbound inquiries stand in for the call-volume the
+    // missed-call math needs). A single provided field is enough to flip a
+    // document to real mode for the templates that can use it.
+    const clientIntake =
+      business.avgClientValueCad != null ||
+      business.monthlyLeadVolume != null ||
+      business.monthlyAdSpendCad != null
+        ? {
+            avgJobValueCad: business.avgClientValueCad ?? undefined,
+            monthlyLeadVolume: business.monthlyLeadVolume ?? undefined,
+            monthlyCallVolume: business.monthlyLeadVolume ?? undefined,
+            adSpendMonthlyCad: business.monthlyAdSpendCad ?? undefined,
+          }
+        : undefined;
+
+    const detected = detectLeaks({
+      business: {
+        name: business.name,
+        industry: business.industry,
+        category: business.category,
+        city: business.city,
+        phone: business.phone,
+        website: business.website,
+        rating: business.rating,
+        reviewCount: business.reviewCount,
+      },
+      intel,
+      scrape,
+      fallbackText: page.text,
+      placeReviews: reviews,
+      intake: clientIntake,
+    });
+    const leakInputs = buildLeakInputs(detected.report, detected.data);
+    const leaks: LeakContext = {
+      report: detected.report,
+      coldAudit: detected.coldAudit,
+      outOfScope: detected.outOfScope,
+      grades: detected.grades,
+      promptBlock: leakInputsToPromptBlock(leakInputs),
+      allowedNumbers: allowedNumbersFor(detected.report, detected.data),
+      inputs: leakInputs,
+    };
+
     const ctx: GenerationContext = {
       business: {
         name: business.name,
@@ -133,6 +196,7 @@ export async function POST(req: NextRequest) {
       },
       intel,
       websiteText: websiteTextForPrompt,
+      leaks,
     };
 
     // ── Regenerate a single deliverable, merging into the latest stored pack.
@@ -170,21 +234,70 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ system, assetPack: merged });
     }
 
-    // ── Full pack: all five deliverables.
-    const assetPack = await generateAssetPack(ctx);
-
-    const system = await prisma.generatedSystem.create({
-      data: {
-        businessId: business.id,
-        userId: session.user.id,
-        type: "ASSETS",
-        content: assetPack as unknown as object,
+    // ── Full pack: all nine deliverables, streamed. We emit newline-delimited
+    // JSON progress events as each deliverable actually resolves, so the client
+    // shows true completion (not a guessed timer), then a final "done" event
+    // carrying the pack. Generation no longer persists on its own — the operator
+    // decides what's worth keeping via "Save to library" (POST /api/assets/save).
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (obj: unknown) =>
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+        try {
+          // Enrichment already finished above; it's the first of 10 total steps.
+          send({
+            type: "progress",
+            completed: 1,
+            total: ASSET_PACK_PARTS + 1,
+            label: "Research complete — writing deliverables",
+          });
+          const assetPack = await generateAssetPack(ctx, (done, total, label) => {
+            send({ type: "progress", completed: done + 1, total: total + 1, label });
+          });
+          send({ type: "done", assetPack });
+        } catch (err) {
+          console.error("Generate assets stream error:", err);
+          const s =
+            typeof err === "object" && err !== null && "status" in err
+              ? (err as { status?: number }).status
+              : undefined;
+          send({
+            type: "error",
+            status: s ?? 500,
+            error:
+              s === 429
+                ? "The AI provider is rate-limiting this account right now. Wait a minute and try again."
+                : "Failed to generate asset pack",
+          });
+        } finally {
+          controller.close();
+        }
       },
     });
 
-    return NextResponse.json({ system, assetPack });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("Generate assets error:", error);
+    const status =
+      typeof error === "object" && error !== null && "status" in error
+        ? (error as { status?: number }).status
+        : undefined;
+    if (status === 429) {
+      return NextResponse.json(
+        {
+          error:
+            "The AI provider is rate-limiting this account right now. Wait a minute and try again.",
+        },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       { error: "Failed to generate asset pack" },
       { status: 500 }

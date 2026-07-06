@@ -17,25 +17,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { businessId } = await req.json().catch(() => ({ businessId: undefined }));
+    const body = await req.json().catch(() => ({}));
+    const businessId = body?.businessId;
+    const providedPack = body?.assetPack as AssetPack | undefined;
     if (!businessId || typeof businessId !== "string") {
       return NextResponse.json({ error: "businessId is required" }, { status: 400 });
     }
 
-    const latest = await prisma.generatedSystem.findFirst({
-      where: { businessId, userId: session.user.id, type: "ASSETS" },
-      orderBy: { createdAt: "desc" },
-      include: { business: { select: { name: true } } },
-    });
-
-    if (!latest) {
-      return NextResponse.json(
-        { error: "No generated asset pack found. Generate the pack first." },
-        { status: 404 }
-      );
+    // Prefer the pack the client already has in memory (works for an unsaved,
+    // just-generated pack); otherwise fall back to the last saved one.
+    let pack = providedPack;
+    if (!pack?.meta || !pack.file1) {
+      const latest = await prisma.generatedSystem.findFirst({
+        where: { businessId, userId: session.user.id, type: "ASSETS" },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!latest) {
+        return NextResponse.json(
+          { error: "No asset pack found. Generate the pack first." },
+          { status: 404 }
+        );
+      }
+      pack = latest.content as unknown as AssetPack;
     }
 
-    const pack = latest.content as unknown as AssetPack;
     if (!pack?.meta || !pack.file1) {
       return NextResponse.json(
         { error: "This pack predates the export format. Regenerate it, then export." },

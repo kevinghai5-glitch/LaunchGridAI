@@ -1,5 +1,7 @@
 "use client";
 
+import { Search, Bell, Settings } from "lucide-react";
+
 interface TopBarProps {
   title: string;
   /** Breadcrumb shown after the title (e.g. "Charleston, SC · Day Spa"). */
@@ -14,7 +16,7 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
         height: 64,
         padding: "0 40px",
         gap: 24,
-        background: "rgba(10, 10, 11, 0.6)",
+        background: "rgba(9, 9, 10, 0.62)",
         borderBottom: "1px solid var(--line)",
         backdropFilter: "blur(32px) saturate(180%)",
         WebkitBackdropFilter: "blur(32px) saturate(180%)",
@@ -23,7 +25,7 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
       <div className="flex items-center" style={{ gap: 10, minWidth: 220 }}>
         <div
           className="lg-display"
-          style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}
+          style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.022em", color: "var(--text)" }}
         >
           {title}
         </div>
@@ -44,23 +46,23 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
             gap: 10,
             height: 38,
             padding: "0 14px",
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid var(--line)",
-            borderRadius: 12,
+            background: "var(--surface-2)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: 999,
             cursor: "pointer",
             fontFamily: "inherit",
             transition: "background var(--t), border-color var(--t)",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--line-strong)";
+            (e.currentTarget as HTMLElement).style.background = "var(--surface-hi)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--line-bright)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--line)";
+            (e.currentTarget as HTMLElement).style.background = "var(--surface-2)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--line-strong)";
           }}
         >
-          <span aria-hidden style={{ fontSize: 13, opacity: 0.8, lineHeight: 1 }}>🔍</span>
+          <Search size={15} strokeWidth={1.85} style={{ color: "var(--text-3)" }} />
           <span style={{ fontSize: 13, color: "var(--text-3)" }}>Search</span>
           <span style={{ flex: 1 }} />
           <Kbd>⌘</Kbd>
@@ -68,12 +70,12 @@ export function TopBar({ title, subtitle = "Today" }: TopBarProps) {
         </button>
       </div>
 
-      <div className="flex items-center justify-end" style={{ gap: 4, minWidth: 220 }}>
+      <div className="flex items-center justify-end" style={{ gap: 8, minWidth: 220 }}>
         <IconButton ariaLabel="Notifications" dot>
-          🔔
+          <Bell size={15} strokeWidth={1.85} />
         </IconButton>
         <IconButton ariaLabel="Settings">
-          ⚙️
+          <Settings size={15} strokeWidth={1.85} />
         </IconButton>
       </div>
     </div>
@@ -117,21 +119,22 @@ function IconButton({
         width: 36,
         height: 36,
         padding: 0,
-        fontSize: 15,
         lineHeight: 1,
-        background: "transparent",
-        border: "none",
+        background: "var(--surface-2)",
+        border: "1px solid var(--line-strong)",
         borderRadius: 10,
-        opacity: 0.78,
-        transition: "background var(--t), opacity var(--t)",
+        color: "var(--text-2)",
+        transition: "background var(--t), border-color var(--t), color var(--t)",
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-        (e.currentTarget as HTMLElement).style.opacity = "1";
+        (e.currentTarget as HTMLElement).style.background = "var(--surface-hi)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--line-bright)";
+        (e.currentTarget as HTMLElement).style.color = "var(--text)";
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "transparent";
-        (e.currentTarget as HTMLElement).style.opacity = "0.78";
+        (e.currentTarget as HTMLElement).style.background = "var(--surface-2)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--line-strong)";
+        (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
       }}
     >
       {children}
@@ -139,13 +142,13 @@ function IconButton({
         <span
           style={{
             position: "absolute",
-            top: 7,
-            right: 7,
-            width: 6,
-            height: 6,
+            top: -2,
+            right: -2,
+            width: 8,
+            height: 8,
             borderRadius: 99,
             background: "var(--accent)",
-            boxShadow: "0 0 0 2px rgba(10,10,11,0.6)",
+            boxShadow: "0 0 0 2px var(--bg)",
           }}
         />
       )}

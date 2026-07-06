@@ -25,8 +25,8 @@ export function Surface({
 /* ── Pill */
 type Tone = "neutral" | "accent" | "money" | "warn" | "danger";
 const PILL_TONE: Record<Tone, { c: string; bg: string; b: string }> = {
-  neutral: { c: "var(--text-3)", bg: "rgba(255,255,255,0.035)", b: "transparent" },
-  accent: { c: "oklch(0.80 0.11 252)", bg: "var(--accent-soft)", b: "transparent" },
+  neutral: { c: "var(--text-2)", bg: "var(--surface-hi)", b: "transparent" },
+  accent: { c: "var(--accent-fill-text)", bg: "var(--accent-fill)", b: "transparent" },
   money: { c: "oklch(0.80 0.11 158)", bg: "var(--money-soft)", b: "transparent" },
   warn: { c: "oklch(0.82 0.11 75)", bg: "var(--warn-soft)", b: "transparent" },
   danger: { c: "oklch(0.78 0.14 25)", bg: "var(--danger-soft)", b: "transparent" },
@@ -49,14 +49,14 @@ export function Pill({
       className="inline-flex items-center"
       style={{
         gap: 6,
-        padding: "4px 9px",
-        fontSize: 11.5,
+        padding: "4px 11px",
+        fontSize: 12,
         fontWeight: 600,
         letterSpacing: "-0.005em",
         background: t.bg,
         color: t.c,
         border: `1px solid ${t.b}`,
-        borderRadius: 99,
+        borderRadius: 999,
         lineHeight: 1.3,
         whiteSpace: "nowrap",
         ...style,
@@ -86,7 +86,7 @@ export function PanelHeader({
       <div>
         <h3
           className="lg-display"
-          style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "-0.015em" }}
+          style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em" }}
         >
           {title}
         </h3>
@@ -196,7 +196,7 @@ export function KpiCard({
       <div style={{ fontSize: 12.5, color: "var(--text-3)", marginBottom: 12 }}>{label}</div>
       <div
         className="lg-display tnum"
-        style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-0.025em", color: c, lineHeight: 1 }}
+        style={{ fontSize: 30, fontWeight: 680, letterSpacing: "-0.03em", color: c, lineHeight: 1 }}
       >
         {value}
       </div>

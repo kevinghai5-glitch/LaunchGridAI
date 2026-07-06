@@ -7,6 +7,9 @@
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
+    "gen:check": "tsx scripts/gen-check.ts",
+    "check:pack": "tsx scripts/check-pack.ts",
+    "test": "tsx scripts/leak-detection.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -51,6 +54,7 @@
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.6",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

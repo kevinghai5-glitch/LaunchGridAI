@@ -2,39 +2,54 @@
 // and bundles them into a single ZIP.
 //
 // HTML-primary: all five deliverables ship as premium, standalone HTML — that's
-// what the client opens and what makes the pack feel high-end. The editable
-// PDF / DOCX / TXT versions of the relevant files are kept alongside in an
-// "editable-copies" folder so the buyer can still edit/print them.
+// what the client opens and what makes the pack feel high-end.
 
 import JSZip from "jszip";
 import type { AssetPack } from "@/types";
-import {
-  renderFile1Html,
-  renderFile2Html,
-  renderFile3Html,
-  renderFile4Html,
-  renderFile5Html,
-} from "./html";
-import { renderFile2Pdf } from "./pdf";
-import { renderFile3Docx } from "./docx";
-import { renderFile4Txt } from "./txt";
+import { DELIVERABLES, renderDeliverableHtml } from "./deliverables";
+import { validatePack, formatValidation } from "./validate-pack";
+import { hasInventedOffer } from "../leak-narrative";
 
-// Primary HTML deliverables — the polished files the client actually opens.
-export const DELIVERABLE_FILENAMES = {
-  file1: "landing-page-growth-audit.html",
-  file2: "lead-qualification-system.html",
-  file3: "email-nurture-system.html",
-  file4: "sms-follow-up-system.html",
-  file5: "booking-appointment-system.html",
-} as const;
+// The "…comes off the list" tail of the kickoff-verification line survives minor
+// wording drift — same signature the pack validator uses.
+const KICKOFF_SIGNATURE = /comes off the list|verify (this|it)(?: together)? at kickoff/i;
 
-// Editable source copies kept alongside the HTML for buyers who want to tweak
-// or print them.
-const EDITABLE_FILENAMES = {
-  file2: "editable-copies/lead-qualification-system.pdf",
-  file3: "editable-copies/email-nurture-system.docx",
-  file4: "editable-copies/sms-follow-up-system.txt",
-} as const;
+// Defect 3: prove the governance rules hold on the FINAL rendered HTML of every
+// deliverable — not just on the pack object. Renders each deliverable, then
+// asserts (a) every BENCHMARK leak's kickoff line is present in D1's HTML, and
+// (b) no fabricated offer survived into any deliverable. Logs loudly; never
+// throws (a validation gap must not block a paying operator's export).
+export function validateRenderedDeliverables(pack: AssetPack): {
+  html: Record<string, string>;
+  violations: string[];
+} {
+  const html: Record<string, string> = {};
+  for (const d of DELIVERABLES) html[d.id] = renderDeliverableHtml(pack, d.id);
+
+  const violations: string[] = [];
+
+  const benchmarkLeaks = (pack.intelligence?.leakAnalysis ?? []).filter(
+    (l) => l.evidenceTier === "BENCHMARK"
+  );
+  if (benchmarkLeaks.length) {
+    const kickoffCount = (html.d1.match(new RegExp(KICKOFF_SIGNATURE, "gi")) ?? []).length;
+    if (kickoffCount < benchmarkLeaks.length)
+      violations.push(
+        `D1 HTML renders ${kickoffCount} kickoff-verification line(s) but has ${benchmarkLeaks.length} BENCHMARK leak(s).`
+      );
+  }
+
+  for (const [id, doc] of Object.entries(html)) {
+    if (hasInventedOffer(doc))
+      violations.push(`${id} HTML contains a fabricated discount amount.`);
+  }
+
+  const packResult = validatePack(pack);
+  if (!packResult.passed)
+    violations.push(`Pack validator: ${packResult.fails} failure(s).\n${formatValidation(packResult)}`);
+
+  return { html, violations };
+}
 
 function slug(name: string): string {
   return (
@@ -47,25 +62,23 @@ function slug(name: string): string {
 }
 
 export function zipFilename(pack: AssetPack): string {
-  return `${slug(pack.meta.businessName)}-acquisition-pack.zip`;
+  return `${slug(pack.meta.businessName)}-growth-infrastructure.zip`;
 }
 
 export async function buildAssetZip(pack: AssetPack): Promise<Buffer> {
-  const [pdf, docx] = await Promise.all([renderFile2Pdf(pack), renderFile3Docx(pack)]);
-
   const zip = new JSZip();
 
-  // Primary: all five as premium HTML.
-  zip.file(DELIVERABLE_FILENAMES.file1, renderFile1Html(pack));
-  zip.file(DELIVERABLE_FILENAMES.file2, renderFile2Html(pack));
-  zip.file(DELIVERABLE_FILENAMES.file3, renderFile3Html(pack));
-  zip.file(DELIVERABLE_FILENAMES.file4, renderFile4Html(pack));
-  zip.file(DELIVERABLE_FILENAMES.file5, renderFile5Html(pack));
+  // Render once, validate the FINAL HTML (Defect 3), then bundle those exact
+  // documents so the validated artifact is the shipped artifact.
+  const { html, violations } = validateRenderedDeliverables(pack);
+  if (violations.length)
+    console.warn(
+      `[deliverables] governance violations on rendered HTML:\n${violations.join("\n")}`
+    );
 
-  // Editable copies for the files that have a richer source format.
-  zip.file(EDITABLE_FILENAMES.file2, pdf);
-  zip.file(EDITABLE_FILENAMES.file3, docx);
-  zip.file(EDITABLE_FILENAMES.file4, renderFile4Txt(pack));
+  for (const d of DELIVERABLES) {
+    zip.file(d.filename, html[d.id]);
+  }
 
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }

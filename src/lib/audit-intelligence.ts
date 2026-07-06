@@ -36,7 +36,28 @@ export interface WebsiteSignals {
     certifications: boolean;
     awards: boolean;
   };
+  // Marketing-stack fingerprint from the live HTML (script/pixel/embed detection).
+  // Presence proves they're already investing; absence is a concrete, named leak.
+  marketing: {
+    metaPixel: boolean;
+    googleAdsTag: boolean;
+    analytics: string[];
+    tiktokPixel: boolean;
+    chat: string[];
+    emailMarketing: string[];
+    crm: string[];
+  };
 }
+
+const EMPTY_MARKETING: WebsiteSignals["marketing"] = {
+  metaPixel: false,
+  googleAdsTag: false,
+  analytics: [],
+  tiktokPixel: false,
+  chat: [],
+  emailMarketing: [],
+  crm: [],
+};
 
 export interface ReviewIntel {
   available: boolean;
@@ -88,6 +109,58 @@ const BOOKING_PROVIDERS: Record<string, string> = {
   "cal.com": "Cal.com",
 };
 
+// Live-chat / messaging widgets — presence means they're capturing inbound
+// conversation; absence on a service site is a responsiveness leak.
+const CHAT_PROVIDERS: Record<string, string> = {
+  "tawk.to": "Tawk.to",
+  intercom: "Intercom",
+  drift: "Drift",
+  "crisp.chat": "Crisp",
+  zdassets: "Zendesk Chat",
+  zendesk: "Zendesk",
+  livechatinc: "LiveChat",
+  tidio: "Tidio",
+  hubspot: "HubSpot Chat",
+  podium: "Podium",
+  birdeye: "Birdeye",
+  "manychat": "ManyChat",
+};
+
+// Email-marketing / list-building platforms — presence means an email channel
+// exists; absence is the single biggest follow-up leak we can name concretely.
+const EMAIL_PROVIDERS: Record<string, string> = {
+  mailchimp: "Mailchimp",
+  "list-manage": "Mailchimp",
+  klaviyo: "Klaviyo",
+  constantcontact: "Constant Contact",
+  "ctctcdn": "Constant Contact",
+  convertkit: "ConvertKit",
+  "kit.com": "ConvertKit",
+  aweber: "AWeber",
+  activecampaign: "ActiveCampaign",
+  getdrip: "Drip",
+  sendinblue: "Brevo",
+  brevo: "Brevo",
+  hubspotusercontent: "HubSpot",
+  mailerlite: "MailerLite",
+  omnisend: "Omnisend",
+};
+
+// CRM / lead-management platforms — presence means leads are being tracked;
+// absence means leads likely live in a phone/inbox with no system behind them.
+const CRM_PROVIDERS: Record<string, string> = {
+  "hs-scripts": "HubSpot CRM",
+  "hsforms": "HubSpot CRM",
+  salesforce: "Salesforce",
+  "pardot": "Salesforce Pardot",
+  zoho: "Zoho",
+  pipedrive: "Pipedrive",
+  gohighlevel: "HighLevel",
+  leadconnectorhq: "HighLevel",
+  keap: "Keap",
+  infusionsoft: "Keap",
+};
+
 const CTA_PATTERNS = [
   "book",
   "schedule",
@@ -105,6 +178,38 @@ const CTA_PATTERNS = [
 ];
 
 // --- Website signal detection -------------------------------------------------
+
+// Fingerprint the marketing stack from raw HTML by matching known script hosts,
+// pixel IDs and embed snippets. All matchers are substring/regex on the lowered
+// HTML — best-effort and presence-only (we never claim spend or performance).
+function detectMarketing(lower: string): WebsiteSignals["marketing"] {
+  const matchProviders = (map: Record<string, string>): string[] =>
+    Array.from(
+      new Set(
+        Object.entries(map)
+          .filter(([key]) => lower.includes(key))
+          .map(([, label]) => label)
+      )
+    );
+
+  const analytics = new Set<string>();
+  if (/gtag\(|googletagmanager\.com\/gtag\/js|google-analytics\.com\/(g\/collect|analytics\.js)|\bga\(/.test(lower))
+    analytics.add("Google Analytics");
+  if (/googletagmanager\.com\/gtm\.js|\bgtm-[a-z0-9]+\b/.test(lower))
+    analytics.add("Google Tag Manager");
+  if (/hotjar\.com|static\.hotjar/.test(lower)) analytics.add("Hotjar");
+  if (/clarity\.ms/.test(lower)) analytics.add("Microsoft Clarity");
+
+  return {
+    metaPixel: /connect\.facebook\.net\/[^"']*fbevents\.js|fbq\(\s*['"]init|facebook pixel/.test(lower),
+    googleAdsTag: /googleadservices\.com|googletagmanager\.com\/gtag\/js\?id=aw-|gtag\(\s*['"]config['"]\s*,\s*['"]aw-/.test(lower),
+    analytics: Array.from(analytics),
+    tiktokPixel: /analytics\.tiktok\.com|ttq\.load|ttq\.track/.test(lower),
+    chat: matchProviders(CHAT_PROVIDERS),
+    emailMarketing: matchProviders(EMAIL_PROVIDERS),
+    crm: matchProviders(CRM_PROVIDERS),
+  };
+}
 
 export function analyzeWebsite(html: string): WebsiteSignals {
   if (!html) {
@@ -124,6 +229,7 @@ export function analyzeWebsite(html: string): WebsiteSignals {
         certifications: false,
         awards: false,
       },
+      marketing: EMPTY_MARKETING,
     };
   }
 
@@ -171,6 +277,7 @@ export function analyzeWebsite(html: string): WebsiteSignals {
       certifications: /certified|accredited|board[\s-]?certified|bbb|better business bureau/.test(lower),
       awards: /award|best of|voted|#1 |top[\s-]?rated/.test(lower),
     },
+    marketing: detectMarketing(lower),
   };
 }
 
@@ -425,6 +532,33 @@ export function intelligenceToPromptBlock(intel: AuditIntelligence): string {
       .filter(([, v]) => v)
       .map(([k]) => k);
     lines.push(`- Trust signals present: ${present.length ? present.join(", ") : "none detected"}`);
+
+    // Marketing-stack fingerprint: name what they DO run, and flag concrete
+    // missing channels as leaks (this is real, observed evidence from the HTML).
+    const m = intel.website.marketing;
+    const running: string[] = [];
+    if (m.metaPixel) running.push("Meta Pixel");
+    if (m.googleAdsTag) running.push("Google Ads tag");
+    if (m.tiktokPixel) running.push("TikTok Pixel");
+    running.push(...m.analytics);
+    if (m.chat.length) running.push(`chat (${m.chat.join(", ")})`);
+    if (m.emailMarketing.length) running.push(`email marketing (${m.emailMarketing.join(", ")})`);
+    if (m.crm.length) running.push(`CRM (${m.crm.join(", ")})`);
+    lines.push(`- Marketing stack detected on site: ${running.length ? running.join(", ") : "none detected"}`);
+
+    const missing: string[] = [];
+    if (!m.emailMarketing.length)
+      missing.push("no email-marketing platform — no list-building or follow-up sequences detected");
+    if (!m.crm.length)
+      missing.push("no CRM/lead-management tool — inbound leads likely tracked manually, if at all");
+    if (!m.chat.length)
+      missing.push("no live-chat/messaging widget — website visitors can't start a conversation instantly");
+    if (!m.metaPixel && !m.googleAdsTag && !m.tiktokPixel)
+      missing.push("no ad-retargeting pixels — site visitors who don't convert can't be re-reached with ads");
+    if (missing.length) {
+      lines.push("- MARKETING-STACK LEAKS (observed from the live HTML — concrete, not assumed):");
+      missing.forEach((leak) => lines.push(`  · ${leak}`));
+    }
   } else {
     lines.push("- Website could not be read; treat on-page findings as strategic assumptions.");
   }

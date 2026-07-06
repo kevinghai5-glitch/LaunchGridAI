@@ -9,9 +9,9 @@
 
 :root {
   --radius-sm: 8px;
-  --radius: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius: 11px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
   --radius-2xl: 28px;
   --space-1: 4px;
   --space-2: 8px;
@@ -26,42 +26,45 @@
   --transition: 240ms cubic-bezier(0.32, 0.72, 0, 1);
   --t: 240ms cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* base / surfaces — deep neutral charcoal, near-black */
-  --bg: #0a0a0b;
-  --bg-deep: #060607;
-  --bg-elevated: #161617;
-  --surface: #151517;
-  --surface-2: #1c1c1f;
-  --surface-hi: #232326;
-  --glass: rgba(22, 22, 24, 0.72);
+  /* base / surfaces — pure near-black canvas, flat elevated cards (Whop/Apple) */
+  --bg: #09090a;
+  --bg-deep: #050506;
+  --bg-elevated: #18181a;
+  --surface: #161618;
+  --surface-2: #1d1d20;
+  --surface-hi: #242427;
+  --glass: rgba(20, 20, 22, 0.78);
 
   /* legacy aliases used across existing components */
-  --surface-hover: #1c1c1f;
-  --surface-active: #232326;
+  --surface-hover: #1d1d20;
+  --surface-active: #242427;
   --sidebar: #060607;
 
-  /* lines — fewer, softer */
-  --line: rgba(255, 255, 255, 0.05);
-  --line-strong: rgba(255, 255, 255, 0.08);
-  --line-bright: rgba(255, 255, 255, 0.12);
-  --border: rgba(255, 255, 255, 0.05);
-  --border-strong: rgba(255, 255, 255, 0.08);
+  /* lines — hairline, soft (subtly visible card edges, Apple/Whop) */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.11);
+  --line-bright: rgba(255, 255, 255, 0.16);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.11);
 
-  /* text — neutral cool-gray, near-zero chroma */
-  --text: oklch(0.98 0.001 270);
-  --text-2: oklch(0.79 0.003 270);
-  --text-3: oklch(0.62 0.004 270);
-  --text-4: oklch(0.47 0.005 270);
-  --text-muted: oklch(0.79 0.003 270);
-  --text-subtle: oklch(0.62 0.004 270);
+  /* text — neutral cool-gray, near-zero chroma, crisp Apple hierarchy */
+  --text: oklch(0.985 0.001 270);
+  --text-2: oklch(0.83 0.003 270);
+  --text-3: oklch(0.67 0.004 270);
+  --text-4: oklch(0.51 0.005 270);
+  --text-muted: oklch(0.83 0.003 270);
+  --text-subtle: oklch(0.67 0.004 270);
 
-  /* accent — refined Apple system-blue, used sparingly */
-  --accent: oklch(0.68 0.15 252);
-  --accent-2: oklch(0.62 0.16 254);
-  --accent-hover: oklch(0.74 0.15 252);
-  --accent-soft: oklch(0.62 0.15 252 / 0.13);
-  --accent-glow: oklch(0.62 0.16 252 / 0.16);
-  --accent-text: oklch(0.16 0.04 252);
+  /* accent — vivid Whop/Apple royal-blue */
+  --accent: oklch(0.70 0.16 264);
+  --accent-2: oklch(0.62 0.18 266);
+  --accent-hover: oklch(0.76 0.16 264);
+  --accent-soft: oklch(0.62 0.18 264 / 0.18);
+  --accent-glow: oklch(0.62 0.18 264 / 0.18);
+  --accent-text: oklch(0.16 0.04 264);
+  /* filled-pill blue (the "Active" badge in the reference) */
+  --accent-fill: oklch(0.52 0.19 264 / 0.85);
+  --accent-fill-text: oklch(0.90 0.07 264);
 
   /* money / status */
   --money: oklch(0.76 0.13 158);
@@ -124,15 +127,19 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Inter feature settings → humanist, SF-Pro-like glyphs (single-story a/g,
+       open digits) so the webfont fallback matches the Apple system font. */
+    font-feature-settings: "cv01", "cv03", "cv04", "cv11", "ss01";
     letter-spacing: -0.011em;
   }
 
   body {
     min-height: 100vh;
     min-width: 1320px;
-    /* atmosphere — barely-there neutral depth, no color cast */
+    /* atmosphere — a single, barely-there top wash. The canvas reads as pure
+       near-black (Whop/Apple), letting the flat elevated cards carry the depth. */
     background:
-      radial-gradient(1200px 700px at 0% -25%, rgba(255, 255, 255, 0.022), transparent 62%),
+      radial-gradient(1200px 720px at 50% -28%, rgba(255, 255, 255, 0.018), transparent 62%),
       var(--bg);
     background-attachment: fixed;
   }
@@ -226,10 +233,10 @@
   animation: pingRing 2.2s cubic-bezier(0, 0.55, 0.45, 1) infinite;
 }
 
-/* surface — solid, soft, layered depth */
+/* surface — flat elevated card: solid fill, hairline border, soft shadow */
 .surface {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
@@ -237,7 +244,7 @@
 /* glass — subtle frosted depth for floating panels */
 .glass {
   background: var(--glass);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(28px) saturate(170%);
@@ -320,13 +327,13 @@
 /* Backward-compat utility classes for landing + older pages */
 .glass-card {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 .panel {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
 }
 .glow-blue,
@@ -347,6 +354,54 @@
   -webkit-text-fill-color: transparent;
   color: transparent;
 }
+
+/* ───────── Whop/Apple primitives ─────────
+   Shared building blocks so every tab speaks the same visual language:
+   bold tight titles, flat cards, rounded-full status pills, dashed
+   separators, dashed-underline links, and rounded icon buttons. */
+
+/* Titles — bold + tight, the reference's headline voice */
+.lg-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.025em; color: var(--text); }
+.lg-eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-3);
+}
+
+/* Dashed divider between list rows (the reference's row separators) */
+.lg-divider { height: 0; border: 0; border-top: 1px dashed var(--line-bright); margin: 0; }
+
+/* Dashed-underline link ("Learn more") */
+.lg-dashed-link {
+  font-weight: 600; color: var(--text);
+  text-decoration: underline; text-decoration-style: dashed;
+  text-underline-offset: 5px; text-decoration-color: var(--line-bright);
+  transition: text-decoration-color var(--t), color var(--t);
+}
+.lg-dashed-link:hover { text-decoration-color: var(--text-3); }
+
+/* Rounded-square icon button (the reference's gear) */
+.lg-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  color: var(--text-2); cursor: pointer;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.lg-icon-btn:hover { background: var(--surface-hi); border-color: var(--line-bright); color: var(--text); }
+
+/* Status pills — rounded-full, two reference tones (filled-blue / subtle) */
+.lg-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; line-height: 1;
+  letter-spacing: -0.005em; white-space: nowrap;
+}
+.lg-pill-active { background: var(--accent-fill); color: var(--accent-fill-text); }
+.lg-pill-muted { background: var(--surface-hi); color: var(--text-2); }
+.lg-pill-success { background: var(--success-soft); color: var(--success); }
+.lg-pill-warn { background: var(--warn-soft); color: var(--warn); }
+.lg-pill-danger { background: var(--danger-soft); color: var(--danger); }
 
 /* Sonner overrides — inherit theme tokens */
 [data-sonner-toaster] [data-sonner-toast] {
