@@ -13,7 +13,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { gatherProspects, writeAngles } from "@/lib/daily-prospects";
-import { DAILY_BATCH_SIZE, DECLINE_COOLDOWN_DAYS } from "@/lib/crm";
+import { DAILY_BATCH_SIZE, DECLINE_COOLDOWN_DAYS, NA_METROS } from "@/lib/crm";
+import { anyMetroCallableNow } from "@/lib/call-timing";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -119,5 +120,13 @@ export async function POST(req: Request) {
     orderBy: { reviewCount: "asc" },
   });
 
-  return NextResponse.json({ niche, count: leads.length, leads });
+  // outsideCallingHours = true only when it's off-hours across ALL metros (late
+  // night) and the batch fell back to the soonest-to-open regions. The UI shows a
+  // heads-up when this is set.
+  return NextResponse.json({
+    niche,
+    count: leads.length,
+    leads,
+    outsideCallingHours: !anyMetroCallableNow(NA_METROS, new Date()),
+  });
 }

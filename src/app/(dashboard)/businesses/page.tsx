@@ -164,6 +164,11 @@ export default function BusinessesPage() {
         toast.info(data.message || "No fresh prospects found. Try another niche.");
       } else {
         toast.success(`${data.leads.length} prospects ready to triage`);
+        if (data.outsideCallingHours) {
+          toast.info(
+            "It's outside calling hours across every region right now — these are the soonest-to-open metros. Generate during business hours and the list follows the good local windows."
+          );
+        }
       }
     } catch {
       toast.error("Generation failed");

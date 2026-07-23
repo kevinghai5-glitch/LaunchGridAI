@@ -10,6 +10,7 @@
 import { searchBusinesses, type PlaceResult } from "@/lib/google-places";
 import { openai, DEFAULT_MODEL } from "@/lib/openai";
 import { opportunityScore, NA_METROS, DAILY_BATCH_SIZE } from "@/lib/crm";
+import { orderMetrosByCallTime } from "@/lib/call-timing";
 import {
   selectFinding,
   gateAngle,
@@ -49,9 +50,13 @@ export async function gatherProspects(
   // call, same category (same niche search), same city.
   const metroPools = new Map<string, Benchmark[]>();
 
-  // Walk metros (rotated by offset) until we have enough fresh, unseen prospects.
-  for (let i = 0; i < NA_METROS.length && collected.length < count * 2; i++) {
-    const metro = NA_METROS[(i + metroOffset) % NA_METROS.length];
+  // Source ONLY from metros where it's a good LOCAL time to cold-call right now
+  // (peak windows first). This is what makes a 9am-ET generation skip California
+  // (6am there) and a 6pm-ET generation surface the West Coast (still afternoon).
+  // Falls back to the soonest-to-open metros when nothing is callable (late night).
+  const orderedMetros = orderMetrosByCallTime(NA_METROS, new Date(), metroOffset).metros;
+  for (let i = 0; i < orderedMetros.length && collected.length < count * 2; i++) {
+    const metro = orderedMetros[i];
     let batch: PlaceResult[] = [];
     try {
       batch = await searchBusinesses(niche, metro, 20);
