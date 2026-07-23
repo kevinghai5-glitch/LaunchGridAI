@@ -17,16 +17,19 @@ export async function GET(
     }
 
     const business = await prisma.business.findFirst({
-      where: { id: params.id, userId: session.user.id },
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
       include: {
         generatedSystems: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
         },
         proposals: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
           select: { id: true, title: true, status: true, monthlyPrice: true, createdAt: true },
         },
         callLogs: {
+          where: { deletedAt: null },
           orderBy: { calledAt: "desc" },
           select: { id: true, disposition: true, note: true, durationSec: true, calledAt: true },
         },
@@ -70,7 +73,7 @@ export async function PATCH(
       : parsed.data;
 
     const business = await prisma.business.updateMany({
-      where: { id: params.id, userId: session.user.id },
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
       data,
     });
 
@@ -79,7 +82,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.business.findFirst({
-      where: { id: params.id, userId: session.user.id },
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
     });
 
     return NextResponse.json({ business: updated });
@@ -99,8 +102,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await prisma.business.deleteMany({
-      where: { id: params.id, userId: session.user.id },
+    // Soft-delete: never hard-delete. Set deletedAt; the row stays in the DB and is
+    // filtered out of reads (deletedAt: null). Always recoverable.
+    await prisma.business.updateMany({
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
+      data: { deletedAt: new Date() },
     });
 
     return NextResponse.json({ success: true });

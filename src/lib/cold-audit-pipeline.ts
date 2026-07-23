@@ -5,13 +5,10 @@
 // generator as an on-the-fly fallback when no audit is on file.
 
 import type { Business } from "@prisma/client";
-import { fetchWebsitePage } from "@/lib/website-analyzer";
-import { fetchPlaceReviews, findCompetitors } from "@/lib/google-places";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
-import { firecrawlSite } from "@/lib/firecrawl";
 import { buildBusinessFacts } from "@/lib/business-facts";
 import { resolvePsiSnapshot } from "@/lib/psi-snapshot";
-import { runDataForSeo } from "@/lib/dataforseo";
+import { resolveResearchSnapshot } from "@/lib/research-snapshot";
 import { buildScreenshotBundle } from "@/lib/screenshotone";
 import { generateColdAudit } from "@/lib/cold-audit";
 import type { GenerationContext, LeakContext } from "@/lib/asset-generation";
@@ -28,18 +25,13 @@ export async function runColdAuditPipeline(
   business: Business
 ): Promise<ColdAuditReport> {
   // Same enrichment as the full pack — the audit lives or dies on real signals.
-  const [page, reviews, competitors, scrape, psi, dfs] = await Promise.all([
-    fetchWebsitePage(business.website),
-    fetchPlaceReviews(business.googlePlaceId),
-    findCompetitors(
-      business.industry ?? business.category,
-      business.city,
-      business.googlePlaceId
-    ),
-    firecrawlSite(business.website),
+  // Both share the persisted research + PSI snapshots, so the cold audit and the
+  // deliverables always agree on the same facts and neither pays to re-scrape.
+  const [research, psi] = await Promise.all([
+    resolveResearchSnapshot(business),
     resolvePsiSnapshot(business),
-    runDataForSeo(business.name, business.address),
   ]);
+  const { page, reviews, competitors, scrape, dfs } = research;
 
   const verifiedFacts = buildBusinessFacts({
     scrape,
@@ -50,6 +42,7 @@ export async function runColdAuditPipeline(
       address: business.address,
       website: business.website,
     },
+    ownerName: business.ownerName,
   });
 
   const screenshots = buildScreenshotBundle({
@@ -109,6 +102,7 @@ export async function runColdAuditPipeline(
     scrape,
     fallbackText: page.text,
     placeReviews: reviews,
+    asOf: research.asOf,
   });
   // Part H1: the #1 ranked cold-audit leak (coldAudit is score-desc) drives the
   // headline-cost block — named, with its computed benchmark-mode monthly figure.

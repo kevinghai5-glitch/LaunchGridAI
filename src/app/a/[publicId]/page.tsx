@@ -23,8 +23,8 @@ interface PageProps {
 // report. Any non-cold-audit system (e.g. an asset pack) 404s — those have no
 // public teaser.
 async function loadReport(publicId: string): Promise<ColdAuditReport | null> {
-  const system = await prisma.generatedSystem.findUnique({
-    where: { publicId },
+  const system = await prisma.generatedSystem.findFirst({
+    where: { publicId, deletedAt: null },
     select: { type: true, content: true },
   });
   if (!system || system.type !== "COLD_AUDIT") return null;

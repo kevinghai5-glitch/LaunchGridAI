@@ -25,13 +25,14 @@ export async function GET(req: NextRequest) {
     const businesses = await prisma.business.findMany({
       where: {
         userId: session.user.id,
+        deletedAt: null,
         ...(favoritedOnly ? { favorited: true } : {}),
         ...(deliverableOnly
           ? {
               OR: [
                 { status: { in: DELIVERABLE_STATUSES } },
-                { generatedSystems: { some: { type: { in: ["ASSETS", "COLD_AUDIT"] } } } },
-                { proposals: { some: {} } },
+                { generatedSystems: { some: { type: { in: ["ASSETS", "COLD_AUDIT"] }, deletedAt: null } } },
+                { proposals: { some: { deletedAt: null } } },
               ],
             }
           : {}),

@@ -21,7 +21,7 @@ export async function GET() {
 
   const [zoomLeads, recentLead] = await Promise.all([
     prisma.business.findMany({
-      where: { userId: session.user.id, status: { in: ZOOM_STATUSES } },
+      where: { userId: session.user.id, status: { in: ZOOM_STATUSES }, deletedAt: null },
       orderBy: { nextActionAt: "asc" },
       select: {
         id: true,
@@ -34,7 +34,7 @@ export async function GET() {
       },
     }),
     prisma.business.findFirst({
-      where: { userId: session.user.id },
+      where: { userId: session.user.id, deletedAt: null },
       orderBy: { lastActivityAt: "desc" },
       select: { id: true, name: true },
     }),

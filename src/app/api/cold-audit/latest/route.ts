@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
 
   const latest = await prisma.generatedSystem.findFirst({
-    where: { businessId, userId: session.user.id, type: "COLD_AUDIT" },
+    where: { businessId, userId: session.user.id, type: "COLD_AUDIT", deletedAt: null },
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true, content: true },
   });

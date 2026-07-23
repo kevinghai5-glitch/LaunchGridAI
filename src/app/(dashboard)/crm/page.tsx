@@ -96,6 +96,19 @@ export default function CrmPage() {
 
   useEffect(() => {
     load();
+    // The board reads the DB directly, but clearing/removing a lead happens on
+    // OTHER pages (Opportunities, Call Queue). Without this, the CRM keeps showing
+    // a lead that was already cleared elsewhere until a hard reload. Re-fetch
+    // whenever the tab regains focus so the board always mirrors current state.
+    const refresh = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
 
   const load = async () => {
@@ -404,7 +417,9 @@ export default function CrmPage() {
           onClose={() => setActiveLeadId(null)}
           onStageChange={(toStage) => moveLead(activeLead.id, toStage)}
           onGenerate={() => {
-            router.push(`/businesses/${activeLead.id}?generate=assets`);
+            // Open the Library workspace for this lead and immediately generate
+            // its asset pack (generate=1) — no detour through the detail page.
+            router.push(`/library?businessId=${activeLead.id}&generate=1`);
           }}
         />
       )}

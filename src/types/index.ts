@@ -38,6 +38,7 @@ export interface SavedBusiness {
   painPoint: string | null;
   outreachAngle: string | null;
   suggestedOffer: string | null;
+  status: string;
   createdAt: string;
 }
 
@@ -294,6 +295,12 @@ export interface AssetPackMeta {
   generatedAt: string;
   dataConfidence: DataConfidence;
   assumptions: string[];
+  // TRUE when the pack was generated with NO client intake at all (the pure
+  // pre-intake TESTING path). Drives an unmissable "INTERNAL TEST — generated
+  // without client intake" marker on every document cover. Undefined on packs
+  // built before this flag existed → no marker (they render as before). The only
+  // way to clear it is to regenerate with intake present, never a toggle.
+  internalTest?: boolean;
   // Real-data signal flags so the deliverable can surface "what was measured"
   // honestly to the buyer.
   signals?: {
@@ -386,6 +393,9 @@ export interface LeakAnalysisItem {
   mathFrame?: string; // pre-computed, labeled benchmark/real dollar math (Defect 1)
   industryPattern?: string; // BENCHMARK-slot body: the pattern via stat/softFraming (Defect 4)
   kickoffLine?: string; // BENCHMARK kickoff-verification line, verbatim (Defect 3)
+  // The client confirmed at intake they lack this system → render as fact
+  // ("Confirmed at intake" label, no kickoff line). Absent = benchmark hedge.
+  intakeConfirmed?: boolean;
   // Whether the taxonomy offered this leak a quantification path (whitelisted
   // stats and/or a math template). Some leaks (e.g. CRM pipeline, call-tracking)
   // are qualitative BY DESIGN — no statIds, no mathTemplate — so Law 5 must not

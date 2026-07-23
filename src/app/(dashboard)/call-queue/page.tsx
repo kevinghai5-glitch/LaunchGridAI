@@ -13,6 +13,10 @@ import {
   PhoneCall,
   X,
   SkipForward,
+  UserRound,
+  MapPin,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { DateNav, isSameDay, startOfDay } from "@/components/dashboard/DateNav";
@@ -46,6 +50,7 @@ interface QueueLead {
     mapsUrl: string | null;
     painPoint: string | null;
     outreachAngle: string | null;
+    ownerName: string | null;
     topLeak: string | null;
     headlineCost: string | null;
     mobileScore: number | null;
@@ -124,6 +129,8 @@ export default function CallQueuePage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
 
   const [activeIndex, setActiveIndex] = useState(0);
+  // Lead whose detail popup is open (click a row's name to open it). Null = closed.
+  const [detail, setDetail] = useState<QueueLead | null>(null);
   const [note, setNote] = useState("");
   const [armed, setArmed] = useState<Disposition | null>(null);
   const [callbackTime, setCallbackTime] = useState("");
@@ -272,10 +279,11 @@ export default function CallQueuePage() {
     [submitting, note, load]
   );
 
-  // Remove a company from the call queue WITHOUT destroying it. Reverts the lead
-  // to a prospect (SUGGESTED) and keeps its call history — so it disappears from
-  // the queue but still shows in your Saved list / CRM and can be re-added later.
-  // Non-destructive, so no scary confirm.
+  // Remove a company from the call queue WITHOUT destroying it. SOFT-DELETES the
+  // lead (deletedAt), so it disappears from EVERY view — today's queue, past/date
+  // history, the CRM board, Opportunities and Saved — while the row + call history
+  // stay in the DB (recoverable, never hard-deleted). It does not reappear anywhere
+  // or fall backward into New Leads / Lost. Non-destructive, so no scary confirm.
   const removeLead = useCallback(
     async (id: string) => {
       const before = leads;
@@ -293,7 +301,7 @@ export default function CallQueuePage() {
           toast.error("Failed to remove");
           return;
         }
-        toast.success("Removed from queue — still saved");
+        toast.success("Removed everywhere");
       } catch {
         setLeads(before);
         toast.error("Failed to remove");
@@ -391,6 +399,17 @@ export default function CallQueuePage() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [activeLead, submitting, note, armed, fire, confirmArmed, skip, isToday]);
+
+  // When the detail popup resolves an owner name, cache it back onto the row so
+  // the "Ask for …" line also shows in the list (and stays if the modal reopens).
+  const setOwnerForLead = useCallback((id: string, ownerName: string) => {
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === id ? { ...l, enrichment: { ...l.enrichment, ownerName } } : l
+      )
+    );
+    setDetail((d) => (d && d.id === id ? { ...d, enrichment: { ...d.enrichment, ownerName } } : d));
+  }, []);
 
   const dueCount = useMemo(
     () => leads.filter((l) => l.urgency === "overdue" || l.urgency === "due").length,
@@ -520,6 +539,11 @@ export default function CallQueuePage() {
                   </span>
                   <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                     <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetail(lead);
+                      }}
+                      title="View details"
                       style={{
                         fontSize: 14,
                         fontWeight: 600,
@@ -528,6 +552,9 @@ export default function CallQueuePage() {
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+                        cursor: "pointer",
+                        width: "fit-content",
+                        maxWidth: "100%",
                       }}
                     >
                       {lead.name}
@@ -539,6 +566,15 @@ export default function CallQueuePage() {
                       {lead.phone && (
                         <span className="flex items-center" style={{ gap: 4 }}>
                           <Phone size={11} strokeWidth={1.9} /> {lead.phone}
+                        </span>
+                      )}
+                      {lead.enrichment.ownerName && (
+                        <span
+                          className="flex items-center"
+                          style={{ gap: 4, color: "var(--accent)", fontWeight: 500 }}
+                          title="Owner / decision-maker — ask for them to get past the gatekeeper"
+                        >
+                          <UserRound size={11} strokeWidth={1.9} /> Ask for {lead.enrichment.ownerName}
                         </span>
                       )}
                       {lead.city && <span>{lead.city}</span>}
@@ -847,7 +883,278 @@ export default function CallQueuePage() {
           })}
         </div>
       </div>
+
+      {detail && (
+        <QueueDetailModal
+          lead={detail}
+          onClose={() => setDetail(null)}
+          onOwnerResolved={setOwnerForLead}
+        />
+      )}
     </>
+  );
+}
+
+// Detail popup for a queued lead — the Call Queue mirror of the prospect card's
+// SuggestionDetailModal. Read-only: shows the find, contact rows (incl. the owner
+// to ask for), and a Maps link. Opens when a row's business name is clicked.
+function QueueDetailModal({
+  lead,
+  onClose,
+  onOwnerResolved,
+}: {
+  lead: QueueLead;
+  onClose: () => void;
+  onOwnerResolved: (id: string, ownerName: string) => void;
+}) {
+  const e = lead.enrichment;
+
+  // Resolve the owner on open if we don't already have one (same free single-site
+  // read the prospect card uses; cached back to the row via onOwnerResolved).
+  const [owner, setOwner] = useState<string | null>(e.ownerName);
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  useEffect(() => {
+    setOwner(e.ownerName);
+    // Resolve on open (site first, then a "<name> <city> owner" web search), so we
+    // attempt even without a website — search only needs the name + city.
+    if (e.ownerName) return;
+    let cancelled = false;
+    setOwnerLoading(true);
+    fetch("/api/opportunities/owner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: lead.id }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.ownerName) {
+          setOwner(d.ownerName as string);
+          onOwnerResolved(lead.id, d.ownerName as string);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setOwnerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead.id, e.ownerName, onOwnerResolved]);
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(3px)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        animation: "lg-fade-up 0.14s ease-out",
+      }}
+    >
+      <div
+        onClick={(ev) => ev.stopPropagation()}
+        className="surface"
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "88vh",
+          overflowY: "auto",
+          padding: 0,
+          borderRadius: 16,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="grid place-items-center"
+          style={{
+            position: "absolute",
+            top: 14,
+            right: 14,
+            zIndex: 2,
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            background: "rgba(0,0,0,0.4)",
+            border: "1px solid var(--line)",
+            color: "var(--text-2)",
+            cursor: "pointer",
+          }}
+        >
+          <X size={15} strokeWidth={1.8} />
+        </button>
+
+        <div style={{ padding: "24px 24px 24px" }}>
+          <div
+            className="lg-display"
+            style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}
+          >
+            {lead.name}
+          </div>
+          <div
+            className="flex items-center"
+            style={{ gap: 8, marginTop: 5, fontSize: 12.5, color: "var(--text-3)", flexWrap: "wrap" }}
+          >
+            {lead.industry && <span>{lead.industry}</span>}
+            {lead.industry && lead.city && <span style={{ color: "var(--text-4)" }}>·</span>}
+            {lead.city && (
+              <span className="flex items-center" style={{ gap: 4 }}>
+                <MapPin size={12} strokeWidth={1.7} /> {lead.city}
+              </span>
+            )}
+          </div>
+
+          {(e.rating != null || e.reviewCount != null) && (
+            <div
+              className="flex items-center"
+              style={{ gap: 10, marginTop: 10, fontSize: 13, color: "var(--text-2)" }}
+            >
+              {e.rating != null && (
+                <span className="flex items-center" style={{ gap: 4 }}>
+                  <Star size={13} strokeWidth={1.9} style={{ color: "oklch(0.82 0.14 85)" }} /> {e.rating}
+                </span>
+              )}
+              {e.reviewCount != null && (
+                <>
+                  <span style={{ color: "var(--text-4)" }}>·</span>
+                  <span>{e.reviewCount} reviews</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* The cold-call finding — full, never truncated */}
+          {(e.painPoint || e.outreachAngle) && (
+            <div
+              style={{
+                marginTop: 18,
+                padding: "14px 16px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid var(--line)",
+                borderLeft: "2px solid oklch(0.82 0.14 85)",
+              }}
+            >
+              <div
+                className="lg-mono"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "oklch(0.82 0.14 85)",
+                  marginBottom: 8,
+                }}
+              >
+                The find to open with
+              </div>
+              {e.painPoint && (
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--text)" }}>
+                  {e.painPoint}
+                </p>
+              )}
+              {e.outreachAngle && (
+                <p style={{ margin: e.painPoint ? "10px 0 0" : 0, fontSize: 13, lineHeight: 1.6, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--text-4)" }}>Angle · </span>
+                  {e.outreachAngle}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Contact rows */}
+          <div className="flex flex-col" style={{ gap: 2, marginTop: 16 }}>
+            {lead.phone && (
+              <QueueDetailRow icon={<Phone size={14} strokeWidth={1.6} />} href={`tel:${lead.phone}`} text={lead.phone} />
+            )}
+            <QueueDetailRow
+              icon={<UserRound size={14} strokeWidth={1.6} />}
+              text={owner ? `Ask for ${owner}` : ownerLoading ? "Finding owner…" : "Owner not found"}
+              muted={!owner}
+            />
+            {lead.website && (
+              <QueueDetailRow
+                icon={<Globe size={14} strokeWidth={1.6} />}
+                href={lead.website}
+                text={lead.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                external
+              />
+            )}
+          </div>
+
+          {e.mapsUrl && (
+            <div
+              className="flex items-center"
+              style={{ gap: 8, marginTop: 20, paddingTop: 18, borderTop: "1px solid var(--line)" }}
+            >
+              <a
+                href={e.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center"
+                style={{ gap: 6, marginLeft: "auto", fontSize: 12.5, color: "var(--text-3)", textDecoration: "none" }}
+              >
+                Google Maps <ExternalLink size={12} strokeWidth={1.7} />
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QueueDetailRow({
+  icon,
+  text,
+  href,
+  external,
+  muted,
+}: {
+  icon: React.ReactNode;
+  text: string;
+  href?: string;
+  external?: boolean;
+  muted?: boolean;
+}) {
+  const inner = (
+    <div
+      className="flex items-center"
+      style={{
+        gap: 10,
+        padding: "7px 0",
+        fontSize: 13,
+        color: muted ? "var(--text-4)" : href ? "var(--text)" : "var(--text-2)",
+      }}
+    >
+      <span style={{ color: "var(--text-3)", flex: "none" }}>{icon}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
+    </div>
+  );
+  if (!href) return inner;
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      style={{ textDecoration: "none" }}
+    >
+      {inner}
+    </a>
   );
 }
 

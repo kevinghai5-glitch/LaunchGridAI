@@ -50,7 +50,7 @@ export function BusinessSearch({ onResults }: BusinessSearchProps) {
 
   return (
     <div className="glass-card p-6">
-      <h2 className="text-base font-semibold text-white mb-4">Find Local Businesses</h2>
+      <h2 className="text-base font-semibold text-[color:var(--text)] mb-4">Find Local Businesses</h2>
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 space-y-1">
           <Label htmlFor="industry" className="text-xs">Industry</Label>

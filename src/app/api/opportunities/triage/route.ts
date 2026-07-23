@@ -9,8 +9,34 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveOwnersBatch } from "@/lib/owner-name";
 
 export const dynamic = "force-dynamic";
+
+// Owner/decision-maker names are resolved HERE, at approve time — not at
+// generation — because it's a per-site fetch and only the leads you actually keep
+// are worth spending it on. Fired in the background so approve returns instantly;
+// the names cache onto the rows and show up in the Call Queue moments later. A
+// blank owner is fine (verifiable-or-silent), so any failure is swallowed.
+function backfillOwnersInBackground(
+  leads: { id: string; name: string; website: string | null; ownerName: string | null }[]
+): void {
+  const pending = leads.filter((l) => l.website && !l.ownerName);
+  if (pending.length === 0) return;
+  void resolveOwnersBatch(pending)
+    .then(async (owners) => {
+      await Promise.all(
+        owners.map((owner, i) =>
+          owner
+            ? prisma.business
+                .update({ where: { id: pending[i].id }, data: { ownerName: owner } })
+                .catch(() => {})
+            : Promise.resolve()
+        )
+      );
+    })
+    .catch(() => {});
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -33,6 +59,7 @@ export async function POST(req: Request) {
   const where = {
     userId: session.user.id,
     status: "SUGGESTED",
+    deletedAt: null,
     ...(body?.all ? {} : { id: { in: body?.ids ?? [] } }),
   };
 
@@ -55,7 +82,21 @@ export async function POST(req: Request) {
           lastActivityAt: now,
         };
 
+  // For approve, capture the kept leads BEFORE the update (the where-clause filters
+  // on status: SUGGESTED, which the update clears) so we can resolve their owners.
+  const approved =
+    action === "approve"
+      ? await prisma.business.findMany({
+          where,
+          select: { id: true, name: true, website: true, ownerName: true },
+        })
+      : [];
+
   const result = await prisma.business.updateMany({ where, data });
+
+  // Fire-and-forget: resolve owner names for the leads just approved into the
+  // queue. Non-blocking so approve stays instant; names cache in behind it.
+  if (action === "approve") backfillOwnersInBackground(approved);
 
   return NextResponse.json({ updated: result.count, action });
 }

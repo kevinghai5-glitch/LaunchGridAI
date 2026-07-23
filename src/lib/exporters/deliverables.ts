@@ -266,9 +266,11 @@ function renderScorecard(metrics: ScorecardMetric[] | undefined, readout?: strin
 
 // Part C1: the evidence label must match the tier — an industry benchmark is
 // never presented as something "observed" on this business.
-function evidenceLabel(tier: LeakAnalysisItem["evidenceTier"]): string {
-  if (tier === "BENCHMARK") return "Industry pattern";
-  if (tier === "EVIDENCED") return "Signal in your reviews";
+function evidenceLabel(l: LeakAnalysisItem): string {
+  if (l.evidenceTier === "BENCHMARK")
+    // Confirmed at intake → stated as fact, not an unverified benchmark.
+    return l.intakeConfirmed ? "Confirmed at intake" : "Industry pattern";
+  if (l.evidenceTier === "EVIDENCED") return "Signal in your reviews";
   return "What we observed"; // OBSERVED, or unlabeled legacy packs
 }
 
@@ -300,21 +302,29 @@ function statsBlock(l: LeakAnalysisItem): string {
 // the symptom, which lives in the summary slot. OBSERVED/EVIDENCED leaks show the
 // real evidence.
 function leakEvidencePane(l: LeakAnalysisItem): string {
-  const label = `<div class="k">${esc(evidenceLabel(l.evidenceTier))}</div>`;
+  const label = `<div class="k">${esc(evidenceLabel(l))}</div>`;
   let body: string;
   if (l.evidenceTier === "BENCHMARK") {
     const pattern = l.industryPattern?.trim();
-    const kickoff = l.kickoffLine?.trim();
-    body = `${pattern ? para(pattern) : ""}${kickoff ? `<p class="kickoff-line">${esc(kickoff)}</p>` : ""}`;
-    // Fall back to any real evidence only when no pattern/kickoff was stamped.
-    if (!pattern && !kickoff) body = para(l.evidence);
+    if (l.intakeConfirmed) {
+      // Confirmed at intake: state it as fact + the cost context. NO kickoff line
+      // (the client already told us this system is missing — nothing to verify).
+      body = `${para(
+        "Confirmed at intake — you told us this isn't in place, so this isn't a maybe."
+      )}${pattern ? para(pattern) : ""}`;
+    } else {
+      const kickoff = l.kickoffLine?.trim();
+      body = `${pattern ? para(pattern) : ""}${kickoff ? `<p class="kickoff-line">${esc(kickoff)}</p>` : ""}`;
+      // Fall back to any real evidence only when no pattern/kickoff was stamped.
+      if (!pattern && !kickoff) body = para(l.evidence);
+    }
   } else {
     body = para(l.evidence);
   }
   return `<div class="kv">${label}${body}${statsBlock(l)}</div>`;
 }
 
-function renderLeakAnalysis(items: LeakAnalysisItem[] | undefined): string {
+export function renderLeakAnalysis(items: LeakAnalysisItem[] | undefined): string {
   if (!items?.length) return "";
   return items
     .map((l) => {

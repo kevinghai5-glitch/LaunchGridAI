@@ -19,12 +19,12 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LaunchGrid AI — Build AI Systems Local Businesses Will Pay Monthly For",
+  title: "ReclaimedHQ — Build AI Systems Local Businesses Will Pay Monthly For",
   description:
     "Find real local businesses, generate AI-powered Lead & Content systems, send professional proposals, and close monthly recurring clients.",
   keywords: ["AI systems", "local business", "lead generation", "content system", "proposals", "recurring revenue"],
   openGraph: {
-    title: "LaunchGrid AI",
+    title: "ReclaimedHQ",
     description: "Find businesses. Generate AI systems. Send proposals. Get paid monthly.",
     type: "website",
   },

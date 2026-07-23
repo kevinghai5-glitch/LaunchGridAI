@@ -94,6 +94,10 @@ model Business {
   painPoint     String?
   outreachAngle String?
   suggestedOffer String?
+  // Owner / decision-maker name, extracted once at cold-audit time from the
+  // scraped About/Team pages (owner-name.ts). null = unknown or ambiguous — a
+  // wrong name on a cold call is worse than none, so it's silent unless certain.
+  ownerName     String?
   createdAt     DateTime @default(now())
 
   // --- Daily Call Queue (call-tracking) ---
@@ -115,13 +119,55 @@ model Business {
   // provided → REAL mode ("based on the numbers you provided").
   avgClientValueCad Int?                        // average value of one closed customer, CAD
   monthlyLeadVolume Int?                        // inbound inquiries per month
-  monthlyAdSpendCad Int?                        // monthly ad spend, CAD
+  monthlyAdSpendCad Int?                        // monthly ad spend, CAD (legacy; no longer captured in UI)
+
+  // --- Intake system booleans (null = unknown / not asked) ---
+  // Drive REAL-mode leak framing in D1–D4: true suppresses the matching leak,
+  // false renders it "Confirmed at intake", null keeps the benchmark hedge.
+  hasCrm                  Boolean?              // has a CRM / lead-tracking pipeline
+  hasFollowUpSequence     Boolean?              // has an automated follow-up sequence
+  hasReminderSystem       Boolean?              // has an appointment reminder system
+  hasPastCustomerDatabase Boolean?              // has a reachable past-customer list
+  // Services they want more of — from the intake form. COPY EMPHASIS ONLY:
+  // shapes generated wording, never leak selection / tiers / scores / math.
+  servicesFocus           String?
+
+  // --- Intake form: booking / GBP / build priorities (all nullable = not asked) ---
+  // Mirror the ReclaimedHQ client intake form verbatim.
+  // Q "How do people book with you right now?" — "PHONE_EMAIL_ONLY" | "BOOKING_TOOL" | "OTHER".
+  //   Gates no_online_booking: BOOKING_TOOL suppresses (reframe as connect+optimize
+  //   the named tool); PHONE_EMAIL_ONLY confirms the gap (declarative + dollars);
+  //   OTHER/null → hedged + kickoff-verify.
+  bookingMethod           String?
+  bookingToolName         String?               // the "which one" when bookingMethod = BOOKING_TOOL
+  // Q "Do you manage your own Google Business listing?" — "SELF" (Yes) | "NOT_SELF" (No)
+  //   | "SOMEONE_ELSE" (Someone else does) | "NOT_SURE". FRAMING ONLY for the review
+  //   engine — never suppresses review leaks (review data is API-observed regardless).
+  gbpManagement           String?
+  // Q "Which of these do you want PRIORITIZED in your build?" — comma-separated slugs
+  //   from a fixed 10-option checkbox. ORDERING + copy emphasis ONLY for the Blueprint;
+  //   never adds/removes/reweights a leak, score, or dollar figure.
+  buildPriorities         String?
 
   // --- PageSpeed snapshot (Part H3) ---
   // Measured once per business, then reused verbatim across every artifact (cold
   // audit + all deliverables) so PSI numbers never diverge between runs.
   psiSnapshot   Json?                           // serialized PsiBundle
   psiSnapshotAt DateTime?                        // when the snapshot was taken (TTL refresh)
+
+  // --- Research snapshot (determinism fix 2) ---
+  // The full enrichment bundle (native page, Places reviews, competitors,
+  // Firecrawl scrape, DataForSeo) captured ONCE and reused verbatim on every
+  // regenerate. Regenerate alone is a zero-scrape, zero-API-cost operation; fresh
+  // data is a deliberate "refresh research" action, never a side effect. Carries
+  // an `asOf` timestamp that also freezes date-window logic (fix 3).
+  researchSnapshot   Json?                        // serialized ResearchBundle
+  researchSnapshotAt DateTime?                     // when the bundle was captured (TTL + clock freeze)
+
+  // --- Soft delete ---
+  // We NEVER hard-delete. "Clear / Remove / Delete" sets deletedAt; the row stays
+  // in the DB and is filtered out of reads (deletedAt: null). Always recoverable.
+  deletedAt DateTime?
 
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedSystems GeneratedSystem[]
@@ -141,6 +187,8 @@ model GeneratedSystem {
   // rows have a public page.
   publicId   String   @unique @default(cuid())
   createdAt  DateTime @default(now())
+  // Soft delete — never hard-deleted; filtered out of reads via deletedAt: null.
+  deletedAt  DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -173,6 +221,8 @@ model Proposal {
   systemsIncluded  Json     @default("[]")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  // Soft delete — never hard-deleted; filtered out of reads via deletedAt: null.
+  deletedAt        DateTime?
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -189,6 +239,8 @@ model Deal {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Soft delete — never hard-deleted; filtered out of reads via deletedAt: null.
+  deletedAt   DateTime?
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -205,6 +257,8 @@ model CallLog {
   note        String?  // convention: "[objection] | [detail] | [commitment]"
   durationSec Int?
   calledAt    DateTime @default(now())
+  // Soft delete — never hard-deleted; filtered out of reads via deletedAt: null.
+  deletedAt   DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -107,54 +107,115 @@ export function gapsFor(rating: number, reviews: number, hasWebsite: boolean): s
 // ---------------------------------------------------------------------------
 
 // High-ticket, local-service niches whose customer LTV supports a premium
-// retainer for the acquisition system we sell. The picker surfaces a random
-// subset (NICHE_VISIBLE_COUNT) and a shuffle control reshuffles which show.
-export const NICHE_RECOMMENDATIONS: string[] = [
-  "Med Spa",
-  "Cosmetic Dentistry",
-  "Plastic Surgery",
-  "Law Firm",
-  "Roofing",
-  "HVAC",
-  "Solar Installation",
-  "Real Estate Team",
-  "Chiropractic",
-  "Pool & Outdoor Living",
-  "Fitness & Performance",
-  "Veterinary Clinic",
-  "Dental Implants",
-  "Personal Injury Lawyer",
-  "Landscaping & Hardscaping",
-  "Med Spa & Aesthetics",
-  "Orthodontics",
-  "Dermatology",
-  "Physical Therapy",
-  "Pest Control",
-  "Garage Door Services",
-  "Window & Door Replacement",
-  "Kitchen & Bath Remodeling",
-  "Auto Body & Collision",
-  "Med Weight Loss",
-  "IV Therapy & Wellness",
-  "Hair Restoration",
-  "Fertility Clinic",
-  "Bankruptcy Lawyer",
-  "Family Law Firm",
-  "Estate Planning Attorney",
-  "Commercial Cleaning",
-  "Tree Service",
-  "Electrical Contractor",
-  "Plumbing",
-  "Foundation Repair",
+// retainer for the acquisition system we sell. Grouped into categories so the
+// picker can filter (e.g. "just trades") — the shuffle control reshuffles which
+// niches from the active category are shown.
+export interface NicheCategory {
+  id: string;
+  label: string;
+  niches: string[];
+}
+
+export const NICHE_CATEGORIES: NicheCategory[] = [
+  {
+    id: "trades",
+    label: "Trades & Home Services",
+    niches: [
+      "Roofing",
+      "HVAC",
+      "Solar Installation",
+      "Plumbing",
+      "Electrical Contractor",
+      "Landscaping & Hardscaping",
+      "Pest Control",
+      "Garage Door Services",
+      "Window & Door Replacement",
+      "Kitchen & Bath Remodeling",
+      "Tree Service",
+      "Foundation Repair",
+      "Pool & Outdoor Living",
+      "Commercial Cleaning",
+      "Auto Body & Collision",
+    ],
+  },
+  {
+    id: "medical",
+    label: "Medical & Dental",
+    niches: [
+      "Cosmetic Dentistry",
+      "Dental Implants",
+      "Orthodontics",
+      "Chiropractic",
+      "Physical Therapy",
+      "Veterinary Clinic",
+      "Fertility Clinic",
+    ],
+  },
+  {
+    id: "aesthetics",
+    label: "Aesthetics & Wellness",
+    niches: [
+      "Med Spa",
+      "Med Spa & Aesthetics",
+      "Plastic Surgery",
+      "Dermatology",
+      "Med Weight Loss",
+      "IV Therapy & Wellness",
+      "Hair Restoration",
+      "Fitness & Performance",
+    ],
+  },
+  {
+    id: "legal",
+    label: "Legal",
+    niches: [
+      "Law Firm",
+      "Personal Injury Lawyer",
+      "Bankruptcy Lawyer",
+      "Family Law Firm",
+      "Estate Planning Attorney",
+    ],
+  },
+  {
+    id: "realestate",
+    label: "Real Estate & Property",
+    niches: [
+      "Real Estate Team",
+      "Mortgage Broker",
+      "Property Management",
+      "Custom Home Builder",
+    ],
+  },
+  {
+    id: "boutique",
+    label: "Boutique & Lifestyle",
+    niches: [
+      "Salon & Spa",
+      "Boutique Fitness Studio",
+      "Bridal Boutique",
+      "Interior Design Studio",
+      "Pet Grooming & Boarding",
+      "Photography Studio",
+    ],
+  },
 ];
+
+// Flat pool (all categories) — kept for back-compat and the "All" filter.
+export const NICHE_RECOMMENDATIONS: string[] = NICHE_CATEGORIES.flatMap((c) => c.niches);
 
 // How many recommended-niche chips to surface in the picker at once.
 export const NICHE_VISIBLE_COUNT = 12;
 
 // Return a fresh random subset of the recommendation pool. Powers the picker's
-// shuffle control. Falls back to the whole pool if it's smaller than `count`.
-export function sampleNiches(count = NICHE_VISIBLE_COUNT): string[] {
-  const pool = [...NICHE_RECOMMENDATIONS];
+// shuffle control. Pass a categoryId to restrict the pool to one category
+// (falls back to the whole pool for "all" / unknown). Falls back to the whole
+// pool if it's smaller than `count`.
+export function sampleNiches(count = NICHE_VISIBLE_COUNT, categoryId?: string): string[] {
+  const source =
+    categoryId && categoryId !== "all"
+      ? NICHE_CATEGORIES.find((c) => c.id === categoryId)?.niches ?? NICHE_RECOMMENDATIONS
+      : NICHE_RECOMMENDATIONS;
+  const pool = [...source];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];

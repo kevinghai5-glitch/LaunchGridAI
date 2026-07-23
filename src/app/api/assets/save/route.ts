@@ -29,17 +29,20 @@ export async function POST(req: NextRequest) {
   }
 
   const business = await prisma.business.findFirst({
-    where: { id: businessId, userId: session.user.id },
+    where: { id: businessId, userId: session.user.id, deletedAt: null },
     select: { id: true },
   });
   if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  // One saved pack per business: clear prior saves, then store the latest.
+  // One saved pack per business: SOFT-delete prior saves (never hard-delete — the
+  // old packs stay in the DB, filtered out of reads via deletedAt: null), then
+  // store the latest.
   const [, system] = await prisma.$transaction([
-    prisma.generatedSystem.deleteMany({
-      where: { businessId: business.id, userId: session.user.id, type: "ASSETS" },
+    prisma.generatedSystem.updateMany({
+      where: { businessId: business.id, userId: session.user.id, type: "ASSETS", deletedAt: null },
+      data: { deletedAt: new Date() },
     }),
     prisma.generatedSystem.create({
       data: {

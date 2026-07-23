@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     const business = await prisma.business.findFirst({
-      where: { id: parsed.data.businessId, userId: session.user.id },
+      where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
     });
 
     if (!business) {

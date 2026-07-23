@@ -178,7 +178,7 @@ export function ZoomRoomView() {
                 marginTop: 16,
                 padding: "9px 16px",
                 borderRadius: 9,
-                background: "var(--accent)",
+                background: "var(--accent-grad)",
                 border: "1px solid var(--accent)",
                 color: "#fff",
                 fontSize: 13,

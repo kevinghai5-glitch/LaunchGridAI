@@ -68,10 +68,11 @@ export async function GET(req: Request) {
       userId: session.user.id,
       status: { in: ["BOOKED_ZOOM", "CALLBACK"] },
       nextActionAt: { gte: from, lte: to },
+      deletedAt: null,
     },
     include: {
       generatedSystems: {
-        where: { type: "COLD_AUDIT" },
+        where: { type: "COLD_AUDIT", deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { content: true },
@@ -112,7 +113,7 @@ export async function GET(req: Request) {
   // all-day lane. Cold calls have no individual time slot, so they all attribute
   // to "today" (the only day they're actionable from the burn-down list).
   const callable = await prisma.business.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     select: { status: true, nextActionAt: true, followUpUntil: true },
   });
   const coldCount = callable.filter((b) =>

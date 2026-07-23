@@ -451,6 +451,58 @@ test("Part C2: a BENCHMARK leak carrying the kickoff line passes", () => {
   assert.strictEqual(checkLevel(packWithBenchmarkLeak(true), "Part C · kickoff line"), "pass");
 });
 
+// Determinism fix 1 — the stamped dollarImpact range must match the leak's own
+// mathFrame (and the allowed-number set when threaded in). A model integer that
+// contradicts either is caught.
+function packWithDollar(low: number, high: number, frame: string): AssetPack {
+  return {
+    intelligence: {
+      executiveSummary: { narrative: "", biggestOpportunities: [], biggestThreats: [], mostUrgentFixes: [], quickWins: [] },
+      scorecard: { overallReadout: "", metrics: [] },
+      leakAnalysis: [
+        {
+          area: "Speed-to-Lead",
+          evidenceTier: "BENCHMARK",
+          evidence: "Industry pattern",
+          explanation: "…comes off the list",
+          businessImpact: "Lost calls",
+          dollarImpact: { leadVolumeBasis: "Assuming 20 inquiries/mo", effectSize: "32% missed", avgValueBasis: "$84 benchmark", monthlyLow: low, monthlyHigh: high, formula: "20 × 32% × $84 = $538/mo", usesBenchmarkValue: true },
+          mathFrame: frame,
+          difficulty: "low",
+          priority: "high",
+          recommendedFix: "",
+          owner: "us",
+        },
+      ],
+      fastestWins: [],
+      strategicRecommendations: [],
+    },
+  } as unknown as AssetPack;
+}
+
+test("Fix1: dollarImpact range matching the mathFrame passes the determinism guard", () => {
+  const pack = packWithDollar(538, 538, "≈ $538/mo — assuming 20 inquiries/mo …");
+  assert.strictEqual(checkLevel(pack, "Facts · dollar determinism"), "pass");
+});
+
+test("Fix1: a model integer not present in the mathFrame fails the determinism guard", () => {
+  const pack = packWithDollar(999, 999, "≈ $538/mo — assuming 20 inquiries/mo …");
+  assert.strictEqual(checkLevel(pack, "Facts · dollar determinism"), "fail");
+});
+
+test("Fix1: a stamped integer outside the allowed-number set fails when the set is threaded in", () => {
+  // 538 is in the frame (guard a passes) but NOT in the allowed set (guard b fails).
+  const pack = packWithDollar(538, 538, "≈ $538/mo — assuming 20 inquiries/mo …");
+  const level = validatePack(pack, [20, 32, 84]).checks.find((c) => c.law === "Facts · dollar determinism")?.level;
+  assert.strictEqual(level, "fail");
+});
+
+test("Fix1: a stamped integer inside the allowed-number set passes with the set threaded in", () => {
+  const pack = packWithDollar(538, 538, "≈ $538/mo — assuming 20 inquiries/mo …");
+  const level = validatePack(pack, [20, 32, 84, 538]).checks.find((c) => c.law === "Facts · dollar determinism")?.level;
+  assert.strictEqual(level, "pass");
+});
+
 // ── summary ────────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

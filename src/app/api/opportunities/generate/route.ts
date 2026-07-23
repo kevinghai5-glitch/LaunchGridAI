@@ -30,18 +30,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "niche is required" }, { status: 400 });
   }
 
-  // Dedup set: every Place this operator has saved, plus places declined inside
-  // the cooldown window (declined-long-ago prospects are allowed to resurface).
+  // Dedup set: EVERY Place this operator has ever seen — including cleared/removed
+  // (soft-deleted) rows. A lead you cleared or removed must NEVER come back as a
+  // fresh SUGGESTED lead on the next generation; excluding only live rows was the
+  // bug that resurrected cleared leads and created duplicate rows (16× the same
+  // business). So we scan ALL rows (no deletedAt filter) and exclude their Places.
+  //
+  // The ONE intentional exception is the decline cooldown: a still-live DECLINED
+  // lead whose declinedAt is older than the cooldown window is allowed to resurface
+  // (a long-ago "not interested" can be re-approached). A cleared (soft-deleted)
+  // row is never eligible to resurface — clearing means gone.
   const cooldownCutoff = new Date(Date.now() - DECLINE_COOLDOWN_DAYS * 86_400_000);
   const known = await prisma.business.findMany({
     where: { userId: session.user.id },
-    select: { googlePlaceId: true, status: true, declinedAt: true },
+    select: { googlePlaceId: true, status: true, declinedAt: true, deletedAt: true },
   });
   const exclude = new Set<string>();
   for (const b of known) {
     if (!b.googlePlaceId) continue;
-    if (b.status === "DECLINED" && b.declinedAt && b.declinedAt < cooldownCutoff) {
-      continue; // cooled down — eligible to resurface
+    if (!b.deletedAt && b.status === "DECLINED" && b.declinedAt && b.declinedAt < cooldownCutoff) {
+      continue; // live, cooled-down decline — eligible to resurface
     }
     exclude.add(b.googlePlaceId);
   }
@@ -67,6 +75,12 @@ export async function POST(req: Request) {
     });
   }
 
+  // Generation stays FAST: it only sources + scores prospects and writes their
+  // call angle. Owner/decision-maker resolution (a per-site fetch) is deliberately
+  // NOT done here — fanning it across all 30 Places results blew the request
+  // budget and made generation time out. It instead runs when you APPROVE a lead
+  // into the Call Queue (see /api/opportunities/triage), scoped to just the leads
+  // you keep, so the owner is ready by the time you dial without ever slowing this.
   const angles = await writeAngles(prospects, niche);
 
   // Append to (not replace) this niche's SUGGESTED batch. Prospects you've already
@@ -101,7 +115,7 @@ export async function POST(req: Request) {
   });
 
   const leads = await prisma.business.findMany({
-    where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY", industry: niche },
+    where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY", industry: niche, deletedAt: null },
     orderBy: { reviewCount: "asc" },
   });
 

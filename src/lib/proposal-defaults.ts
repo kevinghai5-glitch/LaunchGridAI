@@ -25,7 +25,7 @@ import type {
 import { PRODUCT_NAME, AGENCY_NAME } from "./brand";
 
 export const DEFAULT_SETUP_FEE = 6500; // one-time, CAD
-export const DEFAULT_MONTHLY = 700; // retainer, CAD/mo
+export const DEFAULT_MONTHLY = 1000; // retainer, CAD/mo
 
 function fmtRange(low: number, high: number): string {
   const f = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -294,7 +294,7 @@ export function buildProposalDefaults(
     agencyName: AGENCY_NAME.toLowerCase() === "our team" ? "" : AGENCY_NAME,
     setupFee,
     monthlyPrice,
-    packageOverview: `We build and run a complete conversion system that plugs the leaks above — instant lead response, qualification through ${PRODUCT_NAME}, structured follow-up, and a booking flow that reduces no-shows. You keep your current lead sources; we make far more of them turn into paying jobs.`,
+    packageOverview: `The visible problems in the audit are symptoms — where the leak shows up. What we build and run is the system behind them: instant lead response, qualification through ${PRODUCT_NAME}, structured follow-up, and a booking flow that reduces no-shows. This is not a website redesign; any page we touch changes only because a system fix has to show up somewhere your customers can see it. You keep your current lead sources — we make far more of them turn into paying jobs.`,
     problem,
     deliverables: components,
     roi,
@@ -334,6 +334,10 @@ export function buildProposalDefaults(
       {
         q: "Is this lead generation?",
         a: "No. You already get leads. This system converts more of the leads you already pay for into booked, paying customers — we don't sell traffic, ads, or SEO.",
+      },
+      {
+        q: "Is this a website redesign?",
+        a: "No. The things you can see on the page are just where the leak shows up. What you're buying is the system behind them — instant lead response, qualification, follow-up, and booking. If we change anything on a page, it's because a system fix has to appear somewhere your customers can see it, not to make the site look different.",
       },
       {
         q: "What's the difference between the setup fee and the monthly?",

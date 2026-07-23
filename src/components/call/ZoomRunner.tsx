@@ -175,7 +175,7 @@ export function ZoomRunner({ businessId, business, audit, proposal }: ZoomRunner
                     height: 30,
                     borderRadius: 8,
                     flex: "none",
-                    background: active ? "var(--accent)" : passed ? "var(--money-soft, rgba(52,199,89,0.12))" : "var(--surface-2)",
+                    background: active ? "var(--accent-grad)" : passed ? "var(--money-soft, rgba(52,199,89,0.12))" : "var(--surface-2)",
                     color: active ? "#fff" : passed ? "var(--money)" : "var(--text-3)",
                   }}
                 >
@@ -233,7 +233,7 @@ export function ZoomRunner({ businessId, business, audit, proposal }: ZoomRunner
                 fontWeight: 600,
                 fontFamily: "inherit",
                 cursor: "pointer",
-                background: "var(--accent)",
+                background: "var(--accent-grad)",
                 border: "1px solid var(--accent)",
                 color: "#fff",
               }}

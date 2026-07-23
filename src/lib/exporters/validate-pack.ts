@@ -1,6 +1,6 @@
 // Mechanical validator for the 10 deliverable laws.
 //
-// Turns the structurally-checkable parts of the "LaunchGrid Deliverable
+// Turns the structurally-checkable parts of the "ReclaimedHQ Deliverable
 // Generation System Prompt (v2)" laws into assertions against an AssetPack, so
 // "does this pack satisfy the laws" becomes a testable property instead of a
 // manual eyeball check. Laws that need human/LLM judgement (real-data grounding,
@@ -143,7 +143,10 @@ const OUT_OF_SCOPE_RECO_TERMS = [
 
 // ── the validator ─────────────────────────────────────────────────────────────
 
-export function validatePack(pack: AssetPack): ValidationResult {
+export function validatePack(
+  pack: AssetPack,
+  allowedNumbers?: number[]
+): ValidationResult {
   const checks: LawCheck[] = [];
   const add = (law: string, level: CheckLevel, message: string) =>
     checks.push({ law, level, message });
@@ -218,24 +221,44 @@ export function validatePack(pack: AssetPack): ValidationResult {
   // A benchmark-tier leak isn't externally visible, so it must invite the client
   // to confirm it at kickoff. Signature: the "…comes off the list" tail of the
   // kickoff line survives minor wording drift.
+  // Two disjoint groups of BENCHMARK leaks:
+  //  · hedged (not confirmed at intake) → MUST carry the kickoff-verification line.
+  //  · intake-confirmed → the client told us they lack the system, so it's stated
+  //    as fact and MUST carry the confirmed framing INSTEAD of the kickoff line.
   const KICKOFF_SIGNATURE = /comes off the list|verify (this|it)(?: together)? at kickoff/i;
+  const CONFIRMED_SIGNATURE = /confirmed at intake|you told us/i;
   const benchmarkLeaks = (intel?.leakAnalysis ?? []).filter(
     (l) => l.evidenceTier === "BENCHMARK"
   );
-  const missingKickoff = benchmarkLeaks.filter((l) => {
-    const text = collectStrings(l).join("\n");
-    return !KICKOFF_SIGNATURE.test(text);
-  });
-  if (benchmarkLeaks.length) {
+  const confirmedLeaks = benchmarkLeaks.filter((l) => l.intakeConfirmed);
+  const hedgedLeaks = benchmarkLeaks.filter((l) => !l.intakeConfirmed);
+  const missingKickoff = hedgedLeaks.filter(
+    (l) => !KICKOFF_SIGNATURE.test(collectStrings(l).join("\n"))
+  );
+  const missingConfirmed = confirmedLeaks.filter(
+    (l) => !CONFIRMED_SIGNATURE.test(collectStrings(l).join("\n"))
+  );
+  if (hedgedLeaks.length) {
     if (missingKickoff.length)
       add(
         "Part C · kickoff line",
         "fail",
-        `${missingKickoff.length}/${benchmarkLeaks.length} BENCHMARK leak(s) miss the kickoff-verification line ("…comes off the list"): ${missingKickoff
+        `${missingKickoff.length}/${hedgedLeaks.length} hedged BENCHMARK leak(s) miss the kickoff-verification line ("…comes off the list"): ${missingKickoff
           .map((l) => l.area)
           .join(", ")}.`
       );
-    else add("Part C · kickoff line", "pass", "Every BENCHMARK leak carries the kickoff-verification line.");
+    else add("Part C · kickoff line", "pass", "Every hedged BENCHMARK leak carries the kickoff-verification line.");
+  }
+  if (confirmedLeaks.length) {
+    if (missingConfirmed.length)
+      add(
+        "Part C · intake-confirmed",
+        "fail",
+        `${missingConfirmed.length}/${confirmedLeaks.length} intake-confirmed leak(s) miss the confirmed framing ("Confirmed at intake" / "you told us"): ${missingConfirmed
+          .map((l) => l.area)
+          .join(", ")}.`
+      );
+    else add("Part C · intake-confirmed", "pass", "Every intake-confirmed leak carries the confirmed framing (no kickoff line).");
   }
 
   // ── Part D1 · clean axes read neutral (no fabricated problem) ─────────────────
@@ -321,6 +344,50 @@ export function validatePack(pack: AssetPack): ValidationResult {
     if (volumeUnlabeled)
       add("Law 13 · label volume", "fail", `${volumeUnlabeled}/${leaks.length} leaks cite a lead volume without assumption language ("assuming…/estimate/replace with your actual number") — an invented volume is being presented as fact.`);
     else add("Law 13 · label volume", "pass", "Lead-volume bases read as labeled assumptions, not invented facts.");
+  }
+
+  // ── Facts · dollar determinism ───────────────────────────────────────────────
+  // The dollarImpact range is STAMPED from the deterministic math estimate, never
+  // authored by the model (determinism fix 1). Two guards prove it stayed that way:
+  //  (a) always-on — each monthlyLow/High must appear verbatim in the SAME leak's
+  //      mathFrame, so the gold-callout range can never contradict the frame text.
+  //  (b) belt-and-suspenders — when the fired-leak allowedNumbers set is threaded
+  //      in, every stamped integer must be a member of it. Either failing means a
+  //      model integer leaked into rendered output.
+  const inSet = (n: number): boolean => {
+    if (!allowedNumbers?.length) return true; // set not provided → guard (a) only
+    return allowedNumbers.some((a) => a === n || (a !== 0 && Math.abs(a - n) / a < 0.01));
+  };
+  const inFrame = (n: number, frame: string | undefined): boolean => {
+    if (!frame) return false;
+    return frame.includes(n.toLocaleString("en-US")) || frame.includes(String(n));
+  };
+  let dollarMismatch = 0;
+  let dollarOutOfSet = 0;
+  for (const l of leaks) {
+    const d = l.dollarImpact;
+    if (!d) continue;
+    for (const n of [d.monthlyLow, d.monthlyHigh]) {
+      if (!n) continue;
+      if (!inFrame(n, l.mathFrame)) dollarMismatch++;
+      if (!inSet(n)) dollarOutOfSet++;
+    }
+  }
+  if (leaks.some((l) => l.dollarImpact)) {
+    if (dollarMismatch || dollarOutOfSet)
+      add(
+        "Facts · dollar determinism",
+        "fail",
+        `${dollarMismatch} dollar figure(s) not present in their own mathFrame` +
+          (allowedNumbers?.length ? ` and ${dollarOutOfSet} outside the allowed-number set` : "") +
+          " — a model-authored integer leaked into rendered output."
+      );
+    else
+      add(
+        "Facts · dollar determinism",
+        "pass",
+        `Every stamped dollar figure matches its mathFrame${allowedNumbers?.length ? " and the allowed-number set" : ""}.`
+      );
   }
 
   // ── Law 3 · done-for-you framing + no agency name ────────────────────────────

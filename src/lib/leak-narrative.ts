@@ -19,6 +19,7 @@ import {
   STATS,
   type Stat,
   type EvidenceTier,
+  type EvidenceClass,
   type ScrapeData,
   type Vertical,
 } from "./leak-taxonomy";
@@ -119,8 +120,28 @@ export interface MathEstimate {
    *  off the assumed volume); in REAL mode they bound the client-number estimate. */
   dollarLow?: number;
   dollarHigh?: number;
+  /** Structured, deterministic dollar breakdown — the ONLY source of the rendered
+   *  dollarImpact. The model's integers are never used; these are stamped verbatim
+   *  (Part I, determinism fix 1). Present only when the template produced a $ figure
+   *  (dollarLow/dollarHigh set); null for qualitative frames. Every number here is
+   *  already in `allowedNumbers`, so the range is guaranteed consistent with the
+   *  frame and passes the stat guard + validator containment check. */
+  impact?: MathImpact | null;
   /** Numbers this estimate legitimately introduces (for the stat guard). */
   allowedNumbers: number[];
+}
+
+/** Deterministic dollar breakdown stamped onto a leak's dollarImpact. Field
+ *  shape mirrors the renderer's DollarImpact contract (whole-dollar bounds +
+ *  labeled bases + visible formula). */
+export interface MathImpact {
+  low: number;
+  high: number;
+  leadVolumeBasis: string;
+  effectSize: string;
+  avgValueBasis: string;
+  formula: string;
+  usesBenchmarkValue: boolean;
 }
 
 type MathTemplate = NonNullable<import("./leak-taxonomy").Leak["mathTemplate"]>;
@@ -156,6 +177,15 @@ export function computeMathEstimate(
           frame: `≈ $${low.toLocaleString()}–$${high.toLocaleString()}/mo — based on the numbers you provided: ${intake.monthlyCallVolume} inquiries/mo × a ${missedPct}% ${verticalMissedLabel(v)} missed-call rate (CallRail) × the 85% of missed callers who never call back (CallRail) × a conservative close rate × your $${intake.avgJobValueCad.toLocaleString()} average customer value. Estimated.`,
           dollarLow: low,
           dollarHigh: high,
+          impact: {
+            low,
+            high,
+            leadVolumeBasis: `Based on your ${intake.monthlyCallVolume} inquiries/mo (estimated projection)`,
+            effectSize: `${missedPct}% ${verticalMissedLabel(v)} missed-call rate × the 85% who never call back (CallRail)`,
+            avgValueBasis: `$${intake.avgJobValueCad.toLocaleString()} average customer value — your number`,
+            formula: `${intake.monthlyCallVolume} inquiries × ${missedPct}% missed × 85% no-callback × conservative close × $${intake.avgJobValueCad.toLocaleString()} = $${low.toLocaleString()}–$${high.toLocaleString()}/mo`,
+            usesBenchmarkValue: false,
+          },
           allowedNumbers: [intake.monthlyCallVolume, missedPct, 85, intake.avgJobValueCad, low, high],
         };
       }
@@ -171,6 +201,15 @@ export function computeMathEstimate(
           frame: `≈ $${monthly.toLocaleString()}/mo — assuming ${assumed} inquiries/mo (a conservative assumption) × a ${missedPct}% ${verticalMissedLabel(v)} missed-call rate (CallRail) × $${cpl} replacement cost per lead, an industry benchmark (WordStream). Estimated; we run this with your real numbers at kickoff.`,
           dollarLow: monthly,
           dollarHigh: monthly,
+          impact: {
+            low: monthly,
+            high: monthly,
+            leadVolumeBasis: `Assuming ${assumed} inquiries/mo (a conservative assumption)`,
+            effectSize: `${missedPct}% ${verticalMissedLabel(v)} missed-call rate (CallRail)`,
+            avgValueBasis: `$${cpl} replacement cost per lead — an industry benchmark (WordStream)`,
+            formula: `${assumed} inquiries × ${missedPct}% missed × $${cpl}/lead = $${monthly.toLocaleString()}/mo`,
+            usesBenchmarkValue: true,
+          },
           allowedNumbers: [assumed, missedPct, cpl, monthly],
         };
       }
@@ -209,14 +248,24 @@ export function computeMathEstimate(
       // REAL MODE dollar math.
       if (intake?.avgJobValueCad && intake?.monthlyLeadVolume) {
         const noShowRate = v === "dental" ? 0.15 : v === "med_spa" ? 0.2 : 0.15;
+        const noShowPct = round0(noShowRate * 100);
         const low = round0(intake.monthlyLeadVolume * noShowRate * 0.5 * intake.avgJobValueCad);
         const high = round0(intake.monthlyLeadVolume * noShowRate * intake.avgJobValueCad);
         return {
           mode: "REAL",
-          frame: `≈ $${low.toLocaleString()}–$${high.toLocaleString()}/mo — based on the numbers you provided: ${intake.monthlyLeadVolume} booked/mo × a ${round0(noShowRate * 100)}% no-show rate × your $${intake.avgJobValueCad.toLocaleString()} average customer value. Estimated.`,
+          frame: `≈ $${low.toLocaleString()}–$${high.toLocaleString()}/mo — based on the numbers you provided: ${intake.monthlyLeadVolume} booked/mo × a ${noShowPct}% no-show rate × your $${intake.avgJobValueCad.toLocaleString()} average customer value. Estimated.`,
           dollarLow: low,
           dollarHigh: high,
-          allowedNumbers: [intake.monthlyLeadVolume, round0(noShowRate * 100), intake.avgJobValueCad, low, high],
+          impact: {
+            low,
+            high,
+            leadVolumeBasis: `Based on your ${intake.monthlyLeadVolume} booked/mo (estimated projection)`,
+            effectSize: `${noShowPct}% no-show rate`,
+            avgValueBasis: `$${intake.avgJobValueCad.toLocaleString()} average customer value — your number`,
+            formula: `${intake.monthlyLeadVolume} booked × ${noShowPct}% no-show × $${intake.avgJobValueCad.toLocaleString()} = $${low.toLocaleString()}–$${high.toLocaleString()}/mo`,
+            usesBenchmarkValue: false,
+          },
+          allowedNumbers: [intake.monthlyLeadVolume, noShowPct, intake.avgJobValueCad, low, high],
         };
       }
       // BENCHMARK MODE: quote the in-STATS vertical range, no dollar.
@@ -244,6 +293,10 @@ export interface LeakInput {
   symptom: string;
   revenueMechanism: string;
   tier: EvidenceTier;
+  /** Is the LEAK itself externally observable, or internal to the operation?
+   *  INVISIBLE leaks may only be written as pattern + visible-absence +
+   *  conditional — never a flat operational assertion — regardless of tier. */
+  evidenceClass: EvidenceClass;
   tierPhrasingRule: string;
   evidence: string[];
   /** Allowed stat phrases (Tier A claim; Tier B softFraming only). */
@@ -254,11 +307,19 @@ export interface LeakInput {
   industryPattern: string | null;
   /** Pre-computed, labeled dollar/spend frame — or null (then emit no figure). */
   mathFrame: string | null;
+  /** Deterministic dollar breakdown stamped into dollarImpact (determinism fix 1).
+   *  Null when the frame is qualitative (no $ figure). Its low/high are guaranteed
+   *  consistent with `mathFrame` and present in `allowedNumbersFor`. */
+  dollar: MathImpact | null;
   /** REAL vs BENCHMARK for the dollar frame, or null when there's no frame.
    *  A whole document runs one mode; this lets copy pick the right framing. */
   mathMode: "REAL" | "BENCHMARK" | null;
-  /** The kickoff-verification line, present only for BENCHMARK leaks. */
+  /** The kickoff-verification line, present only for BENCHMARK leaks that were
+   *  NOT confirmed at intake. */
   requiresKickoffLine: boolean;
+  /** The client told us at intake they lack this system → state it as a
+   *  confirmed fact ("Confirmed at intake"), no kickoff line. */
+  intakeConfirmed: boolean;
 }
 
 export function buildLeakInputs(fired: FiredLeak[], data: ScrapeData): LeakInput[] {
@@ -274,6 +335,7 @@ export function buildLeakInputs(fired: FiredLeak[], data: ScrapeData): LeakInput
       symptom: f.leak.symptom,
       revenueMechanism: f.leak.revenueMechanism,
       tier: f.tier,
+      evidenceClass: f.leak.evidenceClass,
       tierPhrasingRule: TIER_PHRASING[f.tier],
       evidence: f.evidence,
       allowedStats,
@@ -284,8 +346,12 @@ export function buildLeakInputs(fired: FiredLeak[], data: ScrapeData): LeakInput
           ? allowedStats.join(" ")
           : null,
       mathFrame: math?.frame ?? null,
+      dollar: math?.impact ?? null,
       mathMode: math?.mode ?? null,
-      requiresKickoffLine: f.tier === "BENCHMARK",
+      // Intake-confirmed BENCHMARK leaks are stated as fact, so they carry the
+      // confirmed framing INSTEAD of the kickoff-verification line.
+      requiresKickoffLine: f.tier === "BENCHMARK" && !f.intakeConfirmed,
+      intakeConfirmed: f.intakeConfirmed ?? false,
     };
   });
 }
@@ -300,14 +366,22 @@ export function leakInputsToPromptBlock(inputs: LeakInput[]): string {
     "",
   ];
   inputs.forEach((li, i) => {
-    lines.push(`${i + 1}. ${li.name}  [tier: ${li.tier}]`);
+    lines.push(`${i + 1}. ${li.name}  [tier: ${li.tier}] [class: ${li.evidenceClass}]`);
     lines.push(`   symptom: ${li.symptom}`);
     lines.push(`   why it costs money (substitute the real evidence magnitudes below for any generic example figure — Part E): ${li.revenueMechanism}`);
     lines.push(`   evidence you may cite: ${li.evidence.length ? li.evidence.join(" · ") : "(none — do not fabricate)"}`);
     lines.push(`   allowed stats (use verbatim meaning, no other numbers): ${li.allowedStats.length ? li.allowedStats.map((s) => `"${s}"`).join(" | ") : "(none — cite no statistics)"}`);
     lines.push(`   dollar/spend framing: ${li.mathFrame ? li.mathFrame : "(no dollar figure — do NOT invent one)"}`);
     lines.push(`   phrasing rule: ${li.tierPhrasingRule}`);
-    if (li.requiresKickoffLine) lines.push(`   MUST end with: "${KICKOFF_VERIFICATION_LINE}"`);
+    if (li.evidenceClass === "INVISIBLE")
+      lines.push(
+        `   INVISIBLE LEAK — this happens INSIDE their operation and CANNOT be seen from a cold scan. Write it ONLY as pattern + visible-absence + conditional. NEVER assert it as an operational fact about THEM ("they receive no follow-up", "your team doesn't return calls", "there is no reminder system"). Allowed shape: name the visible ABSENCE you can see (no public booking path, no "text us" option, a review pattern), then the industry pattern, then a conditional ("if that's how it works today…"). Even when a review lifts this to EVIDENCED, attribute the operational claim to the review signal — do not state it as flat fact.`
+      );
+    if (li.intakeConfirmed)
+      lines.push(
+        `   CONFIRMED AT INTAKE — the client told us they do NOT have this in place. State it as an established fact: drop the "not externally visible" hedging and do NOT add the kickoff-verification line. Frame it as "You told us you don't currently have this — here's what it costs," then give the cost using ONLY the allowed stat/math above.`
+      );
+    else if (li.requiresKickoffLine) lines.push(`   MUST end with: "${KICKOFF_VERIFICATION_LINE}"`);
     lines.push("");
   });
   return lines.join("\n");
@@ -444,6 +518,96 @@ export function voiceLint(text: string): VoiceLintResult {
   const lower = text.toLowerCase();
   const hits = BANNED_WORDS.filter((w) => lower.includes(w));
   return { ok: hits.length === 0, hits };
+}
+
+// ── Flat-assertion lint (Evidence-class honesty for INVISIBLE leaks) ──────────
+// A cold scan cannot see inside the operation, so the audit must never state an
+// INVISIBLE-leak mechanism as a flat operational FACT ("they receive no
+// follow-up", "your team doesn't return calls", "there is no reminder system").
+// Those claims are only defensible as pattern + visible-absence + conditional.
+// This lint flags any sentence that asserts an internal behavior WITHOUT a
+// hedge/evidence qualifier somewhere in the same sentence — the deterministic
+// backstop behind the prompt rule, run at the generation boundary (to trigger a
+// corrective regen) and at render (last-resort guard).
+
+// Operational claims about internal, non-observable behavior. Each is scoped so
+// it can't catch an OBSERVED gap (a missing booking link, a weak CTA): the
+// objects are follow-up / reminders / pipeline / call-answering / recovery.
+const FLAT_ASSERTION_PATTERNS: RegExp[] = [
+  /\b(calls?|inquir(?:y|ies)|leads?)\s+(?:go|going|are|get|gets)\s+(?:unanswered|unreturned|ignored|missed|to voicemail)\b/i,
+  /\b(?:you|they|your team|your staff|the (?:front )?desk|no one|nobody)\s+(?:miss|misses|are missing|don't answer|doesn't answer|do not answer|never answer)\b/i,
+  /\b(?:receive|receives|get|gets)\s+no\s+(?:follow[-\s]?up|second (?:call|touch)|reply|response|callback|call[-\s]?back)\b/i,
+  /\b(?:you|they|your team|your staff|no one|nobody)\s+(?:don't|doesn't|do not|never|fail to|fails to|aren't|isn't|are not|is not)\s+(?:follow(?:ing)?[-\s]?up|following up)\b/i,
+  /\bthere\s+(?:is|'s)\s+no\s+(?:follow[-\s]?up|reminder|nurture|pipeline|crm|recovery|second (?:touch|call)|reactivation)\b/i,
+  /\b(?:you|they)\s+(?:don't|doesn't|do not)\s+(?:send|use|have)\s+(?:a\s+)?(?:reminders?|appointment reminders?|follow[-\s]?ups?|a follow[-\s]?up (?:system|sequence)|a crm|a pipeline)\b/i,
+  /\bno one\s+(?:follows up|calls back|responds|reminds)\b/i,
+];
+
+// A hedge / evidence qualifier ANYWHERE in the sentence licenses the claim —
+// it signals inference, not asserted fact.
+const ASSERTION_QUALIFIERS: RegExp[] = [
+  /\b(?:likely|probably|typically|usually|often|most|many)\b/i,
+  // Claim-level conditionals only ("if that's how it works today") — a bare
+  // temporal "when the team is on a job" does NOT license a flat assertion.
+  /\bif (?:that|this|it'?s|they|you'?re|there'?s)\b/i,
+  /\b(?:may|might|could|would)\b/i,
+  /\bchances are\b/i,
+  /\balmost certainly\b/i,
+  /\bno (?:visible|clear) (?:sign|signal|evidence)\b/i,
+  /\bfrom (?:the )?outside\b/i,
+  /\b(?:can't|cannot|couldn't) see\b/i,
+  /\breviews?\s+(?:mention|suggest|say|point|describe|report)/i,
+  /\b(?:appears?|seems?|looks like|reads? as)\b/i,
+];
+
+export interface FlatAssertionResult {
+  ok: boolean;
+  hits: string[]; // the offending sentence fragments
+}
+
+/** Flag flat operational assertions about invisible internal behavior that lack
+ *  a hedge/evidence qualifier. Questions (the sanctioned vehicle for invisible
+ *  leaks, Law 3) are skipped. */
+export function flatAssertionLint(text: string): FlatAssertionResult {
+  const sentences = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const hits: string[] = [];
+  for (const sentence of sentences) {
+    if (sentence.endsWith("?")) continue; // questions are allowed to probe
+    const asserts = FLAT_ASSERTION_PATTERNS.some((re) => re.test(sentence));
+    if (!asserts) continue;
+    const hedged = ASSERTION_QUALIFIERS.some((re) => re.test(sentence));
+    if (!hedged) hits.push(sentence.slice(0, 120));
+  }
+  return { ok: hits.length === 0, hits };
+}
+
+// Render-time backstop: soften a flat assertion by injecting a leading hedge, so
+// a stale/non-regenerable finding can't ship a bare operational claim. Only used
+// when a corrective regen isn't available (e.g. HTML render of a saved audit).
+// Conservative and grammar-safe: prefixes the sentence with "Likely, " which
+// reads correctly in front of every FLAT_ASSERTION_PATTERN subject.
+export function softenFlatAssertions(text: string): string {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  return sentences
+    .map((sentence) => {
+      const trimmed = sentence.trim();
+      if (!trimmed || trimmed.endsWith("?")) return sentence;
+      const asserts = FLAT_ASSERTION_PATTERNS.some((re) => re.test(trimmed));
+      const hedged = ASSERTION_QUALIFIERS.some((re) => re.test(trimmed));
+      if (asserts && !hedged) {
+        return sentence.replace(
+          trimmed,
+          `Likely, ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`
+        );
+      }
+      return sentence;
+    })
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 // ── Invented-offer scrub (Defect 5) ──────────────────────────────────────────

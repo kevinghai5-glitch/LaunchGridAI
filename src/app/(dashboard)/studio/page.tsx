@@ -288,8 +288,12 @@ export default function StudioPage() {
     setColdProgress(null);
   };
 
-  const start = async () => {
+  const start = async (opts?: { refreshResearch?: boolean }) => {
     if (!selected || running) return;
+    // The deliberate "refresh research" action re-scrapes every source and
+    // re-persists the snapshot. A plain (re)generate reuses the stored bundle, so
+    // it's a zero-scrape, zero-API-cost operation that can't drift the facts.
+    const refreshResearch = opts?.refreshResearch === true;
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
@@ -297,13 +301,19 @@ export default function StudioPage() {
     setPack(null);
     setSavedPack(false);
     // Real progress streamed from the server. Starts at 0/10 ("gathering data").
-    setGenProgress({ completed: 0, total: 10, label: "Gathering live site & market data" });
+    setGenProgress({
+      completed: 0,
+      total: 10,
+      label: refreshResearch
+        ? "Refreshing live site & market data"
+        : "Gathering live site & market data",
+    });
 
     try {
       const res = await fetch("/api/generate/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: selected.id }),
+        body: JSON.stringify({ businessId: selected.id, refreshResearch }),
         signal: controller.signal,
       });
       // Early errors (auth / validation / not-found) come back as plain JSON.
@@ -602,14 +612,14 @@ export default function StudioPage() {
                     className="lg-display tnum"
                     style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--money)" }}
                   >
-                    $1k–$2k
+                    $1,000
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>/mo</span>
                   </div>
                 </div>
                 <div className="flex justify-between" style={{ padding: "2px 2px", fontSize: 11.5 }}>
                   <span style={{ color: "var(--text-3)" }}>12-mo deal value</span>
                   <span className="lg-mono tnum" style={{ color: "var(--text)", fontWeight: 500 }}>
-                    $18,500–$30,500
+                    $18,500
                   </span>
                 </div>
               </div>
@@ -638,7 +648,7 @@ export default function StudioPage() {
                     variant="primary"
                     size="lg"
                     icon={busy ? undefined : "sparkles"}
-                    onClick={isAudit ? startCold : start}
+                    onClick={isAudit ? startCold : () => start()}
                     disabled={busy || !selected}
                     style={{
                       width: "100%",
@@ -695,6 +705,31 @@ export default function StudioPage() {
                     ? "A free, specific mini-report to send before you pitch"
                     : "Grounded in their live website + Google Places data"}
                 </div>
+                {/* Regenerate reuses the stored research snapshot (no re-scrape),
+                    so facts never drift between runs. This is the deliberate
+                    escape hatch to pull fresh live data on purpose. */}
+                {!isAudit && !busy && (
+                  <button
+                    onClick={() => start({ refreshResearch: true })}
+                    disabled={!selected}
+                    style={{
+                      width: "100%",
+                      marginTop: 8,
+                      padding: "6px 12px",
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--text-subtle)",
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: selected ? "pointer" : "default",
+                      fontFamily: "inherit",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    Refresh research (re-scrape live data)
+                  </button>
+                )}
               </div>
             </LgCard>
           </div>
@@ -1250,8 +1285,7 @@ function ProgressMeter({ progress }: { progress: GenProgress | null }) {
             inset: 0,
             width: `${pct}%`,
             borderRadius: 999,
-            background:
-              "linear-gradient(90deg, oklch(0.66 0.17 250), oklch(0.62 0.20 286))",
+            background: "var(--accent-grad)",
             boxShadow: "0 0 16px oklch(0.64 0.18 266 / 0.55)",
             transition: "width 0.45s cubic-bezier(0.32, 0.72, 0, 1)",
           }}

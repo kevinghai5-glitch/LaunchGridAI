@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { DashboardBody } from "./DashboardBody";
+import { computeCrmRollup } from "@/lib/crm-rollup";
 
 export const dynamic = "force-dynamic";
 
@@ -38,36 +39,23 @@ export default async function DashboardPage() {
   const [
     businessCount,
     proposalCount,
-    wonDeals,
-    pipelineDeals,
+    rollup,
     recentBusinesses,
-    allDeals,
     recentGenerations,
     recentProposals,
     recentSavedBiz,
     opportunityPool,
   ] = await Promise.all([
-    prisma.business.count({ where: { userId } }),
-    prisma.proposal.count({ where: { userId } }),
-    prisma.deal.findMany({
-      where: { userId, stage: "WON" },
-      select: { monthlyValue: true, updatedAt: true, business: { select: { name: true } } },
-    }),
-    prisma.deal.findMany({
-      where: { userId, stage: { in: ["SYSTEMS_GENERATED", "PROPOSAL_SENT", "FOLLOW_UP"] } },
-      select: { monthlyValue: true, createdAt: true },
-    }),
+    prisma.business.count({ where: { userId, deletedAt: null } }),
+    prisma.proposal.count({ where: { userId, deletedAt: null } }),
+    computeCrmRollup(userId),
     prisma.business.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 4,
     }),
-    prisma.deal.findMany({
-      where: { userId },
-      select: { stage: true, monthlyValue: true, businessId: true },
-    }),
     prisma.generatedSystem.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 6,
       select: {
@@ -78,7 +66,7 @@ export default async function DashboardPage() {
       },
     }),
     prisma.proposal.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 6,
       select: {
@@ -89,13 +77,13 @@ export default async function DashboardPage() {
       },
     }),
     prisma.business.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 6,
       select: { name: true, city: true, address: true, createdAt: true },
     }),
     prisma.business.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: 60,
       select: {
@@ -110,23 +98,18 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const totalMRR = wonDeals.reduce((s, d) => s + d.monthlyValue, 0);
-  const pipelineMRR = pipelineDeals.reduce((s, d) => s + d.monthlyValue, 0);
-  const wonCount = wonDeals.length;
+  const totalMRR = rollup.totalMRR;
+  const pipelineMRR = rollup.pipelineMRR;
+  const wonCount = rollup.activeClients;
   const firstName = session.user.name?.split(" ")[0] ?? "there";
 
-  const stageCounts = allDeals.reduce((acc, d) => {
-    acc[d.stage] = (acc[d.stage] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const stageCounts = rollup.stageCounts;
 
   // ---- Real sparklines (cumulative MRR / pipeline over deal history) ----
   const sparkMRR = cumulativeSeries(
-    wonDeals.map((d) => ({ at: d.updatedAt, value: d.monthlyValue }))
+    rollup.won.map((w) => ({ at: w.at, value: w.monthlyValue }))
   );
-  const sparkPipe = cumulativeSeries(
-    pipelineDeals.map((d) => ({ at: d.createdAt, value: d.monthlyValue }))
-  );
+  const sparkPipe = cumulativeSeries(rollup.pipelinePoints);
 
   // ---- Real unified activity feed ----
   type Activity = {
@@ -140,14 +123,14 @@ export default async function DashboardPage() {
   };
   const events: Activity[] = [];
 
-  for (const d of wonDeals) {
+  for (const d of rollup.won) {
     events.push({
       kind: "signed",
       tone: "money",
-      actor: d.business?.name ?? "A client",
+      actor: d.name,
       what: `signed · $${d.monthlyValue.toLocaleString()}/mo`,
-      at: d.updatedAt.getTime(),
-      when: relTime(d.updatedAt),
+      at: d.at.getTime(),
+      when: relTime(d.at),
       highlight: true,
     });
   }
@@ -225,7 +208,7 @@ export default async function DashboardPage() {
     .slice(0, 3);
 
   // ---- Real recent generations list ----
-  const wonBizIds = new Set(allDeals.filter((d) => d.stage === "WON").map((d) => d.businessId));
+  const wonBizIds = rollup.wonBizIds;
   const generations = recentGenerations.slice(0, 4).map((g) => {
     const label = g.type === "ASSETS" ? "Growth Infrastructure Pack" : g.type === "LEAD" ? "Lead system" : "Content system";
     return {

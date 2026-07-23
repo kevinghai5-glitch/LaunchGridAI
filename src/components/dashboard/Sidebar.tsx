@@ -185,7 +185,7 @@ export function Sidebar({
         }}
       >
         {!collapsed && (
-          <Link href="/" aria-label="LaunchGrid OS home">
+          <Link href="/" aria-label="ReclaimedHQ OS home">
             <Logo textOnly />
           </Link>
         )}
@@ -393,7 +393,6 @@ export function Sidebar({
                     pathname === item.href ||
                     (item.href !== "/dashboard" && pathname?.startsWith(item.href));
                   const Icon = item.icon;
-                  const badge = badgeFor(item.badgeKey);
                   const emphasized = item.primary && !active;
                   return (
                     <Link
@@ -442,7 +441,7 @@ export function Sidebar({
                             width: 3,
                             height: 18,
                             borderRadius: "0 3px 3px 0",
-                            background: SB_BRIGHT,
+                            background: "var(--accent-grad)",
                           }}
                         />
                       )}
@@ -452,42 +451,11 @@ export function Sidebar({
                           strokeWidth={active || item.primary ? 2.1 : 1.85}
                           style={{
                             flex: "none",
-                            color: active || item.primary ? SB_BRIGHT : "var(--text-3)",
+                            color: active ? "var(--accent)" : item.primary ? SB_BRIGHT : "var(--text-3)",
                           }}
                         />
-                        {collapsed && badge !== undefined && badge > 0 && (
-                          <span
-                            aria-hidden
-                            style={{
-                              position: "absolute",
-                              top: -5,
-                              right: -7,
-                              minWidth: 6,
-                              height: 6,
-                              borderRadius: 99,
-                              background: SB_BRIGHT,
-                            }}
-                          />
-                        )}
                       </span>
                       {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-                      {!collapsed && badge !== undefined && badge > 0 && (
-                        <span
-                          className="lg-mono tnum grid place-items-center"
-                          style={{
-                            minWidth: 19,
-                            height: 18,
-                            padding: "0 5px",
-                            fontSize: 10.5,
-                            fontWeight: 600,
-                            borderRadius: 6,
-                            background: active ? SB_BRIGHT : "rgba(255,255,255,0.06)",
-                            color: active ? SB_ON_BRIGHT : "var(--text-3)",
-                          }}
-                        >
-                          {badge}
-                        </span>
-                      )}
                     </Link>
                   );
                 })}

@@ -12,9 +12,9 @@
 
 import { openai, ASSET_MODEL } from "./openai";
 import { intelligenceToPromptBlock } from "./audit-intelligence";
-import { AGENCY_NAME } from "./brand";
+import { AGENCY_NAME, SYSTEM_FRAMING } from "./brand";
 import { enforceColdAuditLaws } from "./exporters/cold-audit-html";
-import { statGuard, voiceLint } from "./leak-narrative";
+import { statGuard, voiceLint, flatAssertionLint } from "./leak-narrative";
 import type { GenerationContext } from "./asset-generation";
 import type { ColdAuditReport, ColdAuditFinding } from "@/types";
 
@@ -55,6 +55,9 @@ NON-NEGOTIABLE LAWS (follow strictly):
 - LAW 9 PLAIN LANGUAGE: the reader is non-technical. Explain any jargon inline in one short plain clause the FIRST time it appears (e.g. "your mobile page takes 4.5 seconds to load — slow enough that many people leave before they see you").
 - LAW 10 CTA = PIVOT TO THE OFFER, NEVER FREEBIES: closingCta opens the door to the paid engagement, not more free help. Good: "This is a fraction of what I found — want me to walk you through everything that's leaking and what fixing it looks like?" FORBIDDEN: offering to send free fixes, tips, or "quick wins".
 - LAW 11 EVIDENCE-TIER HONESTY: any finding that rests on an INDUSTRY PATTERN rather than something you directly observed (a leak marked [tier: BENCHMARK] in the governed set) MUST lead with the cited industry rate and HEDGE the business-specific claim — you cannot see inside their operation. Shape: "when [plausible business situation], calls likely hit voicemail — and 85% of callers who reach voicemail never call back (CallRail)." Hedged verbs (likely, typically, most) for the business claim; the industry stat is the cited fact, not the business's own number. NEVER assert an internal fact you could not observe from outside (their exact response time, their real close rate, that THEY specifically miss calls). Directly-observed findings (tier OBSERVED) may be stated as fact.
+- LAW 13 INVISIBLE LEAKS ARE NEVER FLAT FACTS: any leak marked [class: INVISIBLE] in the governed set happens INSIDE their operation — a cold scan cannot see it. NEVER write it as an operational fact about THEM ("you receive no follow-up", "your team doesn't return calls", "there is no reminder system", "calls go unanswered"). This is distinct from tier: even if a review lifts an invisible leak to EVIDENCED, attribute the operational claim to the review signal, not to certainty. The ONLY allowed shapes for an invisible leak are (a) a finding written as visible-absence + industry pattern + conditional ("There's no public booking path and no 'text us' option on the site — so every after-hours lead rides on the phone. In [industry], [cited pattern]. If that's how it works today, it's a quiet leak."), or (b) a question in deeperLeakQuestions. A [class: OBSERVED] leak (missing booking link, weak CTA, review counts) may be stated as fact.
+- LAW 12 SYMPTOM, NOT A REDESIGN: every visible thing you name (a buried booking link, a weak hero, a slow page) is the SYMPTOM — the spot where the leak is visible — never the thing you sell. The prospect must NOT walk away thinking "they want to redesign my website." When you pivot (intro, deeperLeakQuestions, closingCta), frame these visible gaps as where a behind-the-scenes acquisition-SYSTEM problem shows up (lead response, follow-up, booking, qualification), not a cosmetic site problem. Never say or imply "redesign", "new look", "refresh", "make it pretty". The frame to leave them with: "you don't have a design problem, you have a leak problem — the page is just where you can see it dripping." (Still withhold the fix — Law 4.)
+${SYSTEM_FRAMING}
 - SCOPE: preview only the leaks the paid product fixes (speed-to-lead, response time, qualification, follow-up, no-shows, on-page conversion/trust). Do NOT pitch lead-gen, SEO, ads, or "visibility/local authority".
 - This is the teaser, not the report: 3-5 findings, the most damaging ONLY. Not comprehensive.
 - BANNED: "unlock", "supercharge", "revolutionary", "game-changing", "10x", "leverage", "synergy", "I hope this email finds you well", and any obvious AI/guru filler.
@@ -158,7 +161,9 @@ SELF-CHECK before returning (fix anything that fails):
 6. Competitors named with real numbers; assumptions labeled (Laws 7, 8).
 7. Any jargon explained inline in plain language (Law 9).
 8. closingCta PIVOTS to the paid engagement — it does NOT offer free fixes, tips, "quick wins", or to "send/share" anything (Law 10).
-9. Any finding on a [tier: BENCHMARK] leak LEADS with the cited industry rate and HEDGES the business claim (likely/typically/most); no internal fact is asserted that the outside scrape could not see (Law 11).`;
+9. Any finding on a [tier: BENCHMARK] leak LEADS with the cited industry rate and HEDGES the business claim (likely/typically/most); no internal fact is asserted that the outside scrape could not see (Law 11).
+9b. No finding on a [class: INVISIBLE] leak states an internal behavior as flat fact ("you receive no follow-up", "calls go unanswered", "there is no reminder system"). Each is written as visible-absence + industry pattern + conditional, or moved into deeperLeakQuestions as a question (Law 13).
+10. Nothing reads as a website redesign / "new look" / cosmetic refresh; every visible gap is framed as the symptom of a behind-the-scenes acquisition-system leak (Law 12).`;
 
   const response = await openai.chat.completions.create({
     model: ASSET_MODEL,
@@ -174,19 +179,34 @@ SELF-CHECK before returning (fix anything that fails):
   // set (stat guard, decision 4) and banned voice tics, and regenerate ONCE with
   // a corrective addendum if it strays. Only runs when leak context is present.
   if (ctx.leaks) {
+    // Flat-assertion lint runs only over the FINDINGS prose (+ the two lead-in
+    // lines). The deeper-leak questions are the sanctioned home for invisible
+    // leaks (Law 3) and the lint skips interrogatives anyway.
+    const findingsText = (o: ColdAuditModelOutput) =>
+      [o.intro, o.headlineCost, ...(o.findings ?? []).flatMap((f) => [f.problem, f.whyItCosts])]
+        .filter(Boolean)
+        .join("\n");
     const check = (o: ColdAuditModelOutput) => {
       const text = coldAuditText(o);
       const stat = statGuard(text, ctx.leaks!.allowedNumbers);
       const voice = voiceLint(text);
-      return { ok: stat.ok && voice.ok, violations: [...stat.violations, ...voice.hits] };
+      const flat = flatAssertionLint(findingsText(o));
+      return {
+        ok: stat.ok && voice.ok && flat.ok,
+        violations: [...stat.violations, ...voice.hits, ...flat.hits],
+        flatHits: flat.hits,
+      };
     };
     const first = check(out);
     if (!first.ok) {
+      const flatNote = first.flatHits.length
+        ? `\n\nSPECIFICALLY: these lines assert an INVISIBLE internal behavior as flat fact — you cannot see inside their operation. Rewrite each as pattern + visible-absence + conditional (name the visible ABSENCE, cite the industry pattern, then hedge with "likely/if that's how it works today"), or move it into deeperLeakQuestions as a question: ${first.flatHits.map((h) => `"${h}"`).join(" ; ")}.`
+        : "";
       const corrective = `${prompt}
 
 ════════ GOVERNANCE CORRECTION (your previous draft violated the rules) ════════
 Your previous draft used disallowed content: ${first.violations.join(", ")}.
-Rewrite it WITHOUT any of those. This is pre-intake — invent NO dollar amounts, percentages, or multipliers; anchor pain to what they already pay per lead (only figures supplied above). Remove the banned words entirely. Return the same JSON shape.`;
+Rewrite it WITHOUT any of those. This is pre-intake — invent NO dollar amounts, percentages, or multipliers; anchor pain to what they already pay per lead (only figures supplied above). Remove the banned words entirely.${flatNote} Return the same JSON shape.`;
       const retryRes = await openai.chat.completions.create({
         model: ASSET_MODEL,
         messages: [{ role: "user", content: corrective }],

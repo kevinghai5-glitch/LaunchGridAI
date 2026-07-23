@@ -45,7 +45,7 @@ export default async function ProposalsPage() {
   if (!session) redirect("/login");
 
   const proposals = await prisma.proposal.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
     include: { business: true },
   });

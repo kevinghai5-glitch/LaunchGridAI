@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * LAUNCHGRID LEAK TAXONOMY — SINGLE SOURCE OF TRUTH
+ * RECLAIMEDHQ LEAK TAXONOMY — SINGLE SOURCE OF TRUTH
  * ============================================================================
  *
  * PURPOSE
@@ -8,7 +8,7 @@
  * (Growth Leak Report, Blueprint, Conversion Asset Pack, 90-Day Roadmap)
  * and the cold audit MUST select exclusively from this list. If a leak is
  * not in this file, it cannot appear in any output. This is what prevents
- * the generator from inventing problems LaunchGrid cannot fix in
+ * the generator from inventing problems ReclaimedHQ cannot fix in
  * GoHighLevel / LeadGate.
  *
  * CORE RULES (enforced by the generator, see claude-code-deliverable-refactor.md)
@@ -19,7 +19,7 @@
  *    benchmark). This is what keeps the output consultant-grade and honest.
  * 4. Every stat comes from STATS (mirrors statistics_database.md). The
  *    generator may NEVER produce a number that is not in STATS.
- * 5. scope: "out_of_scope" leaks are NEVER presented as things LaunchGrid
+ * 5. scope: "out_of_scope" leaks are NEVER presented as things ReclaimedHQ
  *    fixes. They go only into the "Also worth knowing" section.
  *
  * MAINTENANCE
@@ -34,7 +34,7 @@
 
 /* ============================================================================
  * SECTION 1 — INPUT DATA CONTRACT
- * What the LaunchGrid research pipeline already collects per business.
+ * What the ReclaimedHQ research pipeline already collects per business.
  * Claude Code: map these fields onto the real data model in Phase 0 of the
  * refactor task. Rename fields to match the codebase; do not change semantics.
  * ==========================================================================*/
@@ -128,6 +128,10 @@ export interface ScrapeData {
     hasFollowUpSequence?: boolean;
     hasReminderSystem?: boolean;
     hasPastCustomerDatabase?: boolean;
+    /** "How do people book right now?" — gates no_online_booking. */
+    bookingMethod?: "PHONE_EMAIL_ONLY" | "BOOKING_TOOL" | "OTHER";
+    /** The named scheduler when bookingMethod = BOOKING_TOOL (e.g. "Calendly"). */
+    bookingToolName?: string;
   };
 }
 
@@ -162,6 +166,29 @@ export type EvidenceTier =
    *  stop after one or two touches. If that's true here, this is likely the
    *  largest leak on this list." */
   | "BENCHMARK";
+
+/**
+ * EVIDENCE CLASS — is the LEAK ITSELF externally observable from a cold scan, or
+ * does it live inside the operation? This is a PER-LEAK property, distinct from
+ * the per-fire `tier` (which says how provable a specific detection was). A leak
+ * can be INVISIBLE by nature yet still fire at EVIDENCED tier off review proxies.
+ *
+ * It exists to fix a specific defect: the audit stating invisible-system leaks
+ * (missed-call recovery, follow-up) as flat operational FACT — "they receive no
+ * follow-up" — while its own "leaks I can't see from out here" section lists the
+ * same thing. A cold scan cannot see inside their operation, so:
+ *
+ *   OBSERVED  — the gap is directly visible in the scrape: a missing booking
+ *               link, a weak/absent CTA, low review counts, limited GBP hours
+ *               with no public 24/7 capture path. May be stated as fact.
+ *   INVISIBLE — the mechanism is internal: response speed, missed-call recovery,
+ *               follow-up, appointment reminders, pipeline/CRM, database
+ *               reactivation, call tracking, social-DM response behavior,
+ *               deposit/payment friction. It may ONLY be written as
+ *               pattern + visible-absence + conditional (never a flat operational
+ *               assertion), even when a review proxy lifts its fire to EVIDENCED.
+ */
+export type EvidenceClass = "OBSERVED" | "INVISIBLE";
 
 /** Ranking multiplier per tier — observed leaks outrank guessed ones. */
 export const TIER_MULTIPLIER: Record<EvidenceTier, number> = {
@@ -408,7 +435,7 @@ export type Scope =
   | "ghl"
   /** Fixed by deploying LeadGate on their site/funnel */
   | "leadgate"
-  /** Real problem, NOT something LaunchGrid fixes. "Also worth knowing"
+  /** Real problem, NOT something ReclaimedHQ fixes. "Also worth knowing"
    *  section ONLY. Never a recommendation, never in the roadmap. */
   | "out_of_scope";
 
@@ -443,6 +470,10 @@ export interface Leak {
   name: string;
   scope: Scope;
   scorecardArea: ScorecardArea | null; // null for out_of_scope
+  /** Is the gap externally observable from a cold scan, or internal to the
+   *  operation? Drives the narrative honesty rule for INVISIBLE leaks
+   *  (pattern + visible-absence + conditional only). See EvidenceClass. */
+  evidenceClass: EvidenceClass;
   /** What the owner experiences, in plain language. Used as the leak headline. */
   symptom: string;
 
@@ -478,7 +509,7 @@ export interface Leak {
 
   /**
    * THE FIX — exactly what Kevin builds. Maps 1:1 to the DFY build spec
-   * in the LaunchGrid Model. This string flows into the roadmap
+   * in the ReclaimedHQ Model. This string flows into the roadmap
    * ("Fix: ...") and the proposal ("[leak] → [asset] → [effect]").
    */
   ghlFix: {
@@ -521,6 +552,7 @@ export const LEAKS: Leak[] = [
     name: "Slow response to web leads",
     scope: "ghl",
     scorecardArea: "response_speed",
+    evidenceClass: "INVISIBLE", // response latency is internal; reviews only proxy it
     symptom:
       "Someone fills out the website form and waits hours — or days — for a reply. By then they've called someone else.",
     detection: [
@@ -569,6 +601,7 @@ export const LEAKS: Leak[] = [
     name: "Missed calls with no recovery",
     scope: "ghl",
     scorecardArea: "call_capture",
+    evidenceClass: "INVISIBLE", // whether calls are missed/recovered is internal; reviews only proxy it
     symptom:
       "Calls hit voicemail when the team is on a job, with a patient, or in court — and nothing happens next. The caller dials the next business on the list.",
     detection: [
@@ -618,6 +651,11 @@ export const LEAKS: Leak[] = [
     name: "No after-hours capture",
     scope: "ghl",
     scorecardArea: "after_hours_coverage",
+    // SPLIT LEAK: the ABSENCE of a public 24/7 capture path (limited hours + no
+    // booking link + no chat) IS observable, so the class is OBSERVED. But what
+    // happens to an after-hours caller (do they get a response?) is INVISIBLE and
+    // must stay hedged in the narrative — never assert their after-hours handling.
+    evidenceClass: "OBSERVED",
     symptom:
       "Demand doesn't stop at 5pm — a big share of calls and inquiries arrive evenings and weekends, and right now they land on a closed door.",
     detection: [
@@ -663,6 +701,7 @@ export const LEAKS: Leak[] = [
     name: "No online booking path",
     scope: "ghl",
     scorecardArea: "online_booking",
+    evidenceClass: "OBSERVED", // absence of a booking link/scheduler is directly visible
     symptom:
       "The only way to become a customer is to call during business hours. Anyone who prefers to book online — or is browsing at 9pm — can't.",
     detection: [
@@ -702,6 +741,7 @@ export const LEAKS: Leak[] = [
     name: "No website chat capture",
     scope: "ghl",
     scorecardArea: "call_capture",
+    evidenceClass: "OBSERVED", // presence/absence of a chat widget is directly visible
     symptom:
       "Visitors with a quick question have two options: call, or leave. There's no low-friction way to start a conversation from the site.",
     detection: [
@@ -729,6 +769,10 @@ export const LEAKS: Leak[] = [
     name: "No lead qualification at intake",
     scope: "leadgate",
     scorecardArea: "lead_qualification",
+    // OBSERVED when a form exists without qualifying fields (directly visible). The
+    // BENCHMARK branch (all-phone intake) is closer to invisible, but the primary
+    // detection is the observable form, so the leak's class is OBSERVED.
+    evidenceClass: "OBSERVED",
     symptom:
       "Every inquiry — tire-kicker or $20k job — lands in the same pile. The owner spends selling time sorting instead of closing.",
     detection: [
@@ -766,6 +810,7 @@ export const LEAKS: Leak[] = [
     name: "Weak landing page conversion path",
     scope: "ghl",
     scorecardArea: "lead_qualification",
+    evidenceClass: "OBSERVED", // CTA/click-to-call presence on the page is directly visible
     symptom:
       "Traffic arrives, reads, and leaves. The page doesn't tell visitors what to do next — no clear primary action, buried phone number, generic 'contact us'.",
     detection: [
@@ -803,6 +848,7 @@ export const LEAKS: Leak[] = [
     name: "No structured follow-up on unbooked leads",
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
+    evidenceClass: "INVISIBLE", // what they do after a lead goes quiet is internal
     symptom:
       "A lead says 'let me think about it' — and that's the last touch they ever get. No second call, no email, no text.",
     detection: [
@@ -847,6 +893,7 @@ export const LEAKS: Leak[] = [
     name: "No-show exposure on booked appointments",
     scope: "ghl",
     scorecardArea: "show_rate_protection",
+    evidenceClass: "INVISIBLE", // reminder systems + real no-show rate are internal
     symptom:
       "Appointments get booked, then a chunk of them simply don't show — an empty chair or a wasted drive, with no reminder system working to prevent it.",
     detection: [
@@ -892,6 +939,7 @@ export const LEAKS: Leak[] = [
     name: "No pipeline — leads are untracked",
     scope: "ghl",
     scorecardArea: "pipeline_tracking",
+    evidenceClass: "INVISIBLE", // whether they track leads is entirely internal
     symptom:
       "Leads live in a notebook, an inbox, or nowhere. Nobody can say how many inquiries came in last month or what happened to them.",
     detection: [
@@ -920,6 +968,7 @@ export const LEAKS: Leak[] = [
     name: "Dormant customer database",
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
+    evidenceClass: "INVISIBLE", // existence/use of a past-customer list is internal
     symptom:
       "Years of past customers and old quotes sit in a spreadsheet or an inbox — and nobody has contacted them since the job ended.",
     detection: [
@@ -953,6 +1002,7 @@ export const LEAKS: Leak[] = [
     name: "No long-cycle nurture for 'not yet' leads",
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
+    evidenceClass: "INVISIBLE", // long-cycle nurture behavior is internal
     symptom:
       "Leads who said 'not right now' vanish from the system. When their trigger finally hits — the furnace dies, the case becomes urgent — the business isn't in their inbox.",
     detection: [
@@ -984,6 +1034,7 @@ export const LEAKS: Leak[] = [
     name: "Review generation lagging competitors",
     scope: "ghl",
     scorecardArea: "reputation_social_proof",
+    evidenceClass: "OBSERVED", // review counts/recency vs competitors are directly visible
     symptom:
       "Happy customers finish the job and leave — nobody asks them for a review. Meanwhile the competitor down the street adds ten a month.",
     detection: [
@@ -1021,6 +1072,7 @@ export const LEAKS: Leak[] = [
     name: "Reviews left unanswered",
     scope: "ghl",
     scorecardArea: "reputation_social_proof",
+    evidenceClass: "OBSERVED", // owner response rate is directly visible on the listing
     symptom:
       "Customers — including unhappy ones — leave reviews and hear nothing back. Every prospect reading the page sees the silence.",
     detection: [
@@ -1052,6 +1104,9 @@ export const LEAKS: Leak[] = [
     name: "Social DMs outside the system",
     scope: "ghl",
     scorecardArea: "call_capture",
+    // The CHANNEL (FB/IG link) is observed, but DM response behavior is INVISIBLE —
+    // never assert how fast they answer DMs; hedge it as the detection note says.
+    evidenceClass: "INVISIBLE",
     symptom:
       "Facebook and Instagram messages sit in an app nobody checks between jobs. DM inquiries get the slowest response of any channel — or none.",
     detection: [
@@ -1083,6 +1138,7 @@ export const LEAKS: Leak[] = [
     name: "No visibility into call performance",
     scope: "ghl",
     scorecardArea: "pipeline_tracking",
+    evidenceClass: "INVISIBLE", // call-tracking presence is not externally visible
     symptom:
       "Nobody knows how many calls came in last month, how many were missed, or what time of day they're lost. The leak can't be seen, so it can't be managed.",
     detection: [
@@ -1111,6 +1167,7 @@ export const LEAKS: Leak[] = [
     name: "Friction between 'yes' and paid",
     scope: "ghl",
     scorecardArea: "online_booking",
+    evidenceClass: "INVISIBLE", // deposit/payment process is mostly invisible externally
     symptom:
       "A lead agrees to the job — then the deposit means an e-transfer request, a mailed invoice, or 'we'll sort it at the appointment'. Some yeses evaporate in that gap.",
     detection: [
@@ -1138,7 +1195,7 @@ export const LEAKS: Leak[] = [
   },
 
   /* ------------------------------------------------------------------
-   * OUT OF SCOPE — detected, flagged, NEVER sold as a LaunchGrid fix.
+   * OUT OF SCOPE — detected, flagged, NEVER sold as a ReclaimedHQ fix.
    * These appear ONLY in the report's "Also worth knowing" section.
    * They exist because ignoring an obviously slow or dated site would
    * make the report read as blind — but they are not the engagement.
@@ -1148,6 +1205,7 @@ export const LEAKS: Leak[] = [
     name: "Slow site performance",
     scope: "out_of_scope",
     scorecardArea: null,
+    evidenceClass: "OBSERVED", // measured PageSpeed is directly observed
     symptom:
       "The site loads slowly on mobile, which costs some share of visitors before the page even renders.",
     detection: [
@@ -1169,6 +1227,7 @@ export const LEAKS: Leak[] = [
     name: "Site presentation trails competitors",
     scope: "out_of_scope",
     scorecardArea: null,
+    evidenceClass: "OBSERVED", // screenshot comparison is directly observed
     symptom:
       "Side-by-side with local competitors, the site's design reads as noticeably older, which can undercut trust before a word is read.",
     detection: [
@@ -1191,6 +1250,7 @@ export const LEAKS: Leak[] = [
     name: "Google Business Profile visibility gaps",
     scope: "out_of_scope",
     scorecardArea: null,
+    evidenceClass: "OBSERVED", // GBP completeness is directly observed
     symptom:
       "The Google listing is missing elements that affect how often it appears — photos, posts, complete categories.",
     detection: [

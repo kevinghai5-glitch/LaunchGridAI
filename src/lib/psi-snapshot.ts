@@ -26,12 +26,19 @@ interface PsiSnapshotHost {
  *  first run and reusing the identical stored values on every run after (until
  *  the TTL lapses). Guarantees the cold audit and the asset pack render the same
  *  numbers. Persistence failures degrade gracefully to the freshly-measured
- *  bundle. */
-export async function resolvePsiSnapshot(business: PsiSnapshotHost): Promise<PsiBundle> {
+ *  bundle.
+ *
+ *  @param forceRefresh  The deliberate "refresh research" action — re-measure and
+ *                       re-persist even if a fresh snapshot exists. Kept in lockstep
+ *                       with the research snapshot so one refresh busts both. */
+export async function resolvePsiSnapshot(
+  business: PsiSnapshotHost,
+  { forceRefresh = false }: { forceRefresh?: boolean } = {}
+): Promise<PsiBundle> {
   const fresh =
     business.psiSnapshotAt != null &&
     Date.now() - business.psiSnapshotAt.getTime() < PSI_SNAPSHOT_TTL_MS;
-  if (fresh && business.psiSnapshot) {
+  if (!forceRefresh && fresh && business.psiSnapshot) {
     return business.psiSnapshot as PsiBundle;
   }
 

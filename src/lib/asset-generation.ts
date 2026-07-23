@@ -8,7 +8,7 @@
 // intelligence briefing.
 
 import { openai, ASSET_MODEL } from "./openai";
-import { PRODUCT_NAME } from "./brand";
+import { PRODUCT_NAME, SYSTEM_FRAMING } from "./brand";
 import type { AuditIntelligence } from "./audit-intelligence";
 import { intelligenceToPromptBlock } from "./audit-intelligence";
 import type { FiredLeak } from "./leak-detection";
@@ -24,6 +24,7 @@ import {
 import type {
   AssetPack,
   AssetSection,
+  DollarImpact,
   LeakAnalysisItem,
   GrowthAuditFile,
   LeadQualificationFile,
@@ -78,6 +79,24 @@ export interface GenerationContext {
   websiteText: string;
   /** Present once the leak-detection pipeline has run for this business. */
   leaks?: LeakContext;
+  /** Services the client wants more of, from the intake form. COPY EMPHASIS ONLY:
+   *  shapes wording in landing/email/SMS/roadmap copy, never leak facts/math. */
+  servicesFocus?: string;
+  /** TRUE when ANY intake field was provided for this business. When false the
+   *  pack is generated on the pure pre-intake TESTING path and every document
+   *  cover carries an "INTERNAL TEST — generated without client intake" marker. */
+  intakePresent?: boolean;
+  /** Named scheduler the client already uses (intake bookingMethod = BOOKING_TOOL).
+   *  Reframes the booking system as CONNECTING + OPTIMIZING this tool, never adding
+   *  booking they lack. COPY EMPHASIS ONLY. */
+  bookingToolName?: string;
+  /** Who manages the Google Business listing (intake): "SELF" | "NOT_SELF" |
+   *  "SOMEONE_ELSE" | "NOT_SURE". FRAMING ONLY for the review engine — never
+   *  suppresses a review leak or changes any fact/number. */
+  gbpManagement?: string;
+  /** Build features the client asked to prioritize (intake checkbox), already
+   *  mapped to human labels. ORDERING + copy emphasis ONLY for the Blueprint. */
+  buildPriorities?: string[];
 }
 
 // Maps PsiResult → the compact shape we ship in the deliverable JSON.
@@ -100,9 +119,11 @@ BUSINESS MODEL (everything you write must fit this):
 - The offer has TWO parts: (1) a one-time DONE-FOR-YOU setup where WE implement the fixes — the client builds nothing; (2) a monthly QUALIFICATION RETAINER powered by ${PRODUCT_NAME} — the AI lead-qualification + routing engine that runs continuously. That recurring engine is ${PRODUCT_NAME}; name it.
 - The reader has NO team — solo owner or a couple of staff. Never assign work to a "Marketing Team", "Web Dev Team", "Sales Team", "CRM Specialist", or "IT Team".
 
+${SYSTEM_FRAMING}
+
 NON-NEGOTIABLE LAWS:
 1. GROUND EVERYTHING IN REAL DATA. Every quantitative claim traces to a provided input. Never invent a number, competitor, metric, or finding. If data is missing, cut the claim or mark it a stated assumption.
-2. CONVERSION-ONLY SCOPE. Diagnose/fix ONLY the lead→customer path: speed-to-lead, lead qualification, follow-up/nurture, booking, no-show recovery, on-page conversion/trust (hero, CTA, form, mobile speed). Do NOT prescribe lead generation — no paid ads, SEO, social growth, content marketing, "local authority", events, or referral programs. Only allowed exception: review-REQUEST automation after a job, framed as a post-sale trust asset, never a ranking campaign.
+2. CONVERSION-ONLY SCOPE. Diagnose/fix ONLY the lead→customer path: speed-to-lead, lead qualification, follow-up/nurture, booking, no-show recovery, on-page conversion/trust (hero, CTA, form, mobile speed). Do NOT prescribe lead generation — no paid ads, SEO, social growth, content marketing, "local authority", events, or referral programs. Only allowed exception: review-REQUEST automation after a job, framed as a post-sale trust asset, never a ranking campaign. NOT A REDESIGN: any on-page fix (hero, CTA, form, page) is framed as the visible surface of a system fix — the acquisition system is the deliverable, never a cosmetic "redesign", "new look", or "refresh". Never imply the client is buying a prettier website.
 3. DONE-FOR-YOU FRAMING. WE implement everything. Frame fixes as "here's what we deploy for you," not "here's what you should build." Owner is "us" for everything implemented; "you" ONLY for genuine human-judgment steps (showing up to the consult, answering a qualified lead, approving copy). Never assign tasks to roles a small local business does not have.
 4. POSITION THE RETAINER. The lead-qualification + routing layer IS ${PRODUCT_NAME}. Name it. Make clear it RUNS CONTINUOUSLY and is what the monthly retainer pays for — distinct from the one-time setup.
 5. USE ONLY THE PROVIDED FIGURES. Every dollar amount, percentage, and multiplier you print MUST come verbatim from the leak-analysis block supplied to you (its pre-computed math and allowed numbers). NEVER invent, derive, or estimate your own figure. If a leak has no supplied dollar figure, describe the leak qualitatively and spend-anchor it ("this is leaking a share of what you already pay per lead") — do NOT attach a fabricated revenue number. Pre-intake, make ZERO claims about the client's revenue; frame impact against their ad spend / industry cost-per-lead only. When a figure IS supplied, show it with the labeled math beside it.
@@ -155,7 +176,7 @@ function profileBlock(b: BusinessProfile, websiteText: string): string {
   return block;
 }
 
-function contextHeader(ctx: GenerationContext): string {
+export function contextHeader(ctx: GenerationContext): string {
   const parts = [
     profileBlock(ctx.business, ctx.websiteText),
     "",
@@ -172,6 +193,40 @@ function contextHeader(ctx: GenerationContext): string {
         `OUT OF SCOPE (mention ONLY under an "Also worth knowing" aside — observed data + framing, NEVER as a core leak, NEVER with a dollar figure, and NEVER with a fix or recommendation attached): ${names}`
       );
     }
+  }
+  if (ctx.servicesFocus) {
+    parts.push(
+      "",
+      `COPY EMPHASIS — SERVICES THEY WANT MORE OF (from the client's intake form): "${ctx.servicesFocus}". Where it reads naturally, let landing-page headlines/CTAs and the email/SMS examples speak to these services, and use them as concrete examples in the blueprint/roadmap. HARD BOUNDARY — WORDING ONLY: this changes phrasing, never facts. It must NOT add, remove, or reweight any leak, and must NOT change any score, tier, dollar figure, statistic, or calculation — the governed leak set above is the sole authority on what is wrong and what it costs. Never invent a fact, number, offer, or claim about these services; only the leaks and figures already supplied may be stated.`
+    );
+  }
+  if (ctx.bookingToolName) {
+    parts.push(
+      "",
+      `BOOKING — TOOL ALREADY IN PLACE (from intake): the client already takes bookings through ${ctx.bookingToolName}. Frame the booking system as CONNECTING and OPTIMIZING ${ctx.bookingToolName} into the lead flow (wiring it to instant response, reminders, and no-show recovery) — NEVER as adding online booking they lack, and NEVER say "you have no booking". They have booking; the work is integration and conversion. WORDING ONLY: do not add/remove/reweight any leak or change any figure.`
+    );
+  }
+  if (ctx.gbpManagement) {
+    const gbpLine =
+      ctx.gbpManagement === "SELF"
+        ? "The client manages their own Google Business listing, so review-request automation is framed as YOU approving/sending the requests — you own the listing."
+        : ctx.gbpManagement === "SOMEONE_ELSE"
+        ? "Someone else manages the client's Google Business listing, so frame review-request automation as us COORDINATING with whoever manages their listing to connect it."
+        : ctx.gbpManagement === "NOT_SELF"
+        ? "The client does not manage their own Google Business listing, so frame review-request automation as us confirming who controls the listing and coordinating access to connect it."
+        : "It's not yet confirmed who manages the client's Google Business listing — note that ownership of the listing is verified at kickoff before the review engine is connected.";
+    parts.push(
+      "",
+      `GBP MANAGEMENT — REVIEW-ENGINE FRAMING ONLY (from intake): ${gbpLine} HARD BOUNDARY: this changes ONLY how the review-request work is framed — it must NOT suppress, add, or reweight any review leak or change any score/figure. Review findings come from observed review data regardless of who manages the listing.`
+    );
+  }
+  if (ctx.buildPriorities?.length) {
+    parts.push(
+      "",
+      `BUILD PRIORITIES — ORDERING & EMPHASIS ONLY (from the client's intake checkbox): the client asked to prioritize these systems first, in this order — ${ctx.buildPriorities.join(
+        " · "
+      )}. In the Blueprint and the roadmap, lead with and give more detail to the items that match these priorities (wire the checked doors first). HARD BOUNDARY — ORDERING/WORDING ONLY: this changes sequence and emphasis, never facts. It must NOT add, remove, or reweight any leak, and must NOT change any score, tier, dollar figure, or calculation. The governed leak set above remains the sole authority on what is wrong and what it costs.`
+    );
   }
   return parts.join("\n");
 }
@@ -720,24 +775,6 @@ function normLeak(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-// Law 13 enforcement at the output boundary: a leadVolumeBasis that cites a
-// number MUST read as a labeled assumption, never an invented fact. The model is
-// inconsistent about this ("Assuming 20 inquiries/mo" vs a bare "20 inquiries/mo"),
-// so we stamp the label deterministically rather than trust it. Same prefix set
-// the validator recognizes (leading \b, no trailing boundary so "assum" catches
-// "assuming").
-const ASSUME_WORDS_RE =
-  /\b(assum|estimat|replace with|benchmark|typical|conservativ|industry)/i;
-function labelDollarImpact<T extends { leadVolumeBasis?: string } | undefined>(
-  d: T
-): T {
-  if (!d) return d;
-  const basis = d.leadVolumeBasis ?? "";
-  if (/\d/.test(basis) && !ASSUME_WORDS_RE.test(basis))
-    return { ...d, leadVolumeBasis: `Assuming ${basis.trim()}` };
-  return d;
-}
-
 function leakTokenOverlap(a: string, b: string): number {
   const bs = new Set(normLeak(b).split(" ").filter((w) => w.length > 2));
   return normLeak(a)
@@ -745,7 +782,7 @@ function leakTokenOverlap(a: string, b: string): number {
     .filter((w) => w.length > 2 && bs.has(w)).length;
 }
 
-function stampLeakAnalysis(
+export function stampLeakAnalysis(
   intel: GrowthIntelligence,
   inputs: LeakInput[]
 ): GrowthIntelligence {
@@ -787,10 +824,29 @@ function stampLeakAnalysis(
         li.scorecardArea
       : "";
 
+    // The dollar figure is STAMPED from the deterministic math estimate (li.dollar),
+    // never the model's integers (determinism fix 1). The frame and the structured
+    // callout share the same ≤2-per-doc cap and the same source numbers, so the
+    // rendered range is always mathematically consistent with the mathFrame in the
+    // same document. A leak whose $ figure is dropped for the cap loses BOTH the
+    // frame and the callout together.
     let mathFrame: string | undefined = li.mathFrame ?? undefined;
-    if (carriesDollar(li.mathFrame)) {
-      if (dollarFramesLeft > 0) dollarFramesLeft--;
-      else mathFrame = undefined; // drop the dollar figure beyond the 2nd leak
+    let dollarImpact: DollarImpact | undefined;
+    if (li.dollar && carriesDollar(li.mathFrame)) {
+      if (dollarFramesLeft > 0) {
+        dollarFramesLeft--;
+        dollarImpact = {
+          leadVolumeBasis: li.dollar.leadVolumeBasis,
+          effectSize: li.dollar.effectSize,
+          avgValueBasis: li.dollar.avgValueBasis,
+          monthlyLow: li.dollar.low,
+          monthlyHigh: li.dollar.high,
+          formula: li.dollar.formula,
+          usesBenchmarkValue: li.dollar.usesBenchmarkValue,
+        };
+      } else {
+        mathFrame = undefined; // drop the dollar figure beyond the 2nd leak
+      }
     }
 
     return {
@@ -802,7 +858,7 @@ function stampLeakAnalysis(
       evidence: m?.evidence ?? li.evidence.join(" · "),
       explanation: m?.explanation ?? li.revenueMechanism,
       businessImpact: m?.businessImpact ?? li.symptom,
-      dollarImpact: labelDollarImpact(m?.dollarImpact),
+      dollarImpact,
       difficulty: m?.difficulty ?? "medium",
       priority: m?.priority ?? (li.tier === "OBSERVED" ? "high" : "medium"),
       recommendedFix: m?.recommendedFix ?? "",
@@ -812,6 +868,9 @@ function stampLeakAnalysis(
       mathFrame,
       industryPattern: li.industryPattern ?? undefined,
       kickoffLine: li.requiresKickoffLine ? KICKOFF_VERIFICATION_LINE : undefined,
+      // Confirmed-at-intake BENCHMARK leaks render as fact (label + framing) and
+      // carry NO kickoff line — stamped so the renderer + validator agree.
+      intakeConfirmed: li.intakeConfirmed || undefined,
       // Quantifiable = the taxonomy actually gave this leak a stat or a surviving
       // math frame. Uses the POST-cap `mathFrame` so a leak whose dollar figure we
       // intentionally dropped for the ≤2 cap isn't later flagged as unquantified.
@@ -839,7 +898,7 @@ Then a deep GROWTH LEAK ANALYSIS across the conversion path only (speed-to-lead,
 
 Then rank the FASTEST REVENUE WINS by dollar impact ÷ effort. Then STRATEGIC RECOMMENDATIONS framed as the done-for-you scope ("What We Deploy") — name ${PRODUCT_NAME} as the ongoing qualification/routing engine (the retainer). No fluff, no fake statistics, no guarantees.
 
-For dollarImpact: populate it ONLY from a figure supplied in the leak-analysis block. leadVolumeBasis, effectSize, and avgValueBasis restate the supplied bases verbatim; monthlyLow/monthlyHigh are the supplied whole-dollar bounds; formula shows the supplied math. If the block supplies no dollar figure for a leak, omit dollarImpact for that leak rather than inventing one.
+Do NOT author dollarImpact — the dollar range, formula, and bases are computed deterministically and stamped in for you AFTER generation, so any figure you put there is discarded. Omit dollarImpact entirely. When you reference a dollar figure in prose (e.g. the executive summary's #1 leak), use ONLY a figure that appears in the "dollar/spend framing" line of the fired-leak block above — never invent your own.
 
 Return JSON in EXACTLY this shape:
 {
@@ -857,7 +916,7 @@ Return JSON in EXACTLY this shape:
     ]
   },
   "leakAnalysis": [
-    {"area": "Speed-to-Lead", "evidenceTier": "OBSERVED|EVIDENCED|BENCHMARK — copy the [tier: …] of this leak from the governed set above EXACTLY", "evidence": "...", "explanation": "...", "businessImpact": "...", "dollarImpact": {"leadVolumeBasis": "...", "effectSize": "...", "avgValueBasis": "...", "monthlyLow": 0, "monthlyHigh": 0, "formula": "...", "usesBenchmarkValue": true}, "difficulty": "low|medium|high", "priority": "critical|high|medium|low", "recommendedFix": "...", "owner": "us"}
+    {"area": "Speed-to-Lead", "evidenceTier": "OBSERVED|EVIDENCED|BENCHMARK — copy the [tier: …] of this leak from the governed set above EXACTLY", "evidence": "...", "explanation": "...", "businessImpact": "...", "difficulty": "low|medium|high", "priority": "critical|high|medium|low", "recommendedFix": "...", "owner": "us"}
   ],
   "fastestWins": [
     {"opportunity": "...", "impact": "$ range + one phrase", "difficulty": "low|medium|high", "speed": "e.g. under a week"}
@@ -865,7 +924,7 @@ Return JSON in EXACTLY this shape:
   "strategicRecommendations": ["what we deploy — done-for-you scope, ${PRODUCT_NAME} named as the ongoing retainer engine"]
 }
 
-Provide EXACTLY 9 scorecard metrics named and ordered as listed (score left at 0 — it is filled in deterministically). Provide leakAnalysis items covering ONLY the fired leaks from the governed set above, each with a dollarImpact ONLY where a figure was supplied. Provide 4-6 fastestWins and 4-6 strategicRecommendations.`;
+Provide EXACTLY 9 scorecard metrics named and ordered as listed (score left at 0 — it is filled in deterministically). Provide leakAnalysis items covering ONLY the fired leaks from the governed set above (omit dollarImpact — it is stamped in deterministically). Provide 4-6 fastestWins and 4-6 strategicRecommendations.`;
   const intel = await generateGovernedJson<GrowthIntelligence>(
     prompt,
     ctx,
@@ -1116,6 +1175,8 @@ export function buildMeta(ctx: GenerationContext) {
     generatedAt: new Date().toISOString(),
     dataConfidence: i.dataConfidence,
     assumptions: i.assumptions,
+    // No intake at all → mark the pack as an internal test on every cover.
+    internalTest: ctx.intakePresent ? undefined : true,
     signals: {
       websiteScraped: i.website.hasWebsite,
       reviewsAnalyzed: i.reviews.available || Boolean(i.dataForSeo?.reviews.available),

@@ -14,8 +14,8 @@ const toneMap: Record<LgBadgeTone, React.CSSProperties> = {
     border: "1px solid transparent",
   },
   accent: {
-    background: "var(--accent-fill)",
-    color: "var(--accent-fill-text)",
+    background: "var(--accent-grad)",
+    color: "#fff",
     border: "1px solid transparent",
   },
   success: {

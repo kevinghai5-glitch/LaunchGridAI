@@ -7,6 +7,11 @@ import { TopBar } from "@/components/dashboard/TopBar";
 import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
 import type { SavedBusiness } from "@/types";
 import {
+  BOOKING_METHOD_OPTIONS,
+  GBP_MANAGEMENT_OPTIONS,
+  BUILD_PRIORITY_OPTIONS,
+} from "@/lib/intake-options";
+import {
   Search,
   Library as LibraryIcon,
   Sparkles,
@@ -23,6 +28,10 @@ import {
   Layers,
   Loader2,
   Eye,
+  SlidersHorizontal,
+  Check,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 
 type LibraryMode = "workspaces" | "saved";
@@ -60,6 +69,17 @@ interface LibraryItem {
     category: string | null;
     website: string | null;
     photoUrl: string | null;
+    avgClientValueCad: number | null;
+    monthlyLeadVolume: number | null;
+    hasCrm: boolean | null;
+    hasFollowUpSequence: boolean | null;
+    hasReminderSystem: boolean | null;
+    hasPastCustomerDatabase: boolean | null;
+    servicesFocus: string | null;
+    bookingMethod: string | null;
+    bookingToolName: string | null;
+    gbpManagement: string | null;
+    buildPriorities: string | null;
   };
   audits: AuditRow[];
   proposals: ProposalRow[];
@@ -130,12 +150,12 @@ function SectionHead({
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        flexWrap: "wrap",
         gap: 8,
         marginBottom: 12,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <Icon size={14} strokeWidth={1.9} style={{ color: "var(--text-3)" }} />
         <span
           style={{
@@ -163,7 +183,9 @@ function SectionHead({
           {count}
         </span>
       </div>
-      {action}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+        {action}
+      </div>
     </div>
   );
 }
@@ -251,7 +273,7 @@ function InlineProgress({ label, pct }: { label: string; pct?: number }) {
             height: "100%",
             width: pct != null ? `${Math.max(6, Math.min(100, pct))}%` : "100%",
             borderRadius: 999,
-            background: "linear-gradient(90deg, var(--accent), oklch(0.62 0.20 286))",
+            background: "var(--accent-grad)",
             transition: "width .4s cubic-bezier(0.32,0.72,0,1)",
             animation: pct != null ? undefined : "lg-pulse 1.4s ease-in-out infinite",
           }}
@@ -262,32 +284,38 @@ function InlineProgress({ label, pct }: { label: string; pct?: number }) {
 }
 
 // Button twin of MiniAction (same look) that runs an in-place generator.
+// Pass no `label` for an icon-only button (used for secondary actions that need
+// to stay compact so a header's actions fit on one line).
 function MiniButton({
   onClick,
   icon: Icon,
   label,
+  title,
   busy,
 }: {
   onClick: () => void;
   icon: typeof Plus;
-  label: string;
+  label?: string;
+  title?: string;
   busy?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={busy}
+      title={title ?? label}
+      aria-label={title ?? label}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 5,
+        gap: label ? 5 : 0,
         fontSize: 11.5,
         fontWeight: 600,
         color: busy ? "var(--text-2)" : "var(--text-3)",
         background: "transparent",
         border: "1px solid var(--line)",
         borderRadius: 7,
-        padding: "4px 9px",
+        padding: label ? "4px 9px" : "4px 6px",
         cursor: busy ? "default" : "pointer",
         fontFamily: "inherit",
         transition: "color 140ms ease, border-color 140ms ease, background 140ms ease",
@@ -314,14 +342,434 @@ function MiniButton({
   );
 }
 
+// ── Inline intake editor ──────────────────────────────────────────────────────
+// The intake inputs are the ONLY things that change what the D1–D4 deliverables
+// say (confirmed-vs-benchmark framing, leak suppression, services copy emphasis),
+// so they live right next to the Deliverables generate button — not on a separate
+// page. Same save path as everywhere else: PATCH /api/businesses/[id].
+
+type Tri = "yes" | "no" | "unknown";
+const b2tri = (v: boolean | null | undefined): Tri =>
+  v === true ? "yes" : v === false ? "no" : "unknown";
+const tri2bool = (t: Tri): boolean | null =>
+  t === "yes" ? true : t === "no" ? false : null;
+
+const INTAKE_SYSTEMS: { key: "hasCrm" | "hasFollowUpSequence" | "hasReminderSystem" | "hasPastCustomerDatabase"; label: string }[] = [
+  { key: "hasCrm", label: "CRM / lead pipeline" },
+  { key: "hasFollowUpSequence", label: "Automated follow-up" },
+  { key: "hasReminderSystem", label: "Appointment reminders" },
+  { key: "hasPastCustomerDatabase", label: "Past-customer list" },
+];
+
+// Fields the editor can persist. Mirrors the intake slice of updateBusinessSchema.
+type IntakeFields = Pick<
+  LibraryItem["business"],
+  | "avgClientValueCad"
+  | "monthlyLeadVolume"
+  | "hasCrm"
+  | "hasFollowUpSequence"
+  | "hasReminderSystem"
+  | "hasPastCustomerDatabase"
+  | "servicesFocus"
+  | "bookingMethod"
+  | "bookingToolName"
+  | "gbpManagement"
+  | "buildPriorities"
+>;
+
+function IntakeEditor({
+  b,
+  onSaved,
+}: {
+  b: LibraryItem["business"];
+  onSaved: (next: IntakeFields) => void;
+}) {
+  const [systems, setSystems] = useState<Record<string, Tri>>({
+    hasCrm: b2tri(b.hasCrm),
+    hasFollowUpSequence: b2tri(b.hasFollowUpSequence),
+    hasReminderSystem: b2tri(b.hasReminderSystem),
+    hasPastCustomerDatabase: b2tri(b.hasPastCustomerDatabase),
+  });
+  const [focus, setFocus] = useState(b.servicesFocus ?? "");
+  const [avg, setAvg] = useState(b.avgClientValueCad?.toString() ?? "");
+  const [vol, setVol] = useState(b.monthlyLeadVolume?.toString() ?? "");
+  const [booking, setBooking] = useState(b.bookingMethod ?? "");
+  const [bookingTool, setBookingTool] = useState(b.bookingToolName ?? "");
+  const [gbp, setGbp] = useState(b.gbpManagement ?? "");
+  const [priorities, setPriorities] = useState<string[]>(
+    b.buildPriorities ? b.buildPriorities.split(",").map((s) => s.trim()).filter(Boolean) : []
+  );
+  const [saving, setSaving] = useState(false);
+
+  const stored = {
+    systems: {
+      hasCrm: b2tri(b.hasCrm),
+      hasFollowUpSequence: b2tri(b.hasFollowUpSequence),
+      hasReminderSystem: b2tri(b.hasReminderSystem),
+      hasPastCustomerDatabase: b2tri(b.hasPastCustomerDatabase),
+    } as Record<string, Tri>,
+    focus: b.servicesFocus ?? "",
+    avg: b.avgClientValueCad?.toString() ?? "",
+    vol: b.monthlyLeadVolume?.toString() ?? "",
+    booking: b.bookingMethod ?? "",
+    bookingTool: b.bookingToolName ?? "",
+    gbp: b.gbpManagement ?? "",
+    priorities: b.buildPriorities ?? "",
+  };
+  const prioritiesStr = priorities.join(",");
+  const dirty =
+    INTAKE_SYSTEMS.some((q) => systems[q.key] !== stored.systems[q.key]) ||
+    focus.trim() !== stored.focus.trim() ||
+    avg !== stored.avg ||
+    vol !== stored.vol ||
+    booking !== stored.booking ||
+    bookingTool.trim() !== stored.bookingTool.trim() ||
+    gbp !== stored.gbp ||
+    prioritiesStr !== stored.priorities;
+
+  const save = async () => {
+    if (saving || !dirty) return;
+    setSaving(true);
+    const num = (s: string): number | null => {
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const payload = {
+      hasCrm: tri2bool(systems.hasCrm),
+      hasFollowUpSequence: tri2bool(systems.hasFollowUpSequence),
+      hasReminderSystem: tri2bool(systems.hasReminderSystem),
+      hasPastCustomerDatabase: tri2bool(systems.hasPastCustomerDatabase),
+      servicesFocus: focus.trim() ? focus.trim() : null,
+      avgClientValueCad: num(avg),
+      monthlyLeadVolume: num(vol),
+      bookingMethod: booking ? (booking as IntakeFields["bookingMethod"]) : null,
+      // Tool name only means something when they book via a tool.
+      bookingToolName:
+        booking === "BOOKING_TOOL" && bookingTool.trim() ? bookingTool.trim() : null,
+      gbpManagement: gbp ? (gbp as IntakeFields["gbpManagement"]) : null,
+      buildPriorities: prioritiesStr ? prioritiesStr : null,
+    };
+    try {
+      const res = await fetch(`/api/businesses/${b.id}`, {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to save intake");
+        return;
+      }
+      onSaved(payload);
+      toast.success("Intake saved — regenerate to apply");
+    } catch {
+      toast.error("Failed to save intake");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const numInput = (
+    value: string,
+    setter: (v: string) => void,
+    label: string,
+    prefix?: string
+  ) => (
+    <div>
+      <label style={{ fontSize: 11, color: "var(--text-3)", display: "block", marginBottom: 4 }}>
+        {label}
+      </label>
+      <div style={{ position: "relative" }}>
+        {prefix && (
+          <span
+            style={{
+              position: "absolute",
+              left: 9,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "var(--text-subtle)",
+              fontSize: 12,
+              pointerEvents: "none",
+            }}
+          >
+            {prefix}
+          </span>
+        )}
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={value}
+          onChange={(e) => setter(e.target.value)}
+          placeholder="—"
+          style={{
+            width: "100%",
+            borderRadius: 7,
+            border: "1px solid var(--line)",
+            background: "var(--bg-deep)",
+            color: "var(--text)",
+            fontFamily: "inherit",
+            fontSize: 12,
+            padding: prefix ? "6px 9px 6px 18px" : "6px 9px",
+            outline: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.015)",
+        padding: "12px 12px 13px",
+        marginBottom: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 11,
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+        {numInput(avg, setAvg, "Avg. customer value", "$")}
+        {numInput(vol, setVol, "Monthly inquiries")}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
+          Systems already in place
+        </span>
+        {INTAKE_SYSTEMS.map((q) => (
+          <div key={q.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>{q.label}</span>
+            <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)" }}>
+              {(["yes", "no", "unknown"] as const).map((opt) => {
+                const active = systems[q.key] === opt;
+                const text = opt === "yes" ? "Yes" : opt === "no" ? "No" : "?";
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setSystems((prev) => ({ ...prev, [q.key]: opt }))}
+                    style={{
+                      padding: "3px 10px",
+                      fontSize: 11,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      border: "none",
+                      borderLeft: opt === "yes" ? "none" : "1px solid var(--line)",
+                      background: active ? "var(--accent-grad)" : "transparent",
+                      color: active ? "#fff" : "var(--text-3)",
+                    }}
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
+          How do they book right now?
+        </span>
+        <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)", alignSelf: "flex-start" }}>
+          {BOOKING_METHOD_OPTIONS.map((opt, i) => {
+            const active = booking === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setBooking(active ? "" : opt.value)}
+                style={{
+                  padding: "4px 11px",
+                  fontSize: 11,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  border: "none",
+                  borderLeft: i === 0 ? "none" : "1px solid var(--line)",
+                  background: active ? "var(--accent-grad)" : "transparent",
+                  color: active ? "#fff" : "var(--text-3)",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {booking === "BOOKING_TOOL" && (
+          <input
+            type="text"
+            value={bookingTool}
+            maxLength={120}
+            onChange={(e) => setBookingTool(e.target.value)}
+            placeholder="Which one? e.g. Calendly, Acuity, GHL"
+            style={{
+              width: "100%",
+              borderRadius: 7,
+              border: "1px solid var(--line)",
+              background: "var(--bg-deep)",
+              color: "var(--text)",
+              fontFamily: "inherit",
+              fontSize: 12,
+              padding: "6px 9px",
+              outline: "none",
+            }}
+          />
+        )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>Manages own Google listing?</span>
+        <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)" }}>
+          {GBP_MANAGEMENT_OPTIONS.map((opt, i) => {
+            const active = gbp === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setGbp(active ? "" : opt.value)}
+                style={{
+                  padding: "3px 9px",
+                  fontSize: 11,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  border: "none",
+                  borderLeft: i === 0 ? "none" : "1px solid var(--line)",
+                  background: active ? "var(--accent-grad)" : "transparent",
+                  color: active ? "#fff" : "var(--text-3)",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label style={{ fontSize: 11, color: "var(--text-3)", display: "block", marginBottom: 4 }}>
+          Services they want more of
+        </label>
+        <textarea
+          value={focus}
+          maxLength={300}
+          rows={2}
+          onChange={(e) => setFocus(e.target.value)}
+          placeholder="e.g. emergency drain calls, water heater installs"
+          style={{
+            width: "100%",
+            borderRadius: 7,
+            border: "1px solid var(--line)",
+            background: "var(--bg-deep)",
+            color: "var(--text)",
+            fontFamily: "inherit",
+            fontSize: 12,
+            padding: "6px 9px",
+            outline: "none",
+            resize: "vertical",
+          }}
+        />
+        <p style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 4, lineHeight: 1.5 }}>
+          Copy wording only — never changes which leaks fire, the scores, or the math.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
+          Prioritize in the build
+        </span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {BUILD_PRIORITY_OPTIONS.map((opt) => {
+            const active = priorities.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() =>
+                  setPriorities((prev) =>
+                    prev.includes(opt.value)
+                      ? prev.filter((v) => v !== opt.value)
+                      : [...prev, opt.value]
+                  )
+                }
+                style={{
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`,
+                  background: active ? "var(--accent-grad)" : "transparent",
+                  color: active ? "#fff" : "var(--text-3)",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 2, lineHeight: 1.5 }}>
+          Ordering &amp; emphasis only — wires the checked doors first, never changes leaks or math.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <MiniButton
+          onClick={save}
+          icon={Check}
+          label="Regenerate deliverables"
+          busy={saving}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Compact count/status pill shown on a collapsed panel row.
+function StatChip({
+  icon: Icon,
+  label,
+  on,
+}: {
+  icon: typeof Activity;
+  label: string;
+  on?: boolean;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 11,
+        fontWeight: 600,
+        color: on ? "var(--text-2)" : "var(--text-subtle)",
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid var(--line)",
+        borderRadius: 999,
+        padding: "2px 8px",
+      }}
+    >
+      <Icon size={11} strokeWidth={1.9} />
+      {label}
+    </span>
+  );
+}
+
 // ── Per-business control panel ────────────────────────────────────────────────
 
 function BusinessPanel({
   item,
   onChange,
+  autoGenerate,
 }: {
   item: LibraryItem;
   onChange: (next: LibraryItem) => void;
+  autoGenerate?: boolean;
 }) {
   const b = item.business;
   const niche = b.industry ?? b.category ?? "—";
@@ -334,7 +782,12 @@ function BusinessPanel({
   const [packRunning, setPackRunning] = useState(false);
   const [packProgress, setPackProgress] = useState<{ pct: number; label: string } | null>(null);
   const [proposalRunning, setProposalRunning] = useState(false);
+  const [showIntake, setShowIntake] = useState(false);
+  // Collapsed by default so 50 clients read as 50 scannable rows, not 50 tall
+  // cards. Any in-flight work (generation or the intake editor) forces it open.
+  const [expanded, setExpanded] = useState(false);
   const auditTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const open = expanded || packRunning || auditRunning || proposalRunning || showIntake;
 
   useEffect(
     () => () => {
@@ -532,8 +985,25 @@ function BusinessPanel({
     }
   };
 
+  // Arriving from a "Generate asset pack" button (CRM modal / Opportunities card)
+  // routes here as /library?businessId=…&generate=1. When that flag targets this
+  // panel, open it and immediately kick off the pack — the whole point is to land
+  // the operator on the running generation, not on a page they still have to click.
+  // Fires once, and only when there's no pack yet (an existing pack is left alone
+  // so we never silently overwrite prior work).
+  const autoFired = useRef(false);
+  useEffect(() => {
+    if (autoGenerate && !autoFired.current) {
+      autoFired.current = true;
+      setExpanded(true);
+      if (!item.hasPack && !packRunning) runPack();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGenerate]);
+
   return (
     <div
+      id={`biz-${item.businessId}`}
       style={{
         background: "var(--surface)",
         border: "1px solid var(--line-strong)",
@@ -542,92 +1012,114 @@ function BusinessPanel({
         overflow: "hidden",
       }}
     >
-      {/* Panel header — identity + primary action */}
+      {/* Panel header — click anywhere to expand/collapse the work surface */}
       <div
+        onClick={() => setExpanded((v) => !v)}
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
           gap: 16,
-          padding: "20px 22px",
-          borderBottom: "1px solid var(--line)",
+          padding: "13px 16px",
+          borderBottom: open ? "1px solid var(--line)" : "none",
           background: "rgba(255,255,255,0.012)",
+          cursor: "pointer",
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <h3
-              className="lg-display"
-              style={{
-                margin: 0,
-                fontSize: 19,
-                fontWeight: 500,
-                letterSpacing: "-0.02em",
-                color: "var(--text)",
-                lineHeight: 1.2,
-              }}
-            >
-              {b.name}
-            </h3>
-            {b.website && (
-              <a
-                href={b.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={b.website}
+        <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+          {open ? (
+            <ChevronDown size={16} strokeWidth={2} style={{ color: "var(--text-3)", flex: "none" }} />
+          ) : (
+            <ChevronRight size={16} strokeWidth={2} style={{ color: "var(--text-3)", flex: "none" }} />
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <h3
+                className="lg-display"
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 11.5,
-                  color: "var(--text-3)",
-                  textDecoration: "none",
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 500,
+                  letterSpacing: "-0.02em",
+                  color: "var(--text)",
+                  lineHeight: 1.2,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                <ExternalLink size={12} strokeWidth={1.8} />
-                Site
-              </a>
-            )}
-          </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 6 }}>
-            {b.city ? `${b.city} · ` : ""}
-            <span style={{ textTransform: "capitalize" }}>{niche}</span>
-            <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
-            <span className="lg-mono tnum">Updated {fmtDate(item.lastActivity)}</span>
+                {b.name}
+              </h3>
+              {b.website && (
+                <a
+                  href={b.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={b.website}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 11.5,
+                    color: "var(--text-3)",
+                    textDecoration: "none",
+                    flex: "none",
+                  }}
+                >
+                  <ExternalLink size={12} strokeWidth={1.8} />
+                  Site
+                </a>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 3 }}>
+              {b.city ? `${b.city} · ` : ""}
+              <span style={{ textTransform: "capitalize" }}>{niche}</span>
+              <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
+              <span className="lg-mono tnum">Updated {fmtDate(item.lastActivity)}</span>
+            </div>
           </div>
         </div>
-        <Link
-          href={item.hasPack ? `${studioBase}&restore=pack` : studioBase}
-          style={{
-            flex: "none",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 14px",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
-            color: "var(--text)",
-            border: "1px solid var(--line-strong)",
-            borderRadius: "var(--radius)",
-            fontSize: 12.5,
-            fontWeight: 600,
-            textDecoration: "none",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), var(--shadow-sm)",
-          }}
-        >
-          Open workspace
-          <ArrowUpRight size={14} strokeWidth={2} />
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
+          {!open && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <StatChip icon={Layers} label={item.hasPack ? "Pack" : "No pack"} on={item.hasPack} />
+              {item.proposals.length > 0 && (
+                <StatChip icon={ScrollText} label={String(item.proposals.length)} on />
+              )}
+              {item.audits.length > 0 && (
+                <StatChip icon={Stethoscope} label={String(item.audits.length)} on />
+              )}
+            </div>
+          )}
+          <Link
+            href={item.hasPack ? `${studioBase}&restore=pack` : studioBase}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              flex: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 13px",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
+              color: "var(--text)",
+              border: "1px solid var(--line-strong)",
+              borderRadius: "var(--radius)",
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: "none",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), var(--shadow-sm)",
+            }}
+          >
+            Open
+            <ArrowUpRight size={14} strokeWidth={2} />
+          </Link>
+        </div>
       </div>
 
-      {/* Three-column work surface */}
+      {/* Three-column work surface — revealed on expand */}
+      {open && (
       <div
         style={{
           display: "grid",
@@ -793,14 +1285,29 @@ function BusinessPanel({
             label="Deliverables"
             count={item.hasPack ? 4 : 0}
             action={
-              <MiniButton
-                onClick={runPack}
-                icon={item.hasPack ? Sparkles : Plus}
-                label={item.hasPack ? "Regenerate" : "Generate"}
-                busy={packRunning}
-              />
+              <div style={{ display: "inline-flex", gap: 6 }}>
+                <MiniButton
+                  onClick={() => setShowIntake((v) => !v)}
+                  icon={SlidersHorizontal}
+                  title="Intake"
+                />
+                <MiniButton
+                  onClick={runPack}
+                  icon={item.hasPack ? Sparkles : Plus}
+                  label={item.hasPack ? "Regenerate" : "Generate"}
+                  busy={packRunning}
+                />
+              </div>
             }
           />
+          {showIntake && (
+            <IntakeEditor
+              b={item.business}
+              onSaved={(next) =>
+                onChange({ ...item, business: { ...item.business, ...next } })
+              }
+            />
+          )}
           {packRunning ? (
             <InlineProgress
               label={packProgress?.label || "Generating deliverables…"}
@@ -1005,6 +1512,7 @@ function BusinessPanel({
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }
@@ -1019,11 +1527,21 @@ export default function LibraryPage() {
   const [q, setQ] = useState("");
   const [niche, setNiche] = useState<string>("all");
   const [mode, setMode] = useState<LibraryMode>("workspaces");
+  // Deep-link target: /library?businessId=…(&generate=1) arrives here from every
+  // "Generate asset pack" button. autogenId is the business whose panel should
+  // auto-open and immediately run the pack.
+  const [autogenId, setAutogenId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        // Read the deep-link params off the URL (client-only, so no Suspense
+        // boundary needed as useSearchParams would require).
+        const params = new URLSearchParams(window.location.search);
+        const bizId = params.get("businessId");
+        const wantsGen = params.get("generate") === "1";
+
         // The two halves of "your businesses": those with work (workspaces) and
         // the full saved list (includes bare bookmarks the workspaces view omits).
         const [libRes, bizRes] = await Promise.all([
@@ -1032,7 +1550,70 @@ export default function LibraryPage() {
         ]);
         if (!libRes.ok) throw new Error(`Failed (${libRes.status})`);
         const data = (await libRes.json()) as { items: LibraryItem[] };
-        if (!cancelled) setItems(data.items ?? []);
+        let nextItems = data.items ?? [];
+
+        // If we were sent here for a specific business that has no work yet, it
+        // won't be in the library feed (which only returns businesses that already
+        // have a pack/audit/proposal or are in deliverable status). Fetch it and
+        // synthesize an empty workspace row so its panel exists to generate into.
+        if (bizId && !nextItems.some((i) => i.businessId === bizId)) {
+          try {
+            const oneRes = await fetch(`/api/businesses/${bizId}`, { cache: "no-store" });
+            if (oneRes.ok) {
+              const { business: b } = (await oneRes.json()) as {
+                business:
+                  | (LibraryItem["business"] & {
+                      createdAt?: string;
+                      lastActivityAt?: string;
+                    })
+                  | null;
+              };
+              if (b) {
+                const nowIso = new Date().toISOString();
+                const synth: LibraryItem = {
+                  id: b.id,
+                  businessId: b.id,
+                  hasPack: false,
+                  packDate: null,
+                  lastActivity: b.lastActivityAt ?? b.createdAt ?? nowIso,
+                  createdAt: b.createdAt ?? nowIso,
+                  business: {
+                    id: b.id,
+                    name: b.name,
+                    city: b.city ?? null,
+                    industry: b.industry ?? null,
+                    category: b.category ?? null,
+                    website: b.website ?? null,
+                    photoUrl: b.photoUrl ?? null,
+                    avgClientValueCad: b.avgClientValueCad ?? null,
+                    monthlyLeadVolume: b.monthlyLeadVolume ?? null,
+                    hasCrm: b.hasCrm ?? null,
+                    hasFollowUpSequence: b.hasFollowUpSequence ?? null,
+                    hasReminderSystem: b.hasReminderSystem ?? null,
+                    hasPastCustomerDatabase: b.hasPastCustomerDatabase ?? null,
+                    servicesFocus: b.servicesFocus ?? null,
+                    bookingMethod: b.bookingMethod ?? null,
+                    bookingToolName: b.bookingToolName ?? null,
+                    gbpManagement: b.gbpManagement ?? null,
+                    buildPriorities: b.buildPriorities ?? null,
+                  },
+                  audits: [],
+                  proposals: [],
+                };
+                nextItems = [synth, ...nextItems];
+              }
+            }
+          } catch {
+            // Non-fatal: fall through with whatever the library returned.
+          }
+        }
+
+        if (!cancelled) {
+          setItems(nextItems);
+          if (bizId && wantsGen && nextItems.some((i) => i.businessId === bizId)) {
+            setAutogenId(bizId);
+          }
+        }
         if (bizRes.ok) {
           const bizData = (await bizRes.json()) as { businesses: SavedBusiness[] };
           if (!cancelled) setSaved(bizData.businesses ?? []);
@@ -1047,6 +1628,14 @@ export default function LibraryPage() {
       cancelled = true;
     };
   }, []);
+
+  // Once the target panel is in the DOM, scroll it into view so the running
+  // generation is what the operator sees on arrival.
+  useEffect(() => {
+    if (!autogenId || loading) return;
+    const el = document.getElementById(`biz-${autogenId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [autogenId, loading]);
 
   // Per-business pack info (hasPack + date) keyed by id, from the workspaces
   // fetch — lets the Saved cards show the same "Asset pack" badge/date.
@@ -1326,6 +1915,7 @@ export default function LibraryPage() {
               <BusinessPanel
                 key={item.id}
                 item={item}
+                autoGenerate={item.businessId === autogenId}
                 onChange={(next) =>
                   setItems((prev) => prev.map((it) => (it.id === next.id ? next : it)))
                 }

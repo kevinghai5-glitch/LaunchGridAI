@@ -112,6 +112,52 @@ async function scrapeOne(url: string): Promise<FirecrawlPage | null> {
   }
 }
 
+export interface FirecrawlSearchResult {
+  url: string;
+  title: string;
+  description: string;
+}
+
+/**
+ * Web search via Firecrawl's /search endpoint. Returns organic results
+ * (title + description + url) — enough to read an owner name out of a snippet
+ * without paying to scrape each page. Empty array when unconfigured or on failure.
+ */
+export async function firecrawlSearch(
+  query: string,
+  limit = 6
+): Promise<FirecrawlSearchResult[]> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey || !query.trim()) return [];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    const res = await fetch(`${FIRECRAWL_BASE}/search`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, limit }),
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      success?: boolean;
+      data?: { url?: string; title?: string; description?: string }[];
+    };
+    if (!data.success || !Array.isArray(data.data)) return [];
+    return data.data.map((d) => ({
+      url: d.url ?? "",
+      title: d.title ?? "",
+      description: d.description ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // Pick up to N "high signal" subpage URLs from the homepage's link map, preferring
 // same-origin paths that look like services / about / contact / pricing / booking.
 function pickSubpageUrls(homepage: FirecrawlPage, max: number): string[] {

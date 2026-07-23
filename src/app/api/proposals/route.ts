@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest) {
     }
 
     const proposals = await prisma.proposal.findMany({
-      where: { userId: session.user.id },
+      where: { userId: session.user.id, deletedAt: null },
       orderBy: { createdAt: "desc" },
       include: { business: true },
     });
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Verify business belongs to user
     const business = await prisma.business.findFirst({
-      where: { id: parsed.data.businessId, userId: session.user.id },
+      where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
     });
 
     if (!business) {

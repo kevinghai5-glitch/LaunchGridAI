@@ -41,6 +41,10 @@ export interface FiredLeak {
   score: number;
   /** Concrete data points that triggered detection (cited in deliverable copy). */
   evidence: string[];
+  /** The client explicitly told us (at intake) they don't have this system —
+   *  the leak is a CONFIRMED fact, not an unverified benchmark. Renders as
+   *  "Confirmed at intake" and drops the kickoff-verification line. */
+  intakeConfirmed?: boolean;
 }
 
 // ── RawResearch: what the pipeline already assembles per business ────────────
@@ -64,6 +68,12 @@ export interface RawResearch {
   placeReviews?: PlaceReview[];
   /** Post-close intake — absent pre-sale by design. */
   intake?: ScrapeData["intake"];
+  /** Research-as-of clock (fix 3). The ISO timestamp the research bundle was
+   *  captured; every date-window computation (e.g. 90-day review recency) measures
+   *  against this frozen instant instead of wall-clock `Date.now()`, so a fact
+   *  can't move between two regenerations of the same snapshot. Absent → falls back
+   *  to now (pre-snapshot / test callers). */
+  asOf?: string;
 }
 
 // ============================================================================
@@ -213,6 +223,11 @@ export function toScrapeData(raw: RawResearch): ScrapeData {
     dfs?.gbp.category
   );
 
+  // Freeze the review-recency clock to the research capture instant (fix 3). A
+  // parseable asOf → that instant; otherwise wall-clock now (test / pre-snapshot).
+  const asOfNow = raw.asOf ? Date.parse(raw.asOf) : Date.now();
+  const nowForWindows = Number.isNaN(asOfNow) ? Date.now() : asOfNow;
+
   const hasWebsiteUrl = Boolean(raw.business.website);
   const { pagesFound, pageText, servicePageTexts } = classifyPages(scrape, raw.fallbackText ?? "");
 
@@ -309,7 +324,7 @@ export function toScrapeData(raw: RawResearch): ScrapeData {
       ? {
           rating,
           count,
-          recentCount90d: countRecentReviews(dfsReviews),
+          recentCount90d: countRecentReviews(dfsReviews, nowForWindows),
           // ownerResponseRate is not fetched (documented gap) — sentinel -1 means
           // "unknown", so unanswered_reviews (OBSERVED) will not fire on a guess.
           ownerResponseRate: -1,
@@ -395,10 +410,14 @@ function matchReviewSignal(
 // Returns { tier, evidence } for the first matching rule, or null.
 // ============================================================================
 
-type DetectionResult = { tier: EvidenceTier; evidence: string[] } | null;
+type DetectionResult = { tier: EvidenceTier; evidence: string[]; intakeConfirmed?: boolean } | null;
 type Detector = (d: ScrapeData) => DetectionResult;
 
+// A benchmark-hedged intake leak fires whenever the client hasn't confirmed the
+// system is in place — i.e. undefined (not asked) OR false (told us they lack it).
 const intakeNot = (v: boolean | undefined) => v !== true;
+// The leak is a CONFIRMED fact only when the client explicitly answered "no".
+const intakeSaysNo = (v: boolean | undefined) => v === false;
 
 const DETECTORS: Record<string, Detector> = {
   // ── Cluster A — response speed ──────────────────────────────────────────
@@ -455,14 +474,33 @@ const DETECTORS: Record<string, Detector> = {
   no_online_booking: (d) => {
     const w = d.website;
     if (!w || d.gbp?.hasBookingLink) return null; // PRESENT via GBP → no leak
-    if (isAbsent(w.hasOnlineBookingLink)) {
+    const link = w.hasOnlineBookingLink;
+    const bm = d.intake?.bookingMethod;
+
+    // A scheduler is visibly present on the site → not a leak, regardless of intake.
+    if (!isAbsent(link) && link !== "UNKNOWN") return null;
+
+    // INTAKE CONTRADICTS: they book through a scheduling tool (even if it isn't
+    // linked on the public site) → they HAVE booking. Suppress the gap; the
+    // opportunity is to connect + optimize the named tool, handled in copy.
+    if (bm === "BOOKING_TOOL") return null;
+
+    // INTAKE CONFIRMS: phone/email only → CONFIRMED gap. Declarative + dollars.
+    if (bm === "PHONE_EMAIL_ONLY") {
+      return {
+        tier: "OBSERVED",
+        evidence: ["Confirmed at intake: they take bookings by phone/email only — no online scheduler"],
+        intakeConfirmed: true,
+      };
+    }
+
+    // No decisive intake (OTHER / null / not asked) → fall back to the scan.
+    if (isAbsent(link)) {
+      // Scan positively saw no booking path → observed gap (pre-intake behavior).
       return { tier: "OBSERVED", evidence: ["No online booking link on the site or Google Business Profile"] };
     }
-    // UNKNOWN: scan couldn't confirm a scheduler → reuse the BENCHMARK hedge.
-    if (w.hasOnlineBookingLink === "UNKNOWN") {
-      return { tier: "BENCHMARK", evidence: ["An online booking path couldn't be confirmed from the outside — verified at kickoff"] };
-    }
-    return null;
+    // link === "UNKNOWN": scan couldn't confirm a scheduler → BENCHMARK hedge + kickoff.
+    return { tier: "BENCHMARK", evidence: ["An online booking path couldn't be confirmed from the outside — verified at kickoff"] };
   },
 
   no_webchat: (d) => {
@@ -520,7 +558,16 @@ const DETECTORS: Record<string, Detector> = {
       return { tier: "EVIDENCED", evidence: [`${m.distinctReviews} reviews mention no follow-up / never received a promised quote`, ...m.fragments] };
     }
     if (intakeNot(d.intake?.hasFollowUpSequence)) {
-      return { tier: "BENCHMARK", evidence: ["Follow-up process is not externally visible — verified at kickoff"] };
+      const confirmed = intakeSaysNo(d.intake?.hasFollowUpSequence);
+      return {
+        tier: "BENCHMARK",
+        evidence: [
+          confirmed
+            ? "Confirmed at intake: no automated follow-up sequence in place"
+            : "Follow-up process is not externally visible — verified at kickoff",
+        ],
+        intakeConfirmed: confirmed,
+      };
     }
     return null;
   },
@@ -532,17 +579,39 @@ const DETECTORS: Record<string, Detector> = {
     }
     const apptVerticals: Vertical[] = ["dental", "med_spa", "law"];
     if (apptVerticals.includes(d.business.industry) && intakeNot(d.intake?.hasReminderSystem)) {
-      return { tier: "BENCHMARK", evidence: ["Appointment-driven vertical with no externally visible reminder system — verified at kickoff"] };
+      const confirmed = intakeSaysNo(d.intake?.hasReminderSystem);
+      return {
+        tier: "BENCHMARK",
+        evidence: [
+          confirmed
+            ? "Confirmed at intake: no appointment reminder system in place"
+            : "Appointment-driven vertical with no externally visible reminder system — verified at kickoff",
+        ],
+        intakeConfirmed: confirmed,
+      };
     }
     return null;
   },
 
   no_crm_pipeline: (d) => {
     if (d.intake?.hasCrm === true) return null; // suppressed entirely
-    return { tier: "BENCHMARK", evidence: ["No pipeline visible from outside — lead tracking verified at kickoff"] };
+    const confirmed = intakeSaysNo(d.intake?.hasCrm);
+    return {
+      tier: "BENCHMARK",
+      evidence: [
+        confirmed
+          ? "Confirmed at intake: no CRM / pipeline to track leads"
+          : "No pipeline visible from outside — lead tracking verified at kickoff",
+      ],
+      intakeConfirmed: confirmed,
+    };
   },
 
   no_database_reactivation: (d) => {
+    // INVERSE polarity vs the other intake booleans: here `false` means "no past-
+    // customer list exists" → nothing to reactivate → suppressed. So there is no
+    // "confirmed you lack it" path; this leak only ever fires as a benchmark hedge
+    // (true or unknown = a list likely exists but is dormant).
     const established = (d.googleReviews?.count ?? 0) >= 20;
     if (established && d.intake?.hasPastCustomerDatabase !== false) {
       return { tier: "BENCHMARK", evidence: ["Established operating history implies a past-customer list that is likely dormant — verified at kickoff"] };
@@ -552,7 +621,16 @@ const DETECTORS: Record<string, Detector> = {
 
   no_long_cycle_nurture: (d) => {
     if (intakeNot(d.intake?.hasFollowUpSequence)) {
-      return { tier: "BENCHMARK", evidence: ["Long-cycle nurture for 'not yet' leads is not externally visible — verified at kickoff"] };
+      const confirmed = intakeSaysNo(d.intake?.hasFollowUpSequence);
+      return {
+        tier: "BENCHMARK",
+        evidence: [
+          confirmed
+            ? "Confirmed at intake: no long-cycle nurture for 'not yet' leads"
+            : "Long-cycle nurture for 'not yet' leads is not externally visible — verified at kickoff",
+        ],
+        intakeConfirmed: confirmed,
+      };
     }
     return null;
   },
@@ -655,6 +733,7 @@ export function getFiredLeaks(data: ScrapeData): FiredLeak[] {
       tier: result.tier,
       score: scoreLeak(leak, result.tier, data),
       evidence: result.evidence,
+      intakeConfirmed: result.intakeConfirmed,
     });
   }
   return fired;

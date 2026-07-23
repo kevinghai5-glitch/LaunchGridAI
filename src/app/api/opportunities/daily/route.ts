@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   let niche = new URL(req.url).searchParams.get("niche")?.trim() || null;
   if (!niche) {
     const latest = await prisma.business.findFirst({
-      where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY" },
+      where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY", deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: { industry: true },
     });
@@ -29,23 +29,65 @@ export async function GET(req: Request) {
 
   const leads = niche
     ? await prisma.business.findMany({
-        where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY", industry: niche },
+        where: { userId: session.user.id, status: "SUGGESTED", source: "DAILY", industry: niche, deletedAt: null },
         orderBy: [{ reviewCount: "asc" }, { createdAt: "desc" }],
       })
     : [];
 
-  return NextResponse.json({ niche, count: leads.length, leads });
+  // How many cleared (soft-deleted) un-triaged prospects are sitting recoverable —
+  // powers the "Restore cleared" affordance. Only never-worked SUGGESTED rows count.
+  const clearedCount = await prisma.business.count({
+    where: {
+      userId: session.user.id,
+      status: "SUGGESTED",
+      deletedAt: { not: null },
+      callLogs: { none: {} },
+    },
+  });
+
+  return NextResponse.json({ niche, count: leads.length, leads, clearedCount });
 }
 
-// Clear the un-triaged batch: removes every still-SUGGESTED prospect that has NO
-// call history so it disappears from BOTH Opportunities and the CRM's New Leads
+// Restore a previously-cleared batch: flips deletedAt back to null on the
+// soft-deleted, never-worked SUGGESTED prospects so they reappear in Opportunities
+// (and the CRM's New Leads). Optional ?niche= scopes the restore to one niche;
+// without it, every cleared un-triaged prospect comes back.
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await req.json().catch(() => null)) as { action?: string } | null;
+  if (body?.action !== "restore") {
+    return NextResponse.json({ error: "action: 'restore' is required" }, { status: 400 });
+  }
+
+  const niche = new URL(req.url).searchParams.get("niche")?.trim() || null;
+
+  const result = await prisma.business.updateMany({
+    where: {
+      userId: session.user.id,
+      status: "SUGGESTED",
+      deletedAt: { not: null },
+      callLogs: { none: {} },
+      ...(niche ? { industry: niche } : {}),
+    },
+    data: { deletedAt: null },
+  });
+
+  return NextResponse.json({ restored: result.count });
+}
+
+// Clear the un-triaged batch: SOFT-deletes every still-SUGGESTED prospect that has
+// NO call history so it disappears from BOTH Opportunities and the CRM's New Leads
 // column. Optional ?niche= scopes the clear to one niche.
 //
-// Non-destructive guardrail: a lead that has ever been called (has a CallLog) is
-// NEVER hard-deleted here, even if it's back in SUGGESTED — deleting it would
-// destroy its call history. Only raw, never-worked suggestions are removed, and
-// re-generating a niche resurfaces fresh prospects. `source` is intentionally not
-// filtered so leads reset back to New Leads (any source) are caught too.
+// We NEVER hard-delete. "Clear" sets deletedAt; every row stays in the DB and is
+// always recoverable — reads filter deletedAt: null so cleared leads don't resurface.
+// The call-history guard is retained (only raw, never-worked suggestions are cleared).
+// `source` is intentionally not filtered so leads reset back to New Leads (any
+// source) are caught too.
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -54,13 +96,15 @@ export async function DELETE(req: Request) {
 
   const niche = new URL(req.url).searchParams.get("niche")?.trim() || null;
 
-  const result = await prisma.business.deleteMany({
+  const result = await prisma.business.updateMany({
     where: {
       userId: session.user.id,
       status: "SUGGESTED",
       callLogs: { none: {} },
+      deletedAt: null,
       ...(niche ? { industry: niche } : {}),
     },
+    data: { deletedAt: new Date() },
   });
 
   return NextResponse.json({ cleared: result.count });

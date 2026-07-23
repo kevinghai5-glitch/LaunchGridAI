@@ -47,7 +47,7 @@ export default function SignupPage() {
         toast.error("Account created — please sign in");
         router.push("/login");
       } else {
-        toast.success("Account created! Welcome to LaunchGrid.");
+        toast.success("Account created! Welcome to ReclaimedHQ.");
         router.push("/dashboard");
       }
     } catch {
@@ -63,17 +63,17 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0B0F] flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-[var(--bg-deep)] flex items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 bg-grid opacity-30" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-[var(--accent-glow)] blur-[100px] pointer-events-none" />
 
       <div className="relative w-full max-w-md px-4">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex justify-center">
             <Logo size="md" />
           </Link>
-          <h1 className="text-2xl font-bold text-white mt-6 mb-1">Create your account</h1>
-          <p className="text-gray-400 text-sm">Start building AI systems for local businesses</p>
+          <h1 className="text-2xl font-bold text-[var(--text)] mt-6 mb-1">Create your account</h1>
+          <p className="text-[var(--text-3)] text-sm">Start building AI systems for local businesses</p>
         </div>
 
         <div className="glass-card p-8">
@@ -99,7 +99,7 @@ export default function SignupPage() {
 
           <div className="relative flex items-center gap-3 mb-6">
             <div className="flex-1 h-px bg-white/10" />
-            <span className="text-xs text-gray-500">or with email</span>
+            <span className="text-xs text-[var(--text-4)]">or with email</span>
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
@@ -161,14 +161,14 @@ export default function SignupPage() {
             </Button>
           </form>
 
-          <p className="text-center text-sm text-gray-400 mt-6">
+          <p className="text-center text-sm text-[var(--text-3)] mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-blue-400 hover:text-blue-300">
+            <Link href="/login" className="text-[var(--accent)] hover:brightness-110">
               Sign in
             </Link>
           </p>
 
-          <p className="text-center text-xs text-gray-600 mt-4">
+          <p className="text-center text-xs text-[var(--text-4)] mt-4">
             By signing up, you agree to our Terms of Service and Privacy Policy.
           </p>
         </div>

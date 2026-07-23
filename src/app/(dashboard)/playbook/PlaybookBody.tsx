@@ -289,7 +289,7 @@ function Overview({ onJump }: { onJump: (s: SectionId) => void }) {
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
         <StatTile value="4" label="Done-for-you deliverables" sub="Diagnosis, blueprint, asset pack, rollout" />
         <StatTile value="$6.5k" label="Setup fee" sub="One-time build" accent="var(--text)" />
-        <StatTile value="$1–2k" label="Monthly retainer" sub="Run + optimize" accent="var(--money)" />
+        <StatTile value="$1,000" label="Monthly retainer" sub="Run + optimize" accent="var(--money)" />
       </div>
 
       <Block title="The one-sentence pitch" accent="var(--accent)">
@@ -528,7 +528,7 @@ function MiniCol({ label, text, tone }: { label: string; text: string; tone: "wa
 function Economics() {
   const [custValue, setCustValue] = useState(800);
   const [extraPerMonth, setExtraPerMonth] = useState(4);
-  const [retainer, setRetainer] = useState(1500);
+  const [retainer] = useState(1000);
 
   const monthlyGain = custValue * extraPerMonth;
   const netMonthly = monthlyGain - retainer;
@@ -557,14 +557,14 @@ function Economics() {
             <Point>Never discount the build — discount scope instead (e.g. start with the audit + page).</Point>
           </div>
         </Block>
-        <Block title="Retainer — $1,000–$2,000/mo" accent="var(--money)">
+        <Block title="Retainer — $1,000/mo" accent="var(--money)">
           <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
             The <strong style={{ color: "var(--text)" }}>engine that keeps it running</strong>: ongoing
             optimization, A/B tests, reporting, and managing the sequences. This is recurring revenue.
           </p>
           <div className="flex flex-col" style={{ gap: 9 }}>
-            <Point color="var(--money)">Bill monthly, in advance. Offer ~2 months free on an annual prepay.</Point>
-            <Point color="var(--money)">Tie the tier to their volume — higher lead flow → $2k.</Point>
+            <Point color="var(--money)">Starts at go-live, not at signing. Cancel anytime, month-to-month.</Point>
+            <Point color="var(--money)">The price is the price — never negotiate it. The only flex is the 50% deposit split on the setup.</Point>
           </div>
         </Block>
       </div>
@@ -575,15 +575,15 @@ function Economics() {
             className="lg-display tnum"
             style={{ fontSize: 38, fontWeight: 680, letterSpacing: "-0.035em", color: "var(--money)", lineHeight: 1 }}
           >
-            $18,500&nbsp;–&nbsp;$30,500
+            $18,500
           </span>
           <span style={{ fontSize: 13, color: "var(--text-3)", paddingBottom: 4 }}>
-            per client, year one ($6,500 setup + 12 × $1k–$2k)
+            per client, year one ($6,500 setup + 12 × $1,000)
           </span>
         </div>
         <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-3)", lineHeight: 1.6 }}>
-          Just <strong style={{ color: "var(--text)" }}>five clients</strong> on the mid retainer is roughly
-          $100k+ in year-one contract value — and the retainers compound every month they renew.
+          Just <strong style={{ color: "var(--text)" }}>five clients</strong> is roughly $92k in year-one
+          contract value — and the retainers compound every month they renew.
         </p>
       </Block>
 
@@ -617,15 +617,17 @@ function Economics() {
             step={1}
             onChange={setExtraPerMonth}
           />
-          <Slider
-            label="Monthly retainer"
-            prefix="$"
-            value={retainer}
-            min={1000}
-            max={2000}
-            step={100}
-            onChange={setRetainer}
-          />
+          <div>
+            <div className="flex items-baseline justify-between" style={{ marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>Monthly retainer</span>
+              <span className="lg-mono tnum" style={{ fontSize: 13, fontWeight: 600, color: "var(--money)" }}>
+                ${retainer.toLocaleString()}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-4)", lineHeight: 1.5 }}>
+              Fixed. The retainer is not negotiable — the only flex is the 50% deposit split on the setup.
+            </p>
+          </div>
         </div>
 
         <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
@@ -1021,7 +1023,7 @@ So right now, when someone's interested in [service] — what's the path? How do
   {
     title: "Presenting the price",
     when: "After they've seen the value and agree the gap is real.",
-    body: `So here's how it works. There's a one-time build of $6,500 — that's the full system: the page, the lead scoring, the email and text follow-up, and the booking flow, all built from your real numbers. Then it's [$1,000–$2,000] a month for me to run it, test it, and keep improving it.
+    body: `So here's how it works. There's a one-time build of $6,500 — that's the full system: the page, the lead scoring, the email and text follow-up, and the booking flow, all built from your real numbers. Then it's $1,000 a month for me to run it, test it, and keep improving it — that starts at go-live, not today, and it's cancel anytime.
 
 Here's the way I'd think about it: your average customer is worth about [$X]. If this system books you even [3–4] extra customers a month that you would've lost, it's already paid for itself — everything past that is profit. Want to get started?`,
   },

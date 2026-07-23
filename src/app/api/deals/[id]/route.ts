@@ -24,7 +24,7 @@ export async function PATCH(
     }
 
     const result = await prisma.deal.updateMany({
-      where: { id: params.id, userId: session.user.id },
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
       data: parsed.data,
     });
 
@@ -33,7 +33,7 @@ export async function PATCH(
     }
 
     const deal = await prisma.deal.findFirst({
-      where: { id: params.id },
+      where: { id: params.id, deletedAt: null },
       include: { business: true, proposal: true },
     });
 
@@ -54,8 +54,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await prisma.deal.deleteMany({
-      where: { id: params.id, userId: session.user.id },
+    // Soft-delete: never hard-delete. Set deletedAt; the row stays in the DB and is
+    // filtered out of reads (deletedAt: null). Always recoverable.
+    await prisma.deal.updateMany({
+      where: { id: params.id, userId: session.user.id, deletedAt: null },
+      data: { deletedAt: new Date() },
     });
 
     return NextResponse.json({ success: true });

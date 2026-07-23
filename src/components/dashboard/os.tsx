@@ -26,7 +26,7 @@ export function Surface({
 type Tone = "neutral" | "accent" | "money" | "warn" | "danger";
 const PILL_TONE: Record<Tone, { c: string; bg: string; b: string }> = {
   neutral: { c: "var(--text-2)", bg: "var(--surface-hi)", b: "transparent" },
-  accent: { c: "var(--accent-fill-text)", bg: "var(--accent-fill)", b: "transparent" },
+  accent: { c: "#fff", bg: "var(--accent-grad)", b: "transparent" },
   money: { c: "oklch(0.80 0.11 158)", bg: "var(--money-soft)", b: "transparent" },
   warn: { c: "oklch(0.82 0.11 75)", bg: "var(--warn-soft)", b: "transparent" },
   danger: { c: "oklch(0.78 0.14 25)", bg: "var(--danger-soft)", b: "transparent" },

@@ -15,7 +15,8 @@ export interface WebsitePage {
 // capped slice of raw HTML (for heuristic CTA/form/booking signal detection).
 // Never throws — returns empty strings on any failure.
 export async function fetchWebsitePage(
-  website: string | null | undefined
+  website: string | null | undefined,
+  timeoutMs = 7000
 ): Promise<WebsitePage> {
   if (!website) return { text: "", html: "" };
 
@@ -28,7 +29,7 @@ export async function fetchWebsitePage(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 7000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(url, {
       signal: controller.signal,
       redirect: "follow",

@@ -9,8 +9,8 @@ interface PageProps {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const proposal = await prisma.proposal.findUnique({
-    where: { publicId: params.publicId },
+  const proposal = await prisma.proposal.findFirst({
+    where: { publicId: params.publicId, deletedAt: null },
     include: { business: true },
   });
   if (!proposal) return { title: "Proposal Not Found" };
@@ -22,14 +22,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 async function markViewed(publicId: string) {
   await prisma.proposal.updateMany({
-    where: { publicId, status: "SENT" },
+    where: { publicId, status: "SENT", deletedAt: null },
     data: { status: "VIEWED" },
   });
 }
 
 export default async function PublicProposalPage({ params }: PageProps) {
-  const proposal = await prisma.proposal.findUnique({
-    where: { publicId: params.publicId },
+  const proposal = await prisma.proposal.findFirst({
+    where: { publicId: params.publicId, deletedAt: null },
     include: { business: true },
   });
 
@@ -67,7 +67,7 @@ export default async function PublicProposalPage({ params }: PageProps) {
           marginTop: 24,
         }}
       >
-        Delivered via LaunchGrid
+        Delivered via ReclaimedHQ
       </p>
     </div>
   );

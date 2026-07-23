@@ -25,14 +25,15 @@ export default async function ZoomRunnerPage({
   if (!session) redirect("/login");
 
   const business = await prisma.business.findFirst({
-    where: { id: params.businessId, userId: session.user.id },
+    where: { id: params.businessId, userId: session.user.id, deletedAt: null },
     include: {
       generatedSystems: {
-        where: { type: { in: ["COLD_AUDIT", "ASSETS"] } },
+        where: { type: { in: ["COLD_AUDIT", "ASSETS"] }, deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { type: true, content: true },
       },
       proposals: {
+        where: { deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 1,
       },

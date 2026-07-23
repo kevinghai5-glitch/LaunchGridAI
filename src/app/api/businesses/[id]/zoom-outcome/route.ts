@@ -33,7 +33,7 @@ export async function POST(
   const patch = resolveZoomOutcome(parsed.data.outcome);
 
   const result = await prisma.business.updateMany({
-    where: { id: params.id, userId: session.user.id },
+    where: { id: params.id, userId: session.user.id, deletedAt: null },
     data: {
       status: patch.status,
       nextAction: patch.nextAction,

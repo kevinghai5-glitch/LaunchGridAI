@@ -21,15 +21,16 @@ export async function GET() {
   }
 
   const businesses = await prisma.business.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     include: {
       callLogs: {
+        where: { deletedAt: null },
         orderBy: { calledAt: "desc" },
         take: 1,
         select: { disposition: true, note: true, calledAt: true },
       },
-      deals: { select: { monthlyValue: true } },
-      proposals: { select: { monthlyPrice: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      deals: { where: { deletedAt: null }, select: { monthlyValue: true } },
+      proposals: { where: { deletedAt: null }, select: { monthlyPrice: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 

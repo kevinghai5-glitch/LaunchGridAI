@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -20,6 +21,8 @@ import {
   Loader2,
   PhoneCall,
   Shuffle,
+  SlidersHorizontal,
+  UserRound,
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
@@ -30,7 +33,9 @@ import {
   gapsFor,
   NICHE_RECOMMENDATIONS,
   NICHE_VISIBLE_COUNT,
+  NICHE_CATEGORIES,
   sampleNiches,
+  DELIVERABLE_STATUSES,
 } from "@/lib/crm";
 import type { BusinessResult, SavedBusiness } from "@/types";
 
@@ -42,18 +47,19 @@ interface Suggestion {
   industry: string | null;
   phone: string | null;
   website: string | null;
+  ownerName: string | null;
   rating: number | null;
   reviewCount: number | null;
   painPoint: string | null;
   outreachAngle: string | null;
+  address: string | null;
+  mapsUrl: string | null;
+  category: string | null;
+  description: string | null;
+  photoUrl: string | null;
 }
 
 type TopMode = "daily" | "search";
-
-// Remembers an explicit "Clear" so the daily batch stays hidden after you
-// navigate away and back — without deleting the prospects (re-picking the niche
-// resurfaces them). Cleared on the next generate / niche selection.
-const DAILY_CLEARED_KEY = "lg:opportunities:daily-cleared";
 
 export default function BusinessesPage() {
   const router = useRouter();
@@ -87,17 +93,18 @@ export default function BusinessesPage() {
   }, []);
 
   const loadDaily = async () => {
-    // Respect an explicit Clear across navigation: stay empty until the operator
-    // re-picks or re-generates a niche (which lifts the flag).
-    if (typeof window !== "undefined" && localStorage.getItem(DAILY_CLEARED_KEY) === "1") {
-      setLoadingDaily(false);
-      return;
-    }
+    // The daily API is the single source of truth: it only returns un-triaged
+    // SUGGESTED leads that aren't soft-deleted, so this view always mirrors the DB
+    // (and therefore the CRM's New Leads column). Clearing soft-deletes the rows,
+    // which empties both surfaces — no client-side hide flag.
     setLoadingDaily(true);
     try {
       const res = await fetch("/api/opportunities/daily", { cache: "no-store" });
       if (res.ok) {
-        const data = (await res.json()) as { niche: string | null; leads: Suggestion[] };
+        const data = (await res.json()) as {
+          niche: string | null;
+          leads: Suggestion[];
+        };
         setSuggestions(data.leads ?? []);
         setActiveNiche(data.niche);
         if (data.niche) setNiche(data.niche);
@@ -138,7 +145,6 @@ export default function BusinessesPage() {
       toast.error("Pick a niche first");
       return;
     }
-    if (typeof window !== "undefined") localStorage.removeItem(DAILY_CLEARED_KEY);
     setGenerating(true);
     try {
       const res = await fetch("/api/opportunities/generate", {
@@ -168,12 +174,21 @@ export default function BusinessesPage() {
 
   // ── daily: load a niche's persisted batch (clicking a niche chip) ─────────
   // Prospects you generate stay saved until you approve them into the Call Queue,
-  // so re-picking a niche resurfaces whatever you already sourced for it.
+  // so re-picking a niche resurfaces whatever you already sourced for it — INCLUDING
+  // any you Cleared. Clicking the niche first un-clears (restores) that niche's
+  // soft-deleted, never-worked leads, then loads them, so a Clear during testing is
+  // always fully reversible just by re-selecting the niche.
   const selectNiche = async (n: string) => {
-    if (typeof window !== "undefined") localStorage.removeItem(DAILY_CLEARED_KEY);
     setNiche(n);
     setLoadingDaily(true);
     try {
+      // Restore this niche's cleared leads first (no-op if none are cleared).
+      await fetch(`/api/opportunities/daily?niche=${encodeURIComponent(n)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      }).catch(() => null);
+
       const res = await fetch(`/api/opportunities/daily?niche=${encodeURIComponent(n)}`, {
         cache: "no-store",
       });
@@ -183,6 +198,7 @@ export default function BusinessesPage() {
         setSuggestions(leads);
         setActiveNiche(leads.length ? n : null);
       }
+      router.refresh(); // keep the sidebar Opportunities badge in sync
     } finally {
       setLoadingDaily(false);
     }
@@ -197,15 +213,14 @@ export default function BusinessesPage() {
     setSuggestions([]);
     setActiveNiche(null);
     setNiche("");
-    if (typeof window !== "undefined") localStorage.setItem(DAILY_CLEARED_KEY, "1");
     try {
       const res = await fetch("/api/opportunities/daily", { method: "DELETE" });
       const data = await res.json().catch(() => null);
       router.refresh(); // clear the sidebar Opportunities badge count
       toast.success(
         data?.cleared
-          ? `Cleared ${data.cleared} lead${data.cleared === 1 ? "" : "s"} — re-generate to bring them back`
-          : "Cleared — re-generate to bring them back"
+          ? `Cleared ${data.cleared} lead${data.cleared === 1 ? "" : "s"} — re-pick the niche to bring them back`
+          : "Cleared from view"
       );
     } catch {
       toast.success("Cleared from view");
@@ -331,7 +346,10 @@ export default function BusinessesPage() {
     const existing = saved.find((b) => b.name === r.name);
     const targetId = existing?.id ?? (await saveBusiness(r));
     if (targetId) {
-      router.push(`/businesses/${targetId}?generate=assets`);
+      // Straight into the Library workspace for this business, which auto-expands
+      // and immediately kicks off the asset-pack generation (generate=1) — no
+      // detour through the business detail page.
+      router.push(`/library?businessId=${targetId}&generate=1`);
     }
   };
 
@@ -349,7 +367,16 @@ export default function BusinessesPage() {
     }
   };
 
+  // Every business we've ever persisted — used only to mark search results as
+  // already-saved (dedup), never for display.
   const savedNames = new Set(saved.map((b) => b.name));
+
+  // The Saved tab only surfaces leads that made it PAST "Interested" — i.e. they
+  // accepted a Zoom (BOOKED_ZOOM) or moved beyond it. Cold prospects sitting in
+  // the call queue are not "saved" in this sense, so they stay out of this list.
+  const convertedSaved = saved.filter((b) =>
+    (DELIVERABLE_STATUSES as string[]).includes(b.status)
+  );
 
   const cards = results.map((r) => ({
     key: r.placeId,
@@ -374,7 +401,7 @@ export default function BusinessesPage() {
     );
   });
 
-  const sortedSaved = [...saved].sort((a, b) => {
+  const sortedSaved = [...convertedSaved].sort((a, b) => {
     if (sort === "rating") return (b.rating ?? 0) - (a.rating ?? 0);
     return (
       opportunityScore(b.rating ?? 0, b.reviewCount ?? 0, Boolean(b.website)) -
@@ -383,7 +410,7 @@ export default function BusinessesPage() {
   });
 
   const showSkeleton = view === "results" && searching && results.length === 0;
-  const showEmptySaved = view === "saved" && !loadingSaved && saved.length === 0;
+  const showEmptySaved = view === "saved" && !loadingSaved && convertedSaved.length === 0;
 
   return (
     <>
@@ -492,7 +519,7 @@ export default function BusinessesPage() {
               <Tab active={view === "results"} onClick={() => setView("results")} count={results.length}>
                 Results
               </Tab>
-              <Tab active={view === "saved"} onClick={() => setView("saved")} count={saved.length}>
+              <Tab active={view === "saved"} onClick={() => setView("saved")} count={convertedSaved.length}>
                 Saved
               </Tab>
               <span style={{ flex: 1 }} />
@@ -562,10 +589,10 @@ export default function BusinessesPage() {
             {showEmptySaved && (
               <div style={{ padding: "48px 0", textAlign: "center", color: "var(--text-3)" }}>
                 <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--text)" }}>
-                  No saved businesses yet
+                  No converted leads yet
                 </div>
                 <p style={{ margin: 0, fontSize: 13.5 }}>
-                  Search above and save businesses to build your acquisition list.
+                  Leads land here once they book a Zoom — work the call queue to move prospects past Interested.
                 </p>
               </div>
             )}
@@ -627,6 +654,9 @@ function DailyView({
   // Spreadsheet-style multi-select for the triage table.
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // Which prospect is open in the Google-Maps-style detail panel (click a row).
+  const [detail, setDetail] = useState<Suggestion | null>(null);
+
   // Which recommended-niche chips are currently shown. Shuffle reshuffles them;
   // the active niche is always kept visible so the selection never disappears.
   // Seed with a deterministic slice (so SSR and the first client render match —
@@ -634,18 +664,40 @@ function DailyView({
   const [visibleNiches, setVisibleNiches] = useState<string[]>(() =>
     NICHE_RECOMMENDATIONS.slice(0, NICHE_VISIBLE_COUNT)
   );
+  // Active category filter ("all" = every niche). Powers the Filter dropdown so
+  // the operator can narrow the picker to e.g. just trades or boutique.
+  const [category, setCategory] = useState<string>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Anchor rect for the portal-rendered filter menu. Portaling to <body> escapes
+  // the picker card's stacking context so the niche chips can't paint over it.
+  const filterBtnRef = useRef<HTMLDivElement | null>(null);
+  const [filterAnchor, setFilterAnchor] = useState<{ top: number; right: number } | null>(null);
+  const openFilter = () => {
+    const r = filterBtnRef.current?.getBoundingClientRect();
+    if (r) setFilterAnchor({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    setFilterOpen((o) => !o);
+  };
   useEffect(() => {
-    setVisibleNiches(sampleNiches());
+    setVisibleNiches(sampleNiches(NICHE_VISIBLE_COUNT, "all"));
   }, []);
   const shuffleNiches = () => {
     setVisibleNiches((prev) => {
-      let next = sampleNiches();
+      let next = sampleNiches(NICHE_VISIBLE_COUNT, category);
       if (niche && !next.includes(niche)) next = [niche, ...next.slice(0, -1)];
       // Guarantee a visible change when possible.
-      if (next.join("|") === prev.join("|")) next = sampleNiches();
+      if (next.join("|") === prev.join("|")) next = sampleNiches(NICHE_VISIBLE_COUNT, category);
       return next;
     });
   };
+  const pickCategory = (id: string) => {
+    setCategory(id);
+    setFilterOpen(false);
+    let next = sampleNiches(NICHE_VISIBLE_COUNT, id);
+    if (niche && !next.includes(niche)) next = [niche, ...next.slice(0, -1)];
+    setVisibleNiches(next);
+  };
+  const activeCategoryLabel =
+    category === "all" ? "All types" : NICHE_CATEGORIES.find((c) => c.id === category)?.label ?? "All types";
 
   // Drop any selected ids that have left the batch (triaged/cleared).
   useEffect(() => {
@@ -710,36 +762,169 @@ function DailyView({
           >
             Recommended niches
           </div>
-          <button
-            type="button"
-            onClick={shuffleNiches}
-            disabled={generating}
-            aria-label="Shuffle recommended niches"
-            className="flex items-center"
-            style={{
-              gap: 6,
-              padding: "5px 10px",
-              fontSize: 11.5,
-              fontWeight: 600,
-              borderRadius: 999,
-              color: "var(--text-3)",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid var(--line)",
-              cursor: generating ? "default" : "pointer",
-              fontFamily: "inherit",
-              transition: "color var(--t), background var(--t), border-color var(--t)",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "var(--text)";
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "var(--text-3)";
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
-            }}
-          >
-            <Shuffle size={12} strokeWidth={1.9} /> Shuffle
-          </button>
+          <div className="flex items-center" style={{ gap: 8, position: "relative", zIndex: 60 }}>
+            {/* Filter by business type (trades, boutique, medical, …) */}
+            <div style={{ position: "relative" }}>
+              <div
+                ref={filterBtnRef}
+                className="flex items-center"
+                style={{
+                  gap: 0,
+                  borderRadius: 999,
+                  color: category === "all" ? "var(--text-3)" : "var(--text)",
+                  background: category === "all" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+                  border: `1px solid ${category === "all" ? "var(--line)" : "var(--line-strong)"}`,
+                  transition: "color var(--t), background var(--t), border-color var(--t)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={openFilter}
+                  disabled={generating}
+                  aria-label="Filter recommended niches by type"
+                  aria-expanded={filterOpen}
+                  className="flex items-center"
+                  style={{
+                    gap: 6,
+                    padding: category === "all" ? "5px 10px" : "5px 8px 5px 10px",
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    borderRadius: 999,
+                    color: "inherit",
+                    background: "transparent",
+                    border: "none",
+                    cursor: generating ? "default" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <SlidersHorizontal size={12} strokeWidth={1.9} />
+                  {category === "all" ? "Filter" : activeCategoryLabel}
+                </button>
+                {category !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => pickCategory("all")}
+                    disabled={generating}
+                    aria-label="Clear filter"
+                    title="Clear filter"
+                    className="flex items-center"
+                    style={{
+                      padding: "5px 9px 5px 4px",
+                      color: "var(--text-3)",
+                      background: "transparent",
+                      border: "none",
+                      cursor: generating ? "default" : "pointer",
+                      fontFamily: "inherit",
+                    }}
+                    onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text)")}
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-3)")}
+                  >
+                    <X size={13} strokeWidth={2} />
+                  </button>
+                )}
+              </div>
+              {filterOpen && filterAnchor && typeof document !== "undefined" &&
+                createPortal(
+                <>
+                  {/* click-away backdrop */}
+                  <div
+                    onClick={() => setFilterOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 1000 }}
+                  />
+                  <div
+                    role="menu"
+                    style={{
+                      position: "fixed",
+                      top: filterAnchor.top,
+                      right: filterAnchor.right,
+                      zIndex: 1001,
+                      minWidth: 210,
+                      padding: 6,
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--line-strong)",
+                      borderRadius: 12,
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
+                    }}
+                  >
+                    {[{ id: "all", label: "All types" }, ...NICHE_CATEGORIES].map((c) => {
+                      const active = category === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => pickCategory(c.id)}
+                          className="flex items-center justify-between"
+                          style={{
+                            width: "100%",
+                            gap: 10,
+                            padding: "8px 10px",
+                            fontSize: 12.5,
+                            fontWeight: active ? 600 : 500,
+                            textAlign: "left",
+                            borderRadius: 8,
+                            color: active ? "var(--text)" : "var(--text-3)",
+                            background: active ? "rgba(255,255,255,0.06)" : "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            transition: "color var(--t), background var(--t)",
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                            (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = active
+                              ? "rgba(255,255,255,0.06)"
+                              : "transparent";
+                            (e.currentTarget as HTMLElement).style.color = active
+                              ? "var(--text)"
+                              : "var(--text-3)";
+                          }}
+                        >
+                          {c.label}
+                          {active && <Check size={13} strokeWidth={2} style={{ color: "var(--money)" }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>,
+                  document.body
+                )}
+            </div>
+            <button
+              type="button"
+              onClick={shuffleNiches}
+              disabled={generating}
+              aria-label="Shuffle recommended niches"
+              className="flex items-center"
+              style={{
+                gap: 6,
+                padding: "5px 10px",
+                fontSize: 11.5,
+                fontWeight: 600,
+                borderRadius: 999,
+                color: "var(--text-3)",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid var(--line)",
+                cursor: generating ? "default" : "pointer",
+                fontFamily: "inherit",
+                transition: "color var(--t), background var(--t), border-color var(--t)",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "var(--text-3)";
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
+              }}
+            >
+              <Shuffle size={12} strokeWidth={1.9} /> Shuffle
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
           {visibleNiches.map((n) => {
@@ -897,6 +1082,7 @@ function DailyView({
                     checked={selected.has(s.id)}
                     onToggle={() => toggleOne(s.id)}
                     disabled={triaging}
+                    onOpen={() => setDetail(s)}
                     onApprove={() => triage("approve", [s.id])}
                     onDecline={() => triage("decline", [s.id])}
                   />
@@ -941,6 +1127,22 @@ function DailyView({
             </>
           )}
         </div>
+      )}
+
+      {detail && (
+        <SuggestionDetailModal
+          s={detail}
+          onClose={() => setDetail(null)}
+          onApprove={() => {
+            triage("approve", [detail.id]);
+            setDetail(null);
+          }}
+          onDecline={() => {
+            triage("decline", [detail.id]);
+            setDetail(null);
+          }}
+          disabled={triaging}
+        />
       )}
     </>
   );
@@ -989,6 +1191,7 @@ function SuggestionRow({
   s,
   checked,
   onToggle,
+  onOpen,
   onApprove,
   onDecline,
   disabled,
@@ -996,6 +1199,7 @@ function SuggestionRow({
   s: Suggestion;
   checked: boolean;
   onToggle: () => void;
+  onOpen: () => void;
   onApprove: () => void;
   onDecline: () => void;
   disabled: boolean;
@@ -1019,23 +1223,44 @@ function SuggestionRow({
         />
       </TdCell>
       <TdCell>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{s.name}</div>
-        {(s.painPoint || s.outreachAngle) && (
-          <div
-            style={{
-              fontSize: 11.5,
-              color: "var(--text-3)",
-              marginTop: 2,
-              maxWidth: 460,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={s.outreachAngle || s.painPoint || ""}
-          >
-            {s.painPoint || s.outreachAngle}
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex items-center text-left w-full"
+          title="View details"
+          style={{
+            gap: 12,
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            color: "inherit",
+          }}
+        >
+          <PlaceThumb photoUrl={s.photoUrl} name={s.name} size={40} />
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span className="flex items-center" style={{ gap: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{s.name}</span>
+            </span>
+            {(s.painPoint || s.outreachAngle) && (
+              <span
+                style={{
+                  display: "block",
+                  fontSize: 11.5,
+                  color: "var(--text-3)",
+                  marginTop: 2,
+                  maxWidth: 420,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {s.painPoint || s.outreachAngle}
+              </span>
+            )}
+          </span>
+        </button>
       </TdCell>
       <TdCell style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>{s.city ?? "—"}</TdCell>
       <TdCell style={{ textAlign: "right" }}>
@@ -1071,6 +1296,348 @@ function SuggestionRow({
         </div>
       </TdCell>
     </tr>
+  );
+}
+
+// Small rounded place thumbnail (Google-Maps-listing style). Falls back to a
+// tinted monogram tile when a business has no Google photo on record.
+function PlaceThumb({
+  photoUrl,
+  name,
+  size = 40,
+  radius = 8,
+}: {
+  photoUrl: string | null;
+  name: string;
+  size?: number;
+  radius?: number;
+}) {
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={name}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: radius,
+          objectFit: "cover",
+          flex: "none",
+          border: "1px solid var(--line)",
+          background: "rgba(255,255,255,0.03)",
+        }}
+      />
+    );
+  }
+  return (
+    <div
+      className="grid place-items-center flex-none lg-display"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        background: "linear-gradient(135deg, var(--accent-soft), rgba(255,255,255,0.03))",
+        border: "1px solid var(--line)",
+        color: "var(--text-3)",
+        fontSize: size * 0.4,
+        fontWeight: 600,
+      }}
+    >
+      {name.trim().charAt(0).toUpperCase() || "?"}
+    </div>
+  );
+}
+
+// Google-Maps-style detail panel for a suggested prospect — hero photo, the full
+// cold-call finding (never truncated), rating/reviews, contact rows, funnel gaps,
+// and inline approve/decline. Opened by clicking a row in the triage table.
+function SuggestionDetailModal({
+  s,
+  onClose,
+  onApprove,
+  onDecline,
+  disabled,
+}: {
+  s: Suggestion;
+  onClose: () => void;
+  onApprove: () => void;
+  onDecline: () => void;
+  disabled: boolean;
+}) {
+  const score = opportunityScore(s.rating ?? 0, s.reviewCount ?? 0, Boolean(s.website));
+  const gaps = gapsFor(s.rating ?? 0, s.reviewCount ?? 0, Boolean(s.website));
+
+  // Owner/decision-maker resolves on open (not at generation, which stays fast).
+  // One free site read for the single business being viewed; cached to the row so
+  // the Call Queue reuses it. Null is a valid, shown-as-blank answer.
+  const [owner, setOwner] = useState<string | null>(s.ownerName);
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  useEffect(() => {
+    setOwner(s.ownerName);
+    // Already known — no lookup. Otherwise resolve on open: the API tries the
+    // business's own site first, then a "<name> <city> owner" web search, so we
+    // attempt even when there's no website (search only needs the name + city).
+    if (s.ownerName) return;
+    let cancelled = false;
+    setOwnerLoading(true);
+    fetch("/api/opportunities/owner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: s.id }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.ownerName) setOwner(d.ownerName as string);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setOwnerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [s.id, s.ownerName]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(3px)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        animation: "lg-fade-up 0.14s ease-out",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="surface"
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "88vh",
+          overflowY: "auto",
+          padding: 0,
+          borderRadius: 16,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="grid place-items-center"
+          style={{
+            position: "absolute",
+            top: 14,
+            right: 14,
+            zIndex: 2,
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            background: "rgba(0,0,0,0.4)",
+            border: "1px solid var(--line)",
+            color: "var(--text-2)",
+            cursor: "pointer",
+          }}
+        >
+          <X size={15} strokeWidth={1.8} />
+        </button>
+
+        {/* Hero photo (Google place photo) */}
+        {s.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={s.photoUrl}
+            alt={s.name}
+            style={{ width: "100%", height: 190, objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <div
+            className="grid place-items-center lg-display"
+            style={{
+              height: 130,
+              background: "linear-gradient(135deg, var(--accent-soft), rgba(255,255,255,0.02))",
+              color: "var(--text-4)",
+              fontSize: 46,
+              fontWeight: 600,
+            }}
+          >
+            {s.name.trim().charAt(0).toUpperCase() || "?"}
+          </div>
+        )}
+
+        <div style={{ padding: "20px 24px 24px" }}>
+          <div
+            className="lg-display"
+            style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text)" }}
+          >
+            {s.name}
+          </div>
+          <div
+            className="flex items-center"
+            style={{ gap: 8, marginTop: 5, fontSize: 12.5, color: "var(--text-3)", flexWrap: "wrap" }}
+          >
+            {s.category && <span>{s.category}</span>}
+            {s.category && s.city && <span style={{ color: "var(--text-4)" }}>·</span>}
+            {s.city && (
+              <span className="flex items-center" style={{ gap: 4 }}>
+                <MapPin size={12} strokeWidth={1.7} /> {s.city}
+              </span>
+            )}
+          </div>
+
+          <div
+            className="flex items-center"
+            style={{ gap: 10, marginTop: 10, fontSize: 13, color: "var(--text-2)" }}
+          >
+            {(s.rating ?? 0) > 0 && <Stars rating={s.rating ?? 0} />}
+            {(s.reviewCount ?? 0) > 0 && (
+              <>
+                <span style={{ color: "var(--text-4)" }}>·</span>
+                <span>{s.reviewCount} reviews</span>
+              </>
+            )}
+            <span style={{ color: "var(--text-4)" }}>·</span>
+            <span style={{ color: "var(--text-3)" }}>Score</span>
+            <span
+              className="lg-mono tnum"
+              style={{ fontWeight: 600, color: score >= 90 ? "var(--text)" : "var(--text-2)" }}
+            >
+              {score}
+            </span>
+          </div>
+
+          {/* The cold-call finding — full, never truncated */}
+          {(s.painPoint || s.outreachAngle) && (
+            <div
+              style={{
+                marginTop: 18,
+                padding: "14px 16px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid var(--line)",
+                borderLeft: "2px solid oklch(0.82 0.14 85)",
+              }}
+            >
+              <div
+                className="lg-mono"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "oklch(0.82 0.14 85)",
+                  marginBottom: 8,
+                }}
+              >
+                The find to open with
+              </div>
+              {s.painPoint && (
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--text)" }}>
+                  {s.painPoint}
+                </p>
+              )}
+              {s.outreachAngle && (
+                <p style={{ margin: s.painPoint ? "10px 0 0" : 0, fontSize: 13, lineHeight: 1.6, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--text-4)" }}>Angle · </span>
+                  {s.outreachAngle}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Contact rows */}
+          <div className="flex flex-col" style={{ gap: 2, marginTop: 16 }}>
+            {s.address && (
+              <DetailRow
+                icon={<MapPin size={14} strokeWidth={1.6} />}
+                href={s.mapsUrl || undefined}
+                text={s.address}
+              />
+            )}
+            {s.phone && (
+              <DetailRow icon={<Phone size={14} strokeWidth={1.6} />} href={`tel:${s.phone}`} text={s.phone} />
+            )}
+            <DetailRow
+              icon={<UserRound size={14} strokeWidth={1.6} />}
+              text={owner ? `Ask for ${owner}` : ownerLoading ? "Finding owner…" : "Owner not found"}
+              muted={!owner}
+            />
+            {s.website && (
+              <DetailRow
+                icon={<Globe size={14} strokeWidth={1.6} />}
+                href={s.website}
+                text={s.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                external
+              />
+            )}
+          </div>
+
+          {s.description && (
+            <p style={{ marginTop: 16, fontSize: 13, lineHeight: 1.6, color: "var(--text-2)" }}>
+              {s.description}
+            </p>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 8 }}>Likely funnel gaps</div>
+            <div className="flex" style={{ flexWrap: "wrap", gap: 6 }}>
+              {gaps.map((g) => (
+                <span
+                  key={g}
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--line)",
+                    color: "var(--text-2)",
+                  }}
+                >
+                  {g}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="flex items-center"
+            style={{ gap: 8, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--line)" }}
+          >
+            <LgButton variant="secondary" size="md" onClick={onDecline} disabled={disabled}>
+              Decline
+            </LgButton>
+            <LgButton variant="primary" size="md" onClick={onApprove} disabled={disabled}>
+              <Check size={14} strokeWidth={2} /> Approve → Queue
+            </LgButton>
+            {s.mapsUrl && (
+              <a
+                href={s.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center"
+                style={{ gap: 6, marginLeft: "auto", fontSize: 12.5, color: "var(--text-3)", textDecoration: "none" }}
+              >
+                Google Maps <ExternalLink size={12} strokeWidth={1.7} />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1809,16 +2376,23 @@ function DetailRow({
   text,
   href,
   external,
+  muted,
 }: {
   icon: React.ReactNode;
   text: string;
   href?: string;
   external?: boolean;
+  muted?: boolean;
 }) {
   const inner = (
     <div
       className="flex items-center"
-      style={{ gap: 10, padding: "7px 0", fontSize: 13, color: href ? "var(--text)" : "var(--text-2)" }}
+      style={{
+        gap: 10,
+        padding: "7px 0",
+        fontSize: 13,
+        color: muted ? "var(--text-4)" : href ? "var(--text)" : "var(--text-2)",
+      }}
     >
       <span style={{ color: "var(--text-3)", flex: "none" }}>{icon}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

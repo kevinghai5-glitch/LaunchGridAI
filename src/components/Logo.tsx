@@ -19,7 +19,7 @@ export function Logo({ className, iconOnly = false, textOnly = false, size = "md
     <div className={cn("flex items-center", className)} style={{ gap: 10 }}>
       {!textOnly && (
         <div
-          aria-label="LaunchGrid OS logo"
+          aria-label="ReclaimedHQ OS logo"
           className="relative grid place-items-center"
           style={{
             width: icon,
@@ -56,7 +56,7 @@ export function Logo({ className, iconOnly = false, textOnly = false, size = "md
             color: "var(--text)",
           }}
         >
-          LaunchGrid
+          ReclaimedHQ
           <span style={{ color: "var(--text-3)", fontWeight: 500 }}>/OS</span>
         </span>
       )}

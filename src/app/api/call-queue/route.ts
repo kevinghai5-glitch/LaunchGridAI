@@ -90,15 +90,16 @@ export async function GET(req: Request) {
     !!d && !!dayStart && !!dayEnd && d.getTime() >= dayStart.getTime() && d.getTime() <= dayEnd.getTime();
 
   const businesses = await prisma.business.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     include: {
       generatedSystems: {
-        where: { type: "COLD_AUDIT" },
+        where: { type: "COLD_AUDIT", deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { content: true },
       },
       callLogs: {
+        where: { deletedAt: null },
         orderBy: { calledAt: "desc" },
         take: dayStart && view === "past" ? 20 : 1,
         select: { id: true, disposition: true, note: true, calledAt: true },
@@ -173,6 +174,7 @@ export async function GET(req: Request) {
           mapsUrl: b.mapsUrl,
           painPoint: b.painPoint,
           outreachAngle: b.outreachAngle,
+          ownerName: b.ownerName,
           ...peek,
         },
         lastCall: lastCall
@@ -188,7 +190,7 @@ export async function GET(req: Request) {
 
   // Burn-down progress: how many calls this user has logged so far today.
   const calledToday = await prisma.callLog.count({
-    where: { userId: session.user.id, calledAt: { gte: startOfToday } },
+    where: { userId: session.user.id, calledAt: { gte: startOfToday }, deletedAt: null },
   });
 
   return NextResponse.json({ leads, calledToday });
@@ -246,7 +248,7 @@ export async function POST(req: Request) {
 
   // Scope the lead to the operator.
   const lead = await prisma.business.findFirst({
-    where: { id: body.businessId, userId: session.user.id },
+    where: { id: body.businessId, userId: session.user.id, deletedAt: null },
     select: { id: true },
   });
   if (!lead) {
@@ -302,12 +304,13 @@ export async function POST(req: Request) {
 //   skip   — defer to tomorrow. Pushes the next touch out a day so the lead
 //            leaves today's list but stays QUEUED and resurfaces tomorrow.
 //
-//   remove — pull the lead OUT of the call queue without destroying it. Reverts
-//            it to SUGGESTED and clears its scheduling so isInQueue() is false,
-//            BUT keeps the row + its CallLog history intact. The lead resurfaces
-//            everywhere a prospect belongs (Saved list, CRM "Suggested" column)
-//            and can be re-approved back into the queue. This replaces the old
-//            hard delete so removing a company never loses its call history.
+//   remove — pull the lead OUT of every view without destroying it. SOFT-DELETES
+//            the row (deletedAt = now), exactly like the Opportunities "Clear". The
+//            row + its CallLog history stay in the DB (recoverable, never hard-
+//            deleted), but every read filters deletedAt: null, so the lead vanishes
+//            from ALL surfaces: today's queue, any past/date history view, the CRM
+//            board (every column, including Lost), Opportunities and Saved. It does
+//            NOT reappear anywhere. Use this when testing to fully clear a lead.
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -337,7 +340,7 @@ export async function PATCH(req: Request) {
     }
     // Scope the log to the operator via its business.
     const log = await prisma.callLog.findFirst({
-      where: { id: body.logId, userId: session.user.id },
+      where: { id: body.logId, userId: session.user.id, deletedAt: null },
       select: { id: true, businessId: true },
     });
     if (!log) {
@@ -355,7 +358,7 @@ export async function PATCH(req: Request) {
     // Only re-advance the lead if this is its latest call (status mirrors the most
     // recent disposition). Editing an older log is a pure history correction.
     const latest = await prisma.callLog.findFirst({
-      where: { businessId: log.businessId },
+      where: { businessId: log.businessId, deletedAt: null },
       orderBy: { calledAt: "desc" },
       select: { id: true, disposition: true },
     });
@@ -386,7 +389,7 @@ export async function PATCH(req: Request) {
   }
 
   const lead = await prisma.business.findFirst({
-    where: { id: body.businessId, userId: session.user.id },
+    where: { id: body.businessId, userId: session.user.id, deletedAt: null },
     select: { id: true },
   });
   if (!lead) {
@@ -396,13 +399,7 @@ export async function PATCH(req: Request) {
   if (body.action === "remove") {
     const updated = await prisma.business.update({
       where: { id: lead.id },
-      data: {
-        status: "SUGGESTED",
-        nextAction: null,
-        nextActionAt: null,
-        followUpUntil: null,
-        closedReason: null,
-      },
+      data: { deletedAt: new Date() },
       select: { id: true, status: true },
     });
     return NextResponse.json({ lead: updated });
@@ -445,11 +442,11 @@ export async function DELETE(req: Request) {
   // Resolve the target log (scoped to the operator).
   const target = body.logId
     ? await prisma.callLog.findFirst({
-        where: { id: body.logId, userId: session.user.id },
+        where: { id: body.logId, userId: session.user.id, deletedAt: null },
         select: { id: true, businessId: true },
       })
     : await prisma.callLog.findFirst({
-        where: { businessId: body.businessId, userId: session.user.id },
+        where: { businessId: body.businessId, userId: session.user.id, deletedAt: null },
         orderBy: { calledAt: "desc" },
         select: { id: true, businessId: true },
       });
@@ -461,9 +458,14 @@ export async function DELETE(req: Request) {
   const businessId = target.businessId;
 
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.callLog.delete({ where: { id: target.id } });
+    // Soft-delete: never hard-delete. Mark the undone log deletedAt; the row stays
+    // in the DB and is excluded from the "latest remaining" recompute below.
+    await tx.callLog.update({
+      where: { id: target.id },
+      data: { deletedAt: new Date() },
+    });
     const latest = await tx.callLog.findFirst({
-      where: { businessId },
+      where: { businessId, deletedAt: null },
       orderBy: { calledAt: "desc" },
       select: { disposition: true },
     });

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     let pack = providedPack;
     if (!pack?.meta || !pack.file1) {
       const latest = await prisma.generatedSystem.findFirst({
-        where: { businessId, userId: session.user.id, type: "ASSETS" },
+        where: { businessId, userId: session.user.id, type: "ASSETS", deletedAt: null },
         orderBy: { createdAt: "desc" },
       });
       if (!latest) {

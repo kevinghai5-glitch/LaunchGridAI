@@ -205,7 +205,7 @@ export function shell(
   // Sticky top command bar — brand, live business context, confidence, and the
   // workspace controls (present mode + print). Print/present are inert-safe.
   const cmdBar = `<div class="cmdbar">
-    <span class="cb-brand"><span class="dot"></span>LaunchGrid</span>
+    <span class="cb-brand"><span class="dot"></span>ReclaimedHQ</span>
     ${opts.docIndex ? `<span class="cb-idx">${esc(opts.docIndex)}</span>` : ""}
     <div class="cb-center">
       <span class="cb-biz">${esc(meta.businessName)}</span>
@@ -244,6 +244,18 @@ export function shell(
 
   const agencyLine =
     AGENCY_NAME.toLowerCase() !== "our team" ? ` \u00B7 ${esc(AGENCY_NAME)}` : "";
+
+  // Unmissable "generated without client intake" marker. Set on the pack meta at
+  // generation time when NO intake field was provided (the pure pre-intake
+  // TESTING path). It renders as a full-width banner under the command bar AND a
+  // stamp on the cover, and it prints. There is no toggle to remove it — the only
+  // way it disappears is regenerating with real intake present.
+  const testBanner = meta.internalTest
+    ? `<div class="testbar" role="alert">INTERNAL TEST \u2014 generated without client intake. Not for client delivery.</div>`
+    : "";
+  const testStamp = meta.internalTest
+    ? `<div class="test-stamp">INTERNAL TEST \u00B7 no client intake</div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -289,6 +301,25 @@ export function shell(
     justify-content: center;
   }
   .layout.solo { grid-template-columns: minmax(0, 860px); max-width: 860px; }
+
+  /* ── Internal-test marker (no client intake) ───────────────────────────── */
+  .testbar {
+    position: sticky; top: 54px; z-index: 49;
+    background: var(--critical); color: #fff;
+    font-weight: 700; font-size: 13px; letter-spacing: .02em;
+    text-align: center; padding: 8px 24px;
+    text-transform: uppercase;
+  }
+  .test-stamp {
+    display: inline-block; margin-bottom: 14px;
+    border: 1.5px solid var(--critical); color: var(--critical);
+    font-weight: 700; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; border-radius: 4px; padding: 4px 10px;
+  }
+  @media print {
+    .testbar { position: static; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .test-stamp { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 
   /* ── Command bar ───────────────────────────────────────────────────────── */
   .cmdbar {
@@ -664,10 +695,12 @@ export function shell(
 </head>
 <body>
   ${cmdBar}
+  ${testBanner}
   <div class="layout${solo ? " solo" : ""}">
     ${rail}
     <main class="main">
       <header class="doc">
+        ${testStamp}
         <div class="eyebrow">Conversion Intelligence</div>
         <h1>${esc(docTitle)}</h1>
         ${opts.subtitle ? `<p class="subtitle">${esc(opts.subtitle)}</p>` : ""}

@@ -26,19 +26,19 @@
   --transition: 240ms cubic-bezier(0.32, 0.72, 0, 1);
   --t: 240ms cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* base / surfaces — pure near-black canvas, flat elevated cards (Whop/Apple) */
-  --bg: #09090a;
-  --bg-deep: #050506;
-  --bg-elevated: #18181a;
-  --surface: #161618;
-  --surface-2: #1d1d20;
-  --surface-hi: #242427;
-  --glass: rgba(20, 20, 22, 0.78);
+  /* base / surfaces — ABSOLUTE black canvas, subtly-raised near-black cards */
+  --bg: #000000;
+  --bg-deep: #000000;
+  --bg-elevated: #0d0d0f;
+  --surface: #0f0f11;
+  --surface-2: #141416;
+  --surface-hi: #1a1a1d;
+  --glass: rgba(6, 6, 7, 0.82);
 
   /* legacy aliases used across existing components */
-  --surface-hover: #1d1d20;
-  --surface-active: #242427;
-  --sidebar: #060607;
+  --surface-hover: #141416;
+  --surface-active: #1a1a1d;
+  --sidebar: #000000;
 
   /* lines — hairline, soft (subtly visible card edges, Apple/Whop) */
   --line: rgba(255, 255, 255, 0.08);
@@ -65,6 +65,11 @@
   /* filled-pill blue (the "Active" badge in the reference) */
   --accent-fill: oklch(0.52 0.19 264 / 0.85);
   --accent-fill-text: oklch(0.90 0.07 264);
+  /* premium blue gradient (light sky → deep navy) — the ONLY place blue gets
+     rich. Used for hero fills: primary buttons, active nav, toggles, pill-active.
+     Flat --accent stays for text, borders, dots, and soft tints. */
+  --accent-grad: linear-gradient(140deg, #5fb4e8 0%, #1c6bd6 46%, #0b3488 100%);
+  --accent-grad-hover: linear-gradient(140deg, #6cbcec 0%, #2a77e0 46%, #0e3f9c 100%);
 
   /* money / status */
   --money: oklch(0.76 0.13 158);
@@ -136,11 +141,8 @@
   body {
     min-height: 100vh;
     min-width: 1320px;
-    /* atmosphere — a single, barely-there top wash. The canvas reads as pure
-       near-black (Whop/Apple), letting the flat elevated cards carry the depth. */
-    background:
-      radial-gradient(1200px 720px at 50% -28%, rgba(255, 255, 255, 0.018), transparent 62%),
-      var(--bg);
+    /* absolute black — no wash. Elevated cards carry all the depth. */
+    background: var(--bg);
     background-attachment: fixed;
   }
 
@@ -305,7 +307,7 @@
 }
 .bar > span {
   position: absolute; inset: 0; transform-origin: left center;
-  background: var(--accent);
+  background: var(--accent-grad);
   animation: barFill 1.2s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
@@ -397,11 +399,15 @@
   font-size: 12.5px; font-weight: 600; line-height: 1;
   letter-spacing: -0.005em; white-space: nowrap;
 }
-.lg-pill-active { background: var(--accent-fill); color: var(--accent-fill-text); }
+.lg-pill-active { background: var(--accent-grad); color: #fff; }
 .lg-pill-muted { background: var(--surface-hi); color: var(--text-2); }
 .lg-pill-success { background: var(--success-soft); color: var(--success); }
 .lg-pill-warn { background: var(--warn-soft); color: var(--warn); }
 .lg-pill-danger { background: var(--danger-soft); color: var(--danger); }
+
+/* premium blue-gradient fill for accent buttons/CTAs (also legacy shadcn Button) */
+.lg-grad { background: var(--accent-grad); color: #fff; border: 1px solid transparent; }
+.lg-grad:hover { background: var(--accent-grad-hover); }
 
 /* Sonner overrides — inherit theme tokens */
 [data-sonner-toaster] [data-sonner-toast] {

@@ -66,14 +66,14 @@ export function BusinessCard({ business, industry, city, isSaved, onSaved }: Bus
   };
 
   return (
-    <div className="glass-card p-5 group hover:border-blue-500/20 transition-all duration-200">
+    <div className="glass-card p-5 group hover:border-[color:var(--accent-soft)] transition-all duration-200">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-white truncate">{business.name}</h3>
+          <h3 className="text-sm font-semibold text-[color:var(--text)] truncate">{business.name}</h3>
           {business.rating > 0 && (
             <div className="flex items-center gap-1 mt-1">
               <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-[color:var(--text-3)]">
                 {business.rating.toFixed(1)} ({business.userRatingsTotal} reviews)
               </span>
             </div>
@@ -97,7 +97,7 @@ export function BusinessCard({ business, industry, city, isSaved, onSaved }: Bus
         </Button>
       </div>
 
-      <div className="space-y-1.5 text-xs text-gray-400">
+      <div className="space-y-1.5 text-xs text-[color:var(--text-3)]">
         {business.address && (
           <div className="flex items-start gap-2">
             <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -117,7 +117,7 @@ export function BusinessCard({ business, industry, city, isSaved, onSaved }: Bus
               href={business.website}
               target="_blank"
               rel="noopener noreferrer"
-              className="truncate hover:text-blue-400 transition-colors"
+              className="truncate hover:text-[color:var(--accent)] transition-colors"
             >
               {business.website.replace(/^https?:\/\/(www\.)?/, "")}
             </a>
@@ -131,7 +131,7 @@ export function BusinessCard({ business, industry, city, isSaved, onSaved }: Bus
             href={business.mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-400 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[color:var(--text-4)] hover:text-[color:var(--accent)] transition-colors"
           >
             <ExternalLink className="h-3 w-3" />
             View on Google Maps

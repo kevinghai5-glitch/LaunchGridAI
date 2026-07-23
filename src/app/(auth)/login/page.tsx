@@ -101,7 +101,7 @@ export default function LoginPage() {
             Welcome back
           </h1>
           <p style={{ fontSize: 13.5, color: "var(--text-3)" }}>
-            Sign in to your LaunchGrid account
+            Sign in to your ReclaimedHQ account
           </p>
         </div>
 

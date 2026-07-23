@@ -17,6 +17,7 @@ export interface Fact<T> {
 
 export interface BusinessFacts {
   name: Fact<string> | null;
+  owner: Fact<string> | null; // owner/decision-maker, resolved at cold-audit time
   phones: Fact<string[]>;
   emails: Fact<string[]>;
   addresses: Fact<string[]>;
@@ -129,7 +130,7 @@ function dedupePhones(phones: string[]): string[] {
   return out;
 }
 
-function extractFromText(text: string): Omit<BusinessFacts, "name"> {
+function extractFromText(text: string): Omit<BusinessFacts, "name" | "owner"> {
   const phones = dedupePhones((text.match(PHONE_RE) ?? []).map(clean)).slice(0, 4);
   const emails = uniq((text.match(EMAIL_RE) ?? []).map((e) => e.toLowerCase()))
     .filter((e) => !/sentry|wix|wordpress|squarespace|noreply|example/i.test(e))
@@ -226,6 +227,8 @@ export interface BuildBusinessFactsInput {
     address: string | null | undefined;
     website: string | null | undefined;
   };
+  // Owner/decision-maker name already resolved + cached on the Business row.
+  ownerName?: string | null;
 }
 
 export function buildBusinessFacts(input: BuildBusinessFactsInput): BusinessFacts {
@@ -264,8 +267,13 @@ export function buildBusinessFacts(input: BuildBusinessFactsInput): BusinessFact
     ? { value: input.places.name, source: "places" as Source }
     : null;
 
+  const owner = input.ownerName
+    ? { value: input.ownerName, source: "website" as Source }
+    : null;
+
   return {
     name,
+    owner,
     phones: { value: phonesMerged, source: phonesSource },
     emails: fromText.emails,
     addresses: { value: addresses, source: "places" },
@@ -286,6 +294,7 @@ export function factsToPromptBlock(facts: BusinessFacts): string {
   const lines: string[] = ["VERIFIED BUSINESS FACTS (defer to these over inference):"];
 
   if (facts.name) lines.push(`- Name: ${facts.name.value} [${facts.name.source}]`);
+  if (facts.owner) lines.push(`- Owner / decision-maker: ${facts.owner.value} [${facts.owner.source}]`);
   if (facts.phones.value.length)
     lines.push(`- Phone(s): ${facts.phones.value.join(", ")} [${facts.phones.source}]`);
   if (facts.emails.value.length)

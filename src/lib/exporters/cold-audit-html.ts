@@ -14,6 +14,7 @@
 // safe; no hover-lift.
 
 import type { ColdAuditReport, ColdAuditFinding } from "@/types";
+import { softenFlatAssertions } from "../leak-narrative";
 
 // ── Law enforcement (deterministic, not prompt-dependent) ───────────────────
 // The generation prompt asks the model to follow the cold-audit laws, but a
@@ -161,10 +162,13 @@ export function enforceColdAuditLaws(report: ColdAuditReport): ColdAuditReport {
     : HEADLINE_COST_FALLBACK;
 
   // Defect 3 / Law 6: thin redundant hedge-stacks in observed-fact prose.
+  // Law 13 backstop: soften any flat operational assertion about an invisible
+  // internal behavior that survived generation (or predates the rule) — a saved
+  // audit can't be regenerated at render, so we hedge it deterministically.
   const findings = (report.findings ?? []).map((f) => ({
     ...f,
-    problem: dehedge(f.problem),
-    whyItCosts: dehedge(f.whyItCosts),
+    problem: softenFlatAssertions(dehedge(f.problem)),
+    whyItCosts: softenFlatAssertions(dehedge(f.whyItCosts)),
   }));
 
   return {

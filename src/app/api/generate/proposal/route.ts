@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const business = await prisma.business.findFirst({
-      where: { id: parsed.data.businessId, userId: session.user.id },
+      where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
     });
     if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
@@ -38,12 +38,12 @@ export async function POST(req: NextRequest) {
     // Pull the richest stored audit signal for this business.
     const [packRow, auditRow] = await Promise.all([
       prisma.generatedSystem.findFirst({
-        where: { businessId: business.id, userId: session.user.id, type: "ASSETS" },
+        where: { businessId: business.id, userId: session.user.id, type: "ASSETS", deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { content: true },
       }),
       prisma.generatedSystem.findFirst({
-        where: { businessId: business.id, userId: session.user.id, type: "COLD_AUDIT" },
+        where: { businessId: business.id, userId: session.user.id, type: "COLD_AUDIT", deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { content: true },
       }),

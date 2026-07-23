@@ -4,13 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateAssetsSchema } from "@/lib/validations";
 import { checkPlanLimit } from "@/lib/limits";
-import { fetchWebsitePage } from "@/lib/website-analyzer";
-import { fetchPlaceReviews, findCompetitors } from "@/lib/google-places";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
-import { firecrawlSite } from "@/lib/firecrawl";
 import { buildBusinessFacts } from "@/lib/business-facts";
 import { resolvePsiSnapshot } from "@/lib/psi-snapshot";
-import { runDataForSeo } from "@/lib/dataforseo";
+import { resolveResearchSnapshot } from "@/lib/research-snapshot";
 import { buildScreenshotBundle } from "@/lib/screenshotone";
 import {
   generateAssetPack,
@@ -21,10 +18,12 @@ import {
   type LeakContext,
 } from "@/lib/asset-generation";
 import { detectLeaks } from "@/lib/leak-detection";
+import { buildPriorityLabels } from "@/lib/intake-options";
 import {
   buildLeakInputs,
   leakInputsToPromptBlock,
   allowedNumbersFor,
+  voiceLint,
 } from "@/lib/leak-narrative";
 import type { AssetPack } from "@/types";
 
@@ -61,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     const business = await prisma.business.findFirst({
-      where: { id: parsed.data.businessId, userId: session.user.id },
+      where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
     });
 
     if (!business) {
@@ -70,19 +69,17 @@ export async function POST(req: NextRequest) {
 
     // ── Enrichment: ground the pack in the live site, real reviews, and local
     // competitors plus the premium signals (Firecrawl, PageSpeed, DataForSEO,
-    // ScreenshotOne). Each source degrades gracefully to empty on failure.
-    const [page, reviews, competitors, scrape, psi, dfs] = await Promise.all([
-      fetchWebsitePage(business.website),
-      fetchPlaceReviews(business.googlePlaceId),
-      findCompetitors(
-        business.industry ?? business.category,
-        business.city,
-        business.googlePlaceId
-      ),
-      firecrawlSite(business.website),
-      resolvePsiSnapshot(business),
-      runDataForSeo(business.name, business.address),
+    // ScreenshotOne). The research bundle (native page, reviews, competitors,
+    // Firecrawl scrape, DataForSEO) is captured ONCE and reused verbatim on every
+    // regenerate — a plain regenerate is a zero-scrape, zero-API-cost operation.
+    // Only the deliberate "refresh research" action (refreshResearch) busts the
+    // snapshot and re-measures. PSI is kept in lockstep on the same refresh flag.
+    const refreshResearch = parsed.data.refreshResearch ?? false;
+    const [research, psi] = await Promise.all([
+      resolveResearchSnapshot(business, { forceRefresh: refreshResearch }),
+      resolvePsiSnapshot(business, { forceRefresh: refreshResearch }),
     ]);
+    const { page, reviews, competitors, scrape, dfs } = research;
 
     const verifiedFacts = buildBusinessFacts({
       scrape,
@@ -93,6 +90,7 @@ export async function POST(req: NextRequest) {
         address: business.address,
         website: business.website,
       },
+      ownerName: business.ownerName,
     });
 
     const screenshots = buildScreenshotBundle({
@@ -143,17 +141,65 @@ export async function POST(req: NextRequest) {
     // call-volume slots (inbound inquiries stand in for the call-volume the
     // missed-call math needs). A single provided field is enough to flip a
     // document to real mode for the templates that can use it.
-    const clientIntake =
+    // Intake booleans (null = unknown/not asked) join the numbers here: any one
+    // provided flips this business out of the pure pre-intake path. Booleans drive
+    // confirmed-vs-benchmark leak framing; `true` suppresses the matching leak.
+    const hasAnyIntake =
       business.avgClientValueCad != null ||
       business.monthlyLeadVolume != null ||
-      business.monthlyAdSpendCad != null
-        ? {
-            avgJobValueCad: business.avgClientValueCad ?? undefined,
-            monthlyLeadVolume: business.monthlyLeadVolume ?? undefined,
-            monthlyCallVolume: business.monthlyLeadVolume ?? undefined,
-            adSpendMonthlyCad: business.monthlyAdSpendCad ?? undefined,
-          }
+      business.hasCrm != null ||
+      business.hasFollowUpSequence != null ||
+      business.hasReminderSystem != null ||
+      business.hasPastCustomerDatabase != null ||
+      business.bookingMethod != null ||
+      business.gbpManagement != null ||
+      business.buildPriorities != null;
+    const clientIntake = hasAnyIntake
+      ? {
+          avgJobValueCad: business.avgClientValueCad ?? undefined,
+          monthlyLeadVolume: business.monthlyLeadVolume ?? undefined,
+          monthlyCallVolume: business.monthlyLeadVolume ?? undefined,
+          hasCrm: business.hasCrm ?? undefined,
+          hasFollowUpSequence: business.hasFollowUpSequence ?? undefined,
+          hasReminderSystem: business.hasReminderSystem ?? undefined,
+          hasPastCustomerDatabase: business.hasPastCustomerDatabase ?? undefined,
+          bookingMethod:
+            (business.bookingMethod as "PHONE_EMAIL_ONLY" | "BOOKING_TOOL" | "OTHER" | null) ??
+            undefined,
+          bookingToolName: business.bookingToolName ?? undefined,
+        }
+      : undefined;
+    // Booking-tool reframe copy fires only when the client both books via a tool
+    // AND named it. GBP framing + build-priority ordering are pure copy emphasis.
+    const bookingToolName =
+      business.bookingMethod === "BOOKING_TOOL"
+        ? business.bookingToolName?.trim() || undefined
         : undefined;
+    const buildPriorities = buildPriorityLabels(business.buildPriorities);
+
+    // No intake at all → this is the pure pre-intake TESTING path. Every document
+    // cover will carry an "INTERNAL TEST — generated without client intake" marker
+    // (driven by ctx.intakePresent → meta.internalTest). Log it loudly at
+    // generation time so a test pack is never mistaken for a client-ready one.
+    if (!hasAnyIntake) {
+      console.warn(
+        `[generate/assets] INTERNAL TEST pack — no client intake for business ${business.id} (${business.name}). Deliverables will be watermarked. Add intake to remove the marker.`
+      );
+    }
+
+    // Services they want more of — COPY EMPHASIS ONLY (never a fact/leak/number).
+    // Runs through the same voice lint as generated copy before it reaches a prompt.
+    let servicesFocus: string | undefined;
+    const rawFocus = business.servicesFocus?.trim();
+    if (rawFocus) {
+      let cleaned = rawFocus;
+      for (const hit of voiceLint(rawFocus).hits) {
+        const re = new RegExp(hit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig");
+        cleaned = cleaned.replace(re, "");
+      }
+      cleaned = cleaned.replace(/\s+/g, " ").trim();
+      servicesFocus = cleaned || undefined;
+    }
 
     const detected = detectLeaks({
       business: {
@@ -171,6 +217,7 @@ export async function POST(req: NextRequest) {
       fallbackText: page.text,
       placeReviews: reviews,
       intake: clientIntake,
+      asOf: research.asOf,
     });
     const leakInputs = buildLeakInputs(detected.report, detected.data);
     const leaks: LeakContext = {
@@ -197,6 +244,11 @@ export async function POST(req: NextRequest) {
       intel,
       websiteText: websiteTextForPrompt,
       leaks,
+      servicesFocus,
+      intakePresent: hasAnyIntake,
+      bookingToolName,
+      gbpManagement: business.gbpManagement ?? undefined,
+      buildPriorities,
     };
 
     // ── Regenerate a single deliverable, merging into the latest stored pack.
@@ -206,6 +258,7 @@ export async function POST(req: NextRequest) {
           businessId: business.id,
           userId: session.user.id,
           type: "ASSETS",
+          deletedAt: null,
         },
         orderBy: { createdAt: "desc" },
       });

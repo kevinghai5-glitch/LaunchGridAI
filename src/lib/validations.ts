@@ -101,6 +101,20 @@ export const updateBusinessSchema = z.object({
   avgClientValueCad: z.coerce.number().int().positive().nullable().optional(),
   monthlyLeadVolume: z.coerce.number().int().positive().nullable().optional(),
   monthlyAdSpendCad: z.coerce.number().int().nonnegative().nullable().optional(),
+  // Intake system booleans — null clears back to "unknown / not asked".
+  hasCrm: z.boolean().nullable().optional(),
+  hasFollowUpSequence: z.boolean().nullable().optional(),
+  hasReminderSystem: z.boolean().nullable().optional(),
+  hasPastCustomerDatabase: z.boolean().nullable().optional(),
+  // Services they want more of — copy emphasis only.
+  servicesFocus: z.string().max(300).nullable().optional(),
+  // Intake form: booking / GBP / build priorities. Enums mirror the form verbatim;
+  // null clears back to "not asked".
+  bookingMethod: z.enum(["PHONE_EMAIL_ONLY", "BOOKING_TOOL", "OTHER"]).nullable().optional(),
+  bookingToolName: z.string().max(120).nullable().optional(),
+  gbpManagement: z.enum(["SELF", "NOT_SELF", "SOMEONE_ELSE", "NOT_SURE"]).nullable().optional(),
+  // Comma-separated slugs from the fixed 10-option "prioritize in your build" checkbox.
+  buildPriorities: z.string().max(400).nullable().optional(),
 });
 
 // Zoom outcome — recorded at the end of the "On the Zoom" runner.
@@ -122,6 +136,10 @@ export const generateAssetsSchema = z.object({
   // When present, regenerate just one deliverable and merge it into the
   // existing pack instead of generating all five.
   section: z.enum(["file1", "file2", "file3", "file4", "file5"]).optional(),
+  // The deliberate "refresh research" action: bust the persisted research +
+  // PSI snapshots and re-scrape live. Absent/false → regenerate reuses the
+  // stored bundle (zero-scrape, zero-API-cost). Fresh data is always a choice.
+  refreshResearch: z.boolean().optional(),
 });
 
 export const generateColdAuditSchema = z.object({

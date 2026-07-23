@@ -14,11 +14,11 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground border-white/20",
-        blue: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+        blue: "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]",
         green: "border-green-500/30 bg-green-500/10 text-green-400",
         yellow: "border-yellow-500/30 bg-yellow-500/10 text-yellow-400",
         red: "border-red-500/30 bg-red-500/10 text-red-400",
-        gray: "border-white/10 bg-white/[0.05] text-gray-400",
+        gray: "border-white/10 bg-white/[0.05] text-[var(--text-3)]",
       },
     },
     defaultVariants: {
