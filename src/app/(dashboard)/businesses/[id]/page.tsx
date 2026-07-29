@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
+import { IntakeForm } from "@/components/businesses/IntakeForm";
+import { WorkflowPanel } from "@/components/businesses/WorkflowPanel";
 import type { AssetPack } from "@/types";
 import { STATUS_META, type LeadStatus } from "@/lib/call-queue";
+import { formatCurrency } from "@/lib/utils";
 import {
   MapPin,
   Phone,
@@ -77,11 +80,23 @@ interface BusinessWithSystems {
   avgClientValueCad: number | null;
   monthlyLeadVolume: number | null;
   monthlyAdSpendCad: number | null;
-  // Intake system booleans (null = unknown / not asked) + services-focus copy hint
+  // Client intake (null = unknown / not asked, which is NOT the same as "no").
+  // The whole set, because this screen and the Library now collect the same
+  // questions through the same component — whichever one the operator opens has
+  // to produce the same pack.
   hasCrm: boolean | null;
   hasFollowUpSequence: boolean | null;
   hasReminderSystem: boolean | null;
   hasPastCustomerDatabase: boolean | null;
+  hasCallTracking: boolean | null;
+  hasOnlinePayment: boolean | null;
+  afterHoursHandling: string | null;
+  missedCallHandling: string | null;
+  responseSpeed: string | null;
+  bookingMethod: string | null;
+  bookingToolName: string | null;
+  gbpManagement: string | null;
+  buildPriorities: string | null;
   servicesFocus: string | null;
   callLogs: Array<{
     id: string;
@@ -104,26 +119,14 @@ export default function BusinessDetailPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
-  // Client-intake card: local drafts (empty string = blank = benchmark)
-  const [numbersDraft, setNumbersDraft] = useState({
-    avgClientValueCad: "",
-    monthlyLeadVolume: "",
-  });
-  // Intake system booleans as a tri-state control ("unknown" = null = not asked).
-  const [intakeDraft, setIntakeDraft] = useState<{
-    hasCrm: "yes" | "no" | "unknown";
-    hasFollowUpSequence: "yes" | "no" | "unknown";
-    hasReminderSystem: "yes" | "no" | "unknown";
-    hasPastCustomerDatabase: "yes" | "no" | "unknown";
-    servicesFocus: string;
-  }>({
-    hasCrm: "unknown",
-    hasFollowUpSequence: "unknown",
-    hasReminderSystem: "unknown",
-    hasPastCustomerDatabase: "unknown",
-    servicesFocus: "",
-  });
-  const [savingNumbers, setSavingNumbers] = useState(false);
+  // Refetch token for the build panel. Bumped after an intake save, because two
+  // of the fourteen workflows are decided by an intake answer ("no social
+  // accounts" drops the social inbox, "no past-customer list" drops the
+  // reactivation campaign) and a third can lock once a scan measures its leak.
+  // The effect can only be known by re-resolving server-side, so it is never
+  // adjusted optimistically here — but it MUST be visible immediately, or an
+  // answer that changed the build looks like an answer that did nothing.
+  const [buildKey, setBuildKey] = useState(0);
 
   useEffect(() => {
     loadBusiness();
@@ -141,19 +144,6 @@ export default function BusinessDetailPage() {
       const data = await res.json();
       setBusiness(data.business);
       setNotesDraft(data.business.notes ?? "");
-      setNumbersDraft({
-        avgClientValueCad: data.business.avgClientValueCad?.toString() ?? "",
-        monthlyLeadVolume: data.business.monthlyLeadVolume?.toString() ?? "",
-      });
-      const b2tri = (v: boolean | null | undefined): "yes" | "no" | "unknown" =>
-        v === true ? "yes" : v === false ? "no" : "unknown";
-      setIntakeDraft({
-        hasCrm: b2tri(data.business.hasCrm),
-        hasFollowUpSequence: b2tri(data.business.hasFollowUpSequence),
-        hasReminderSystem: b2tri(data.business.hasReminderSystem),
-        hasPastCustomerDatabase: b2tri(data.business.hasPastCustomerDatabase),
-        servicesFocus: data.business.servicesFocus ?? "",
-      });
     } catch {
       toast.error("Failed to load business");
     } finally {
@@ -208,48 +198,6 @@ export default function BusinessDetailPage() {
     }
   };
 
-  // Persist the three deliverable numbers. Empty string → null (benchmark mode).
-  const handleSaveNumbers = async () => {
-    if (!business) return;
-    const toValue = (s: string): number | null => {
-      const t = s.trim();
-      if (!t) return null;
-      const n = Number(t);
-      return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
-    };
-    const tri2bool = (t: "yes" | "no" | "unknown"): boolean | null =>
-      t === "yes" ? true : t === "no" ? false : null;
-    const focus = intakeDraft.servicesFocus.trim();
-    const payload = {
-      avgClientValueCad: toValue(numbersDraft.avgClientValueCad),
-      monthlyLeadVolume: toValue(numbersDraft.monthlyLeadVolume),
-      hasCrm: tri2bool(intakeDraft.hasCrm),
-      hasFollowUpSequence: tri2bool(intakeDraft.hasFollowUpSequence),
-      hasReminderSystem: tri2bool(intakeDraft.hasReminderSystem),
-      hasPastCustomerDatabase: tri2bool(intakeDraft.hasPastCustomerDatabase),
-      servicesFocus: focus || null,
-    };
-    setSavingNumbers(true);
-    try {
-      const res = await fetch(`/api/businesses/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to save intake");
-        return;
-      }
-      setBusiness(data.business);
-      toast.success("Client intake saved");
-    } catch {
-      toast.error("Failed to save intake");
-    } finally {
-      setSavingNumbers(false);
-    }
-  };
-
   const handleFavorite = async () => {
     if (!business) return;
     setFavoriting(true);
@@ -261,8 +209,12 @@ export default function BusinessDetailPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setBusiness(data.business);
-        toast.success(data.business.favorited ? "Added to favorites" : "Removed from favorites");
+        // MERGE, don't replace. PATCH answers with the business row only — no
+        // generatedSystems / proposals / callLogs — so swapping the whole object
+        // in would blank the asset pack and call-history sections below.
+        const favorited: boolean = data.business.favorited;
+        setBusiness((prev) => (prev ? { ...prev, favorited } : prev));
+        toast.success(favorited ? "Added to favorites" : "Removed from favorites");
       }
     } catch {
       toast.error("Failed to update favorite");
@@ -485,214 +437,54 @@ export default function BusinessDetailPage() {
               </div>
             </div>
 
-            {/* Client intake: powers REAL-mode math + confirmed-vs-benchmark leak
-                framing in D1–D4. Blank / Unknown = industry benchmarks. */}
+            {/* Client intake — the same questions the Library asks, through the
+                same component. These answers are the only operator input that
+                changes what D1–D4 say, so if the two screens collected different
+                subsets the pack would depend on which screen got used. */}
             <div className="glass-card p-5 space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-[color:var(--text)]">Client intake</h3>
-                <p className="text-xs text-[color:var(--text-4)] mt-1" style={{ lineHeight: 1.5 }}>
-                  Optional. Fill these in and the paid deliverables run the client&apos;s real
-                  economics and confirmed systems. Leave blank and they fall back to industry
-                  benchmarks.
-                </p>
-              </div>
+              <h3 className="text-sm font-semibold text-[color:var(--text)]">Client intake</h3>
+              <IntakeForm
+                business={business}
+                density="comfortable"
+                successMessage="Client intake saved"
+                onSaved={(next) => {
+                  setBusiness((prev) => (prev ? { ...prev, ...next } : prev));
+                  // The build panel below reads these answers server-side, so it
+                  // has to be told to re-read. Answering "we don't have social
+                  // accounts" and seeing the workflow drop out of the build in the
+                  // same motion is the whole reason the two sit together.
+                  setBuildKey((n) => n + 1);
+                }}
+                renderFooter={({ save, saving, dirty }) => (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[color:var(--text-4)]">
+                      {business.avgClientValueCad || business.monthlyLeadVolume
+                        ? "Real-mode math active"
+                        : "Benchmark mode"}
+                    </span>
+                    {dirty && (
+                      <Button variant="blue" size="sm" onClick={save} disabled={saving}>
+                        {saving ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <Check className="h-3 w-3 mr-1" />
+                        )}
+                        Save intake
+                      </Button>
+                    )}
+                  </div>
+                )}
+              />
+            </div>
 
-              {(() => {
-                const fields: Array<{
-                  key: keyof typeof numbersDraft;
-                  label: string;
-                  hint: string;
-                  prefix?: string;
-                }> = [
-                  { key: "avgClientValueCad", label: "Avg. customer value", hint: "one closed client", prefix: "$" },
-                  { key: "monthlyLeadVolume", label: "Monthly inquiries", hint: "inbound leads / mo" },
-                ];
-                const b2tri = (v: boolean | null | undefined): "yes" | "no" | "unknown" =>
-                  v === true ? "yes" : v === false ? "no" : "unknown";
-                const storedNumbers = {
-                  avgClientValueCad: business.avgClientValueCad?.toString() ?? "",
-                  monthlyLeadVolume: business.monthlyLeadVolume?.toString() ?? "",
-                };
-                const storedIntake = {
-                  hasCrm: b2tri(business.hasCrm),
-                  hasFollowUpSequence: b2tri(business.hasFollowUpSequence),
-                  hasReminderSystem: b2tri(business.hasReminderSystem),
-                  hasPastCustomerDatabase: b2tri(business.hasPastCustomerDatabase),
-                  servicesFocus: business.servicesFocus ?? "",
-                };
-                const numbersDirty =
-                  numbersDraft.avgClientValueCad !== storedNumbers.avgClientValueCad ||
-                  numbersDraft.monthlyLeadVolume !== storedNumbers.monthlyLeadVolume;
-                const intakeDirty =
-                  intakeDraft.hasCrm !== storedIntake.hasCrm ||
-                  intakeDraft.hasFollowUpSequence !== storedIntake.hasFollowUpSequence ||
-                  intakeDraft.hasReminderSystem !== storedIntake.hasReminderSystem ||
-                  intakeDraft.hasPastCustomerDatabase !== storedIntake.hasPastCustomerDatabase ||
-                  intakeDraft.servicesFocus.trim() !== storedIntake.servicesFocus.trim();
-                const dirty = numbersDirty || intakeDirty;
-
-                const systemQuestions: Array<{
-                  key: "hasCrm" | "hasFollowUpSequence" | "hasReminderSystem" | "hasPastCustomerDatabase";
-                  label: string;
-                }> = [
-                  { key: "hasCrm", label: "CRM / lead pipeline" },
-                  { key: "hasFollowUpSequence", label: "Automated follow-up" },
-                  { key: "hasReminderSystem", label: "Appointment reminders" },
-                  { key: "hasPastCustomerDatabase", label: "Past-customer list" },
-                ];
-
-                return (
-                  <>
-                    <div className="space-y-3">
-                      {fields.map((f) => (
-                        <div key={f.key}>
-                          <div className="flex items-baseline justify-between mb-1.5">
-                            <label className="text-xs text-[color:var(--text-3)]">{f.label}</label>
-                            <span className="text-[11px] text-[color:var(--text-4)]">{f.hint}</span>
-                          </div>
-                          <div style={{ position: "relative" }}>
-                            {f.prefix && (
-                              <span
-                                style={{
-                                  position: "absolute",
-                                  left: 11,
-                                  top: "50%",
-                                  transform: "translateY(-50%)",
-                                  color: "var(--text-3)",
-                                  fontSize: 13,
-                                  pointerEvents: "none",
-                                }}
-                              >
-                                {f.prefix}
-                              </span>
-                            )}
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              min={0}
-                              value={numbersDraft[f.key]}
-                              onChange={(e) =>
-                                setNumbersDraft((prev) => ({ ...prev, [f.key]: e.target.value }))
-                              }
-                              placeholder="—"
-                              style={{
-                                width: "100%",
-                                borderRadius: 8,
-                                border: "1px solid var(--line-strong)",
-                                background: "var(--bg-deep, #0b0d12)",
-                                color: "var(--text)",
-                                fontFamily: "inherit",
-                                fontSize: 13,
-                                padding: f.prefix ? "9px 11px 9px 22px" : "9px 11px",
-                                outline: "none",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Systems the client already has — Yes suppresses that leak,
-                        No renders it "Confirmed at intake", Unknown = benchmark hedge. */}
-                    <div className="space-y-2.5 pt-1">
-                      <div className="text-[11px] uppercase tracking-wide text-[color:var(--text-4)]">
-                        Systems already in place
-                      </div>
-                      {systemQuestions.map((q) => (
-                        <div key={q.key} className="flex items-center justify-between gap-3">
-                          <label className="text-xs text-[color:var(--text-3)]">{q.label}</label>
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              borderRadius: 8,
-                              overflow: "hidden",
-                              border: "1px solid var(--line-strong)",
-                            }}
-                          >
-                            {(["yes", "no", "unknown"] as const).map((opt) => {
-                              const active = intakeDraft[q.key] === opt;
-                              const text = opt === "yes" ? "Yes" : opt === "no" ? "No" : "?";
-                              return (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() =>
-                                    setIntakeDraft((prev) => ({ ...prev, [q.key]: opt }))
-                                  }
-                                  style={{
-                                    padding: "5px 12px",
-                                    fontSize: 12,
-                                    fontFamily: "inherit",
-                                    cursor: "pointer",
-                                    border: "none",
-                                    borderLeft:
-                                      opt === "yes" ? "none" : "1px solid var(--line-strong)",
-                                    background: active ? "var(--accent-grad)" : "transparent",
-                                    color: active ? "#fff" : "var(--text-3)",
-                                  }}
-                                >
-                                  {text}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Services they want more of — copy emphasis ONLY. */}
-                    <div className="pt-1">
-                      <div className="flex items-baseline justify-between mb-1.5">
-                        <label className="text-xs text-[color:var(--text-3)]">Services they want more of</label>
-                        <span className="text-[11px] text-[color:var(--text-4)]">from intake form</span>
-                      </div>
-                      <textarea
-                        value={intakeDraft.servicesFocus}
-                        maxLength={300}
-                        rows={2}
-                        onChange={(e) =>
-                          setIntakeDraft((prev) => ({ ...prev, servicesFocus: e.target.value }))
-                        }
-                        placeholder="e.g. emergency drain calls, water heater installs"
-                        style={{
-                          width: "100%",
-                          borderRadius: 8,
-                          border: "1px solid var(--line-strong)",
-                          background: "var(--bg-deep, #0b0d12)",
-                          color: "var(--text)",
-                          fontFamily: "inherit",
-                          fontSize: 13,
-                          padding: "9px 11px",
-                          outline: "none",
-                          resize: "vertical",
-                        }}
-                      />
-                      <p className="text-[11px] text-[color:var(--text-4)] mt-1" style={{ lineHeight: 1.5 }}>
-                        Shapes copy wording only — never changes which leaks fire, the scores, or
-                        the math.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-[color:var(--text-4)]">
-                        {business.avgClientValueCad || business.monthlyLeadVolume
-                          ? "Real-mode math active"
-                          : "Benchmark mode"}
-                      </span>
-                      {dirty && (
-                        <Button variant="blue" size="sm" onClick={handleSaveNumbers} disabled={savingNumbers}>
-                          {savingNumbers ? (
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                          ) : (
-                            <Check className="h-3 w-3 mr-1" />
-                          )}
-                          Save intake
-                        </Button>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
+            {/* The build — directly under the intake card, because the intake
+                answers are what move it. Two of the fourteen workflows are decided
+                by an answer on the card above, so putting the two anywhere but
+                next to each other means changing an answer and going looking for
+                what it did. It re-reads on every intake save (buildKey). */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-[color:var(--text)]">The build</h3>
+              <WorkflowPanel businessId={business.id} reloadKey={buildKey} density="comfortable" />
             </div>
           </div>
 
@@ -875,7 +667,13 @@ export default function BusinessDetailPage() {
                     >
                       <div>
                         <div className="text-sm font-medium text-[color:var(--text)] group-hover:text-[color:var(--accent-hover)] transition-colors">{p.title}</div>
-                        <div className="text-xs text-[color:var(--text-4)]">${p.monthlyPrice}/mo</div>
+                        {/* This printed a raw "$1000/mo" — no currency marker and
+                            no thousands separator — beside an audit that reads
+                            "CAD $1,290". formatCurrency is the product's one money
+                            formatter: the marker goes before the figure, always. */}
+                        <div className="text-xs text-[color:var(--text-4)]">
+                          {formatCurrency(p.monthlyPrice)}/mo
+                        </div>
                       </div>
                       <Badge variant={p.status === "ACCEPTED" ? "green" : p.status === "SENT" ? "blue" : "gray"}>
                         {p.status}

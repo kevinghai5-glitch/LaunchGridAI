@@ -106,6 +106,8 @@ export const updateBusinessSchema = z.object({
   hasFollowUpSequence: z.boolean().nullable().optional(),
   hasReminderSystem: z.boolean().nullable().optional(),
   hasPastCustomerDatabase: z.boolean().nullable().optional(),
+  hasCallTracking: z.boolean().nullable().optional(),
+  hasOnlinePayment: z.boolean().nullable().optional(),
   // Services they want more of — copy emphasis only.
   servicesFocus: z.string().max(300).nullable().optional(),
   // Intake form: booking / GBP / build priorities. Enums mirror the form verbatim;
@@ -113,6 +115,50 @@ export const updateBusinessSchema = z.object({
   bookingMethod: z.enum(["PHONE_EMAIL_ONLY", "BOOKING_TOOL", "OTHER"]).nullable().optional(),
   bookingToolName: z.string().max(120).nullable().optional(),
   gbpManagement: z.enum(["SELF", "NOT_SELF", "SOMEONE_ELSE", "NOT_SURE"]).nullable().optional(),
+  // How enquiries are handled today. Slugs mirror intake-options.ts verbatim —
+  // the detectors match on these exact strings, so a typo here silently drops a
+  // leak back to its benchmark hedge instead of failing loudly.
+  afterHoursHandling: z
+    .enum(["AUTO_RESPONSE", "NEXT_MORNING", "NOTHING", "UNKNOWN"])
+    .nullable()
+    .optional(),
+  missedCallHandling: z
+    .enum(["INSTANT_TEXT_BACK", "CALL_BACK_WHEN_FREE", "VOICEMAIL_ONLY", "UNKNOWN"])
+    .nullable()
+    .optional(),
+  responseSpeed: z
+    .enum(["UNDER_5_MIN", "FEW_HOURS", "DAY_OR_TWO", "NOT_TRACKED"])
+    .nullable()
+    .optional(),
+  // "Do enquiries come in through Instagram or Facebook messages?" — the only
+  // intake answer that is BOTH a leak fact and a build fact. YES confirms
+  // social_dm_unmanaged; NO and NO_ACCOUNTS both suppress it; and NO_ACCOUNTS
+  // alone switches the Social DM Capture workflow off. Keep all three slugs — the
+  // two that behave the same for the leak behave differently for the build.
+  socialEnquiries: z.enum(["YES", "NO", "NO_ACCOUNTS"]).nullable().optional(),
+  // "When did you last contact past customers or old quotes?" — the dormancy
+  // answer that hasPastCustomerDatabase could never give us. SYSTEMATIC suppresses
+  // no_database_reactivation; the other three confirm it.
+  pastCustomerContact: z
+    .enum(["SYSTEMATIC", "OCCASIONAL", "OVER_A_YEAR", "NEVER"])
+    .nullable()
+    .optional(),
+  // "Do you take a deposit or payment before the work is done?" — the
+  // applicability fact for the Text-to-Pay workflow. NEVER is the only answer that
+  // takes that workflow out of a build; ALWAYS and SOMETIMES both install it.
+  //
+  // NOT INTERCHANGEABLE WITH hasOnlinePayment above, however alike they look. That
+  // one answers "do they already have a mechanism?" and does one job: suppressing
+  // the payment_booking_friction leak. Wire it into the build rule instead of this
+  // and the inversion is silent — a client who takes deposits with no online way
+  // to collect them is the best candidate for Text-to-Pay, not the worst.
+  takesDeposits: z.enum(["ALWAYS", "SOMETIMES", "NEVER"]).nullable().optional(),
+  // "Who replies to your Google reviews right now?" — NOBODY is itself a finding
+  // (no_review_replies, which can only ever be disclosed because nothing we fetch
+  // carries owner replies). OWNER is the only answer that makes removing the Review
+  // Response workflow reasonable, and it does NOT remove it: the panel raises a
+  // hint and the operator decides.
+  reviewReplyOwner: z.enum(["NOBODY", "OWNER", "STAFF_OR_AGENCY"]).nullable().optional(),
   // Comma-separated slugs from the fixed 10-option "prioritize in your build" checkbox.
   buildPriorities: z.string().max(400).nullable().optional(),
 });

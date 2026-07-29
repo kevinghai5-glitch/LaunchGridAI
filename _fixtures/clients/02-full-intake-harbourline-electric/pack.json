@@ -1,0 +1,1805 @@
+{
+  "meta": {
+    "businessName": "Harbourline Electric",
+    "city": "Dartmouth",
+    "industry": "Electrical",
+    "generatedAt": "2026-07-28T12:00:00.000Z",
+    "dataConfidence": "high",
+    "assumptions": [],
+    "signals": {
+      "websiteScraped": true,
+      "reviewsAnalyzed": true,
+      "competitorsAnalyzed": true,
+      "performanceMeasured": true,
+      "gbpProfilePulled": true,
+      "screenshotsCaptured": false,
+      "verifiedFactsExtracted": true
+    }
+  },
+  "file1": {
+    "framing": {
+      "overview": "This module is the diagnostic layer behind the report: where enquiries reach Harbourline, what happens to them on each route, and which of those routes is costing the most. It looks only at converting demand that already exists, because that is the part we can fix without changing what you spend on anything.",
+      "implementationGuide": [
+        "Read the leak sections in the order they are printed; they are ranked by what they cost, not by how easy they are.",
+        "Confirm the 8 finding(s) marked as industry patterns at kickoff, since those were not observed on your business.",
+        "Approve the capture fixes first, because everything downstream only works on enquiries that reached the system.",
+        "Give us the past-customer list and the electrician availability so the second phase can be scheduled.",
+        "Hold the response commitment: the page can only promise what the automation behind it keeps."
+      ],
+      "expectedImpact": "The realistic outcome is more of the enquiries you already receive turning into booked jobs, particularly the ones arriving in the evenings and at weekends where nothing currently catches them."
+    },
+    "executiveSummary": "Harbourline converts well once somebody is actually in the conversation, and the review record says so: competent work, honest advice, fair prices. Everything scoring badly in this report happens before that conversation starts. A call that rings out has no fallback, a form fill has nothing automated behind it, an evening enquiry has nowhere to land, and a quote that goes quiet depends on somebody remembering it. The largest recoverable figure sits on the phone line, and the cheapest fix sits on the same line.",
+    "growthAudit": {
+      "overview": "The audit covers the routes an enquiry can take into this business and what each one does when nobody is free. It does not cover how to get more enquiries, which is out of scope for this engagement by design.",
+      "findings": [
+        {
+          "area": "Phone",
+          "finding": "One published line with no visible text-back path, and no record anywhere of how many calls are answered against how many are not.",
+          "severity": "high"
+        },
+        {
+          "area": "Website form",
+          "finding": "The form collects four generic fields and has nothing automated behind it, so reply speed depends on the day's job list.",
+          "severity": "high"
+        },
+        {
+          "area": "After hours",
+          "finding": "Google hours show evenings and weekends closed, with no booking path and no chat to catch demand in those hours.",
+          "severity": "high"
+        },
+        {
+          "area": "Booking",
+          "finding": "No online scheduler on the site or the Google profile; every booking costs a phone conversation.",
+          "severity": "medium"
+        },
+        {
+          "area": "Social",
+          "finding": "A social page is linked from the footer and sits outside every other channel, with no shared response standard.",
+          "severity": "low"
+        },
+        {
+          "area": "Reputation",
+          "finding": "4.4 stars across 73 reviews, with the work itself consistently well described.",
+          "severity": "low"
+        }
+      ]
+    },
+    "technicalUx": {
+      "available": true,
+      "mobile": {
+        "score": 68,
+        "lcpSeconds": 3.3,
+        "cls": 0.04,
+        "inpMs": 205
+      },
+      "desktop": {
+        "score": 88,
+        "lcpSeconds": 1.7,
+        "cls": 0.02,
+        "inpMs": 88
+      },
+      "businessImpactSummary": "The page loads quickly enough that nothing in this report is being caused by it: 3.3 seconds to the main content on mobile and 1.7 on desktop. These numbers are context, not a work item, since site performance is not part of a conversion engagement.",
+      "topFixes": []
+    },
+    "visuals": {
+      "available": false,
+      "shots": [],
+      "competitiveRead": "No screenshots were captured for this run, so nothing here rests on a visual comparison."
+    },
+    "revenueLeaks": [
+      {
+        "issue": "Calls that ring out have no automated recovery behind them.",
+        "whyItMatters": "A caller who cannot reach a person typically dials the next company within minutes, and nothing brings them back.",
+        "impact": 10,
+        "urgency": 9,
+        "difficulty": 2,
+        "recommendedFix": "Missed-call text-back on the published line, replying within seconds.",
+        "expectedImpact": "The largest single figure in this report, estimated beside that finding."
+      },
+      {
+        "issue": "An after-hours enquiry has nowhere to land.",
+        "whyItMatters": "A tripped main does not wait for office hours, which is exactly when the listing shows you closed.",
+        "impact": 9,
+        "urgency": 9,
+        "difficulty": 2,
+        "recommendedFix": "After-hours auto-response plus a booking page that stays open around the clock.",
+        "expectedImpact": "Turns the highest-urgency hours into hours where you are the company that replied."
+      },
+      {
+        "issue": "Reply speed on the form is set by the day's schedule.",
+        "whyItMatters": "A published review already describes an enquiry that waited, and it went elsewhere.",
+        "impact": 9,
+        "urgency": 8,
+        "difficulty": 2,
+        "recommendedFix": "Instant auto-reply and qualification behind every submission.",
+        "expectedImpact": "First useful reply becomes yours on enquiries you are already receiving."
+      },
+      {
+        "issue": "Every enquiry arrives looking identical.",
+        "whyItMatters": "a panel upgrade and a single dead outlet get the same treatment, so the valuable one waits longest.",
+        "impact": 7,
+        "urgency": 7,
+        "difficulty": 3,
+        "recommendedFix": "Job type, urgency and service area captured and scored at the point of entry.",
+        "expectedImpact": "The biggest job of the week is the first one somebody calls back."
+      },
+      {
+        "issue": "Quotes that go quiet depend on somebody remembering them.",
+        "whyItMatters": "Decisions on planned work are made across weeks, and the company still present when the customer is ready usually gets the work.",
+        "impact": 8,
+        "urgency": 7,
+        "difficulty": 4,
+        "recommendedFix": "A multi-touch follow-up sequence on every unbooked quote, with a longer seasonal branch.",
+        "expectedImpact": "Converts demand already earned, without adding a single new enquiry."
+      }
+    ],
+    "conversionBottlenecks": [
+      {
+        "stage": "Call to conversation",
+        "problem": "No fallback when nobody is free to pick up.",
+        "fix": "Missed-call text-back, with the reply landing in the same queue as everything else."
+      },
+      {
+        "stage": "Form fill to callback",
+        "problem": "Nothing acknowledges the submission and nothing sorts it.",
+        "fix": "Instant auto-reply plus scoring on job type, urgency and area."
+      },
+      {
+        "stage": "Ready customer to held slot",
+        "problem": "Committing to a time needs a phone conversation during office hours.",
+        "fix": "A booking page wired to real availability, with a deposit link behind it."
+      }
+    ],
+    "localMarketIntelligence": {
+      "customerPsychology": "Most people contacting a electrical work company are already uncomfortable and slightly anxious about the bill. They are not researching, they are triaging, and they read speed of reply as a proxy for competence.",
+      "buyingBehavior": "Emergency work is decided in under an hour and usually by phone. A panel upgrade is decided over several weeks, often with two or three written quotes, and frequently stalls until something forces the issue.",
+      "trustExpectations": "Licensing and insurance are assumed rather than persuasive. What actually moves a homeowner is another homeowner in their own neighbourhood saying the tradesperson was honest about what did not need doing.",
+      "competitiveSaturation": "Dartmouth has a dense field of electrical work contractors, and the three nearest carry review counts between 65 and 186. Nobody in that set is visibly answering after hours.",
+      "seasonalDemand": "Demand arrives in bursts around storm season. Capture problems cost several times more inside those windows than they do in the quiet months.",
+      "priceSensitivity": "Callout fees are compared closely; larger quotes are compared on trust and timing more than on the bottom line. A written price given quickly beats a slightly lower one that took three days.",
+      "credibilityMarkers": "Years in the Halifax Regional Municipality, licensing, named electricians, and reviews that mention specific streets or neighbourhoods rather than generic praise."
+    },
+    "competitorPositioning": {
+      "commonWeakMessaging": [
+        "Homepages that lead with how long the company has existed rather than with what happens when you contact them.",
+        "Service lists written in trade language a homeowner has to translate.",
+        "Contact pages that ask for a message and set no expectation about a reply."
+      ],
+      "overusedClaims": [
+        "Family owned and operated",
+        "Fast, friendly, reliable",
+        "Serving Dartmouth for over twenty years",
+        "Free estimates"
+      ],
+      "trustGapsIgnored": [
+        "Nobody in the local set publishes what happens to an enquiry sent at 9pm.",
+        "Nobody states a response time on the page, let alone keeps one.",
+        "Review text is summarised as a star rating rather than shown in the customer's own words."
+      ],
+      "opportunitiesToStandOut": [
+        "Be the company that answers within a minute at any hour, and say so on the page.",
+        "Publish a real arrival window instead of a vague morning or afternoon.",
+        "Show three verbatim reviews with a neighbourhood attached to each.",
+        "Let a homeowner hold a Saturday slot on a Tuesday evening without a phone call."
+      ],
+      "recommendedAngle": "The electrical work company in Dartmouth that actually answers. Not the oldest, not the cheapest, the one that replies while you are still deciding who to call."
+    },
+    "trustGapAnalysis": [
+      {
+        "gap": "The rating is stated but never shown.",
+        "impact": "A visitor comparing you against companies with more reviews has nothing specific to weigh you on.",
+        "fix": "Place three verbatim Google reviews on the page, first name and neighbourhood attached."
+      },
+      {
+        "gap": "No response commitment appears anywhere.",
+        "impact": "The visitor cannot tell whether sending the form means an hour or three days, so they hedge by contacting somebody else too.",
+        "fix": "State the commitment beside the button and let the automation keep it."
+      }
+    ],
+    "fastestWins": [
+      "Missed-call text-back on the published line.",
+      "Instant auto-reply behind the contact form.",
+      "After-hours auto-response covering evenings and weekends.",
+      "Three verbatim reviews added to the homepage."
+    ],
+    "positioningStrategy": "Position Harbourline on responsiveness rather than on longevity. The market is saturated with companies claiming experience and nobody claiming, or keeping, an answer time. Every asset in this pack is built to make that claim true first and visible second.",
+    "ctaStrategy": "Three routes, always in the same order, repeated at the hero and at the close: book, quote, call. The booking route leads because it is the only one that works outside office hours, and the phone route stays visible because some people will always want a person.",
+    "trackingAnalytics": [
+      "Form submissions and tap-to-call clicks recorded as separate conversion events.",
+      "Hour of arrival tagged on every enquiry, so the after-hours question can be sized with real data.",
+      "Booking source recorded, so the booking page is judged on jobs rather than clicks.",
+      "Answered, missed and after-hours call volume reported monthly."
+    ],
+    "loomTalkingPoints": [
+      "A published review describes an enquiry that never got a reply. Start there.",
+      "Your listing says closed evenings and weekends, and there is nothing on the site to catch those enquiries.",
+      "The form asks four generic questions, so the biggest job of the week waits behind the smallest.",
+      "Your rating and your workmanship are fine. This is a capture problem, and it is the cheaper kind."
+    ],
+    "beforeAfterAngles": [
+      {
+        "before": "A call rings out at 7pm and nothing happens.",
+        "after": "A text goes back within seconds, the enquiry is scored, and a slot is held before morning."
+      },
+      {
+        "before": "A form fill sits in an inbox until somebody comes off a job.",
+        "after": "An acknowledgement lands in a minute and the office gets a scored lead instead of a raw message."
+      },
+      {
+        "before": "A quote goes quiet and depends on somebody remembering it.",
+        "after": "A sequence carries it across the weeks the decision actually takes."
+      }
+    ],
+    "salesEnablement": {
+      "coldOutreachAngle": "One of their own published reviews describes an enquiry that got no reply. That is a specific, verifiable problem, and it is cheaper to fix than they expect.",
+      "personalizedOpener": "Noticed your Google hours show evenings and weekends closed, and there is no way on the site to leave a job in the queue. That is the window where the urgent calls actually happen.",
+      "loomScriptBullets": [
+        "Open on the review that mentions an enquiry going unanswered.",
+        "Show the Google listing hours next to the site with no booking path.",
+        "Walk the form: four fields, nothing behind it.",
+        "Close on the estimated missed-call figure and say plainly that it is an estimate."
+      ],
+      "proposalPositioning": "This is not a website project. It is the layer between an enquiry arriving and somebody getting to it, built inside a GoHighLevel sub-account they own, with the qualification engine run monthly.",
+      "discoveryCallPoints": [
+        "How many calls come in on a Saturday, and what happens to them?",
+        "Who reads the form submissions, and when in the day does that happen?",
+        "What happens to a quote that goes quiet for a month?",
+        "Is there a list of past customers anywhere, and has anything ever been sent to it?"
+      ],
+      "objectionHandling": [
+        {
+          "objection": "We already answer the phone.",
+          "response": "During the day, almost certainly. The question is the Saturday afternoon when both electricians are on jobs, and nothing currently tells you how often that happens."
+        },
+        {
+          "objection": "We do not need a new website.",
+          "response": "Agreed, and we do not build them. The website notes in the report are advisory; the only page we build is the booking page inside your own sub-account."
+        },
+        {
+          "objection": "Our customers prefer to phone.",
+          "response": "Many will. This keeps the phone exactly as it is and adds a fallback for the calls that ring out and the enquiries that arrive after five."
+        },
+        {
+          "objection": "That estimate looks optimistic.",
+          "response": "It is an estimate, built from your enquiry count and average job value with the industry rates shown beside it. Turn on call tracking for a month and we will replace it with your real numbers."
+        }
+      ]
+    }
+  },
+  "file2": {
+    "framing": {
+      "overview": "The intake form that replaces the four generic fields on the contact page. Every question here exists to answer one thing before a human spends a minute on the enquiry: how urgent is this, how big is it, and is it in the service area.",
+      "implementationGuide": [
+        "Replace the existing contact form with this one and keep it to a single screen on mobile.",
+        "Wire each answer to the scoring weights below so a submission arrives already sorted.",
+        "Point priority scores at the on-call electrician and everything else at the office queue.",
+        "Send the instant acknowledgement before any human sees the submission.",
+        "Review the thresholds after the first month against jobs that actually booked."
+      ],
+      "expectedImpact": "The largest job in the inbox stops waiting behind the smallest, and nobody has to phone an enquiry back just to find out what it is."
+    },
+    "formHeadline": "Tell us what is happening",
+    "formSubheadline": "Five questions, about a minute, and you get an answer straight back.",
+    "questions": [
+      {
+        "question": "What is going on?",
+        "inputType": "select",
+        "options": [
+          "a dead circuit",
+          "electrical panel problem",
+          "a panel upgrade",
+          "Planned maintenance",
+          "Something else"
+        ],
+        "purpose": "Separates an emergency from planned work before anybody picks up a phone.",
+        "scoringImpact": "a dead circuit scores highest; planned maintenance scores lowest."
+      },
+      {
+        "question": "How soon does this need doing?",
+        "inputType": "select",
+        "options": [
+          "Today",
+          "This week",
+          "This month",
+          "Planning ahead"
+        ],
+        "purpose": "Urgency is what decides the callback order.",
+        "scoringImpact": "Today adds the most; planning ahead routes to the longer sequence."
+      },
+      {
+        "question": "What is your postal code?",
+        "inputType": "text",
+        "options": [],
+        "purpose": "Tells us immediately whether the job is inside the service area.",
+        "scoringImpact": "Outside the service area caps the score into the low-fit band."
+      },
+      {
+        "question": "Is this a home or a commercial property?",
+        "inputType": "select",
+        "options": [
+          "Home",
+          "Commercial",
+          "Rental or strata"
+        ],
+        "purpose": "Changes who calls back and how the quote is written.",
+        "scoringImpact": "Commercial and strata add a small amount for job size."
+      },
+      {
+        "question": "Best number to reach you on",
+        "inputType": "tel",
+        "options": [],
+        "purpose": "The callback is a phone call, so the number has to be right.",
+        "scoringImpact": "No score; a missing number blocks the priority route."
+      }
+    ],
+    "leadScoring": {
+      "rubric": "Job type, urgency, service area and property type, weighted so an urgent in-area job outranks everything else. Thresholds are reviewed monthly against jobs that actually booked.",
+      "hot": "90–100 · a dead circuit or a replacement-sized job inside the service area.",
+      "warm": "70–89 · a real job in the area with no immediate urgency.",
+      "cold": "0–69 · planning ahead, out of area, or work you do not take on."
+    },
+    "routingLogic": [
+      {
+        "tier": "Priority",
+        "action": "Page the on-call electrician and call back immediately.",
+        "timing": "Under five minutes, day or night."
+      },
+      {
+        "tier": "Qualified",
+        "action": "Office calls back and puts a quote in writing.",
+        "timing": "Within one hour during business hours."
+      },
+      {
+        "tier": "Nurture",
+        "action": "Send what they asked for and start the longer sequence.",
+        "timing": "Same day, automated."
+      },
+      {
+        "tier": "Low fit",
+        "action": "Reply honestly, point them somewhere useful, keep the record.",
+        "timing": "Same day, automated."
+      }
+    ],
+    "automationWorkflow": [
+      "Submission lands and is scored before anybody sees it.",
+      "Acknowledgement text and email go out inside a minute.",
+      "Priority scores page the on-call phone; everything else lands in the office queue.",
+      "The record is created at New Lead with the answers attached.",
+      "No callback logged within the tier's window raises an alert."
+    ],
+    "thankYouPage": "Got it — this is with us now. A confirmation is on its way to your phone, and a person will follow it inside the hour during office hours.",
+    "crmFields": [
+      "Job type",
+      "Urgency",
+      "Postal area",
+      "Property type",
+      "Score",
+      "Channel the enquiry arrived on",
+      "Hour of arrival"
+    ],
+    "followUpTiming": "First automated reply inside a minute. First human callback inside the hour during business hours, or first thing the next morning.",
+    "implementation": [
+      "Build the form inside GoHighLevel and point the site's existing buttons at it.",
+      "Set the scoring weights before the form goes live, not after.",
+      "Test the priority route end to end with a real phone before go-live.",
+      "Leave the phone number on the page exactly as it is."
+    ]
+  },
+  "file3": {
+    "framing": {
+      "overview": "The email half of the 60-day follow-up: 7 messages that carry an unbooked quote across the weeks the decision actually takes. 6 texts land between them, so read the two documents together.",
+      "implementationGuide": [
+        "Load these against the Lead Nurture — No Booking workflow, in the step numbers shown, not as a separate campaign.",
+        "Stop every message the moment the customer books or replies.",
+        "Send from the office address rather than a marketing sender.",
+        "Rotate the seasonal references twice a year so nothing reads out of date.",
+        "Review reply rates each quarter and cut anything that never earns one."
+      ],
+      "expectedImpact": "More of the quotes you already wrote turn into booked work, without a single new enquiry entering the business."
+    },
+    "sequence": {
+      "workflowId": "lead-nurture-no-booking",
+      "workflowName": "Lead Nurture — No Booking",
+      "where": "GoHighLevel → Automation → Workflows → Lead Nurture — No Booking (the email steps, sent from your business email address)",
+      "lengthDays": 60,
+      "totalSteps": 13,
+      "emailCount": 7,
+      "textCount": 6,
+      "endsBy": "On day 60 the last email sends and the deal moves to Lost. It stops the moment they reply or book, and they come back in as a new lead the day they get in touch again — nothing is deleted."
+    },
+    "emails": [
+      {
+        "step": 2,
+        "day": 2,
+        "timing": "Day 2 — step 2 of the 60-day sequence on an unbooked quote",
+        "subject": "Your quote from Harbourline",
+        "subjectB": "The numbers we talked about",
+        "previewText": "Everything in one place, plus what happens next.",
+        "body": "Hi [First name],\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at [booking link] without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.\n\n— The team at Harbourline",
+        "cta": "See available times",
+        "purpose": "What you do and what happens next, with the booking link"
+      },
+      {
+        "step": 4,
+        "day": 7,
+        "timing": "Day 7 — step 4 of the 60-day sequence on an unbooked quote",
+        "subject": "What the visit actually looks like",
+        "subjectB": "How the day runs",
+        "previewText": "Access, timing, and what happens while we are there.",
+        "body": "Hi [First name],\n\nIn case it helps to picture it: we arrive inside a two-hour window, the work takes most of the day, and everything is cleared out before we leave.\n\nNothing is needed from you on the day beyond access.\n\n— The team at Harbourline",
+        "cta": "See available times",
+        "purpose": "How the job actually runs — remove the uncertainty that stalls people"
+      },
+      {
+        "step": 6,
+        "day": 16,
+        "timing": "Day 16 — step 6 of the 60-day sequence on an unbooked quote",
+        "subject": "From a customer in [Neighbourhood]",
+        "subjectB": "What other homeowners said",
+        "previewText": "Their words, not ours.",
+        "body": "Hi [First name],\n\nRather than tell you we are good at this, here is what a customer wrote after a job like yours:\n\n[Paste a real Google review verbatim — never write one that nobody left.]\n\nThe quote is still open if you want to move on it.\n\n— The team at Harbourline",
+        "cta": "See available times",
+        "purpose": "Local proof — real reviews and real work, no invented names"
+      },
+      {
+        "step": 8,
+        "day": 30,
+        "timing": "Day 30 — step 8 of the 60-day sequence on an unbooked quote",
+        "subject": "What actually drives the price",
+        "subjectB": "Where the money goes on a job like this",
+        "previewText": "No mystery, just the things that move the number.",
+        "body": "Hi [First name],\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the job, what can be kept and what has to be replaced, access, and how long we are on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.\n\n— The team at Harbourline",
+        "cta": "Reply with your questions",
+        "purpose": "What drives the price, honestly, so cost stops being a mystery"
+      },
+      {
+        "step": 10,
+        "day": 45,
+        "timing": "Day 45 — step 10 of the 60-day sequence on an unbooked quote",
+        "subject": "Before storm season",
+        "subjectB": "Worth doing before the weather turns",
+        "previewText": "Timing, and why it matters on this job.",
+        "body": "Hi [First name],\n\nThis is the point in the year where the calendar starts filling. If the work is happening at all, before storm season is the easy time to do it rather than the expensive one.\n\nNo pressure either way — the quote holds.\n\n— The team at Harbourline",
+        "cta": "See available times",
+        "purpose": "The usual reason people wait, answered straight"
+      },
+      {
+        "step": 12,
+        "day": 58,
+        "timing": "Day 58 — step 12 of the 60-day sequence on an unbooked quote",
+        "subject": "Anything holding this up?",
+        "subjectB": "One question",
+        "previewText": "Tell me the real blocker and I will answer it straight.",
+        "body": "Hi [First name],\n\nIf this has stalled, it is usually one specific thing rather than the whole quote. Tell me which and I will answer it straight rather than guessing.\n\nIf it has simply moved to next year, that is a fine answer too.\n\n— The team at Harbourline",
+        "cta": "Reply and tell me",
+        "purpose": "Final email — the straight ask with the booking link"
+      },
+      {
+        "step": 13,
+        "day": 60,
+        "timing": "Day 60 — step 13 of the 60-day sequence on an unbooked quote",
+        "subject": "Closing this one off",
+        "subjectB": "Last one from me",
+        "previewText": "Nothing further unless you want it.",
+        "body": "Hi [First name],\n\nI will stop here. The quote stays on file and the price holds for thirty days from the date on it.\n\nIf anything changes, the calendar is always open at [booking link], and you can reply to this email any time.\n\n— The team at Harbourline",
+        "cta": "See available times",
+        "purpose": "Close-out — we stop here, the door stays open, and the deal moves to Lost"
+      }
+    ]
+  },
+  "file4": {
+    "framing": {
+      "overview": "The text half of the same 60-day follow-up: 6 short messages that land between the emails. They are short on purpose and every one of them invites a reply, because a reply is what turns a sequence into a conversation.",
+      "implementationGuide": [
+        "Load these into the Lead Nurture — No Booking workflow at the step numbers shown, interleaved with the emails.",
+        "Send from the same tracked number the missed-call text-back uses, so the thread stays in one place.",
+        "Stop the sequence the instant somebody replies or books.",
+        "Keep each message under two segments so it lands as one text.",
+        "Never send between 9pm and 8am unless the customer messaged first.",
+        "Route every reply into the pipeline rather than into a personal phone."
+      ],
+      "expectedImpact": "Faster replies on the enquiries that are already in the system, and a route back for the quotes that would otherwise go quiet."
+    },
+    "sequence": {
+      "workflowId": "lead-nurture-no-booking",
+      "workflowName": "Lead Nurture — No Booking",
+      "where": "GoHighLevel → Automation → Workflows → Lead Nurture — No Booking (the text steps, sent from your business number)",
+      "lengthDays": 60,
+      "totalSteps": 13,
+      "emailCount": 7,
+      "textCount": 6,
+      "endsBy": "On day 60 the last email sends and the deal moves to Lost. It stops the moment they reply or book, and they come back in as a new lead the day they get in touch again — nothing is deleted."
+    },
+    "messages": [
+      {
+        "step": 1,
+        "order": 1,
+        "day": 1,
+        "timing": "Day 1 — step 1 of the 60-day sequence on an unbooked quote",
+        "message": "Hi [First name], it is Harbourline. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: [booking link]",
+        "charCount": 156,
+        "psychology": "Picks the conversation back up the day after, while it is still the thing they were thinking about.",
+        "replyStrategy": "Replies route to the office queue; a booking closes the sequence automatically."
+      },
+      {
+        "step": 3,
+        "order": 2,
+        "day": 4,
+        "timing": "Day 4 — step 3 of the 60-day sequence on an unbooked quote",
+        "message": "Quick one [First name] — is it still doing the same thing, or has it got worse? Changes what I would suggest doing first.",
+        "charCount": 121,
+        "psychology": "One question that takes four words to answer, which is what restarts a thread that has gone quiet.",
+        "replyStrategy": "Any reply reopens the conversation with the office; the word URGENT pages the on-call number."
+      },
+      {
+        "step": 5,
+        "order": 3,
+        "day": 11,
+        "timing": "Day 11 — step 5 of the 60-day sequence on an unbooked quote",
+        "message": "Hi [First name], is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
+        "charCount": 134,
+        "psychology": "Names the real blocker instead of asking for a decision they have not made yet.",
+        "replyStrategy": "Replies go to the office; a booking or a reply stops the rest of the sequence."
+      },
+      {
+        "step": 7,
+        "order": 4,
+        "day": 23,
+        "timing": "Day 23 — step 7 of the 60-day sequence on an unbooked quote",
+        "message": "Hi [First name], still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
+        "charCount": 144,
+        "psychology": "A genuine permission check that also sorts the list into now and later.",
+        "replyStrategy": "Later parks the record until the seasonal run; done stops everything."
+      },
+      {
+        "step": 9,
+        "order": 5,
+        "day": 38,
+        "timing": "Day 38 — step 9 of the 60-day sequence on an unbooked quote",
+        "message": "Hi [First name], we have space in the calendar over the next fortnight if you want it done before storm season. Slots are here: [booking link]",
+        "charCount": 142,
+        "psychology": "Real availability stated plainly, with no invented deadline attached to it.",
+        "replyStrategy": "A booking closes the sequence; anything else leaves the last two steps to run."
+      },
+      {
+        "step": 11,
+        "order": 6,
+        "day": 52,
+        "timing": "Day 52 — step 11 of the 60-day sequence on an unbooked quote",
+        "message": "Last one from me [First name] — do you want this booked in? One word back and I will either sort it or leave you to it.",
+        "charCount": 119,
+        "psychology": "A direct, warm ask at the point where anything less direct gets ignored.",
+        "replyStrategy": "Yes routes straight to the office to book; anything else lets the final email close it out."
+      }
+    ]
+  },
+  "file5": {
+    "framing": {
+      "overview": "The booking page and everything that protects the slot once it is taken. This is the one page in the pack we actually build and host, inside your own GoHighLevel sub-account.",
+      "implementationGuide": [
+        "Wire the calendar to real electrician availability rather than to a fixed grid.",
+        "Point every call to action on the website at this page.",
+        "Turn on the confirmation, reminder and arrival messages together; each one is weaker alone.",
+        "Attach the deposit link to larger work only, not to callout visits.",
+        "Check the arrival windows against actual route times after the first month."
+      ],
+      "expectedImpact": "Bookings taken outside office hours, and fewer wasted trips on slots nobody is home for."
+    },
+    "headline": "Pick a time that suits you",
+    "subheadline": "Real availability, confirmed instantly, no phone call needed.",
+    "whatToExpect": [
+      "You choose a window rather than being given a whole morning.",
+      "A confirmation text arrives within a minute with the electrician's name.",
+      "A reminder lands the day before with what to clear access to.",
+      "You get a message when the electrician leaves the previous job.",
+      "Nothing is charged beyond the callout fee without a written price you agreed."
+    ],
+    "threeStepBreakdown": [
+      {
+        "step": "Choose your window",
+        "description": "Live availability across the next fourteen days."
+      },
+      {
+        "step": "Confirm the details",
+        "description": "Address, the job, and the best number to reach you."
+      },
+      {
+        "step": "Get it confirmed",
+        "description": "A text within a minute, and a reminder the day before."
+      }
+    ],
+    "appointmentPositioning": "The visit is a diagnosis, not a sales call. The electrician tells you what has failed, what it costs to fix, and whether they would fix it or replace it in your position. You decide after that, with the price in writing.",
+    "microSocialProof": [
+      "Rated 4.4 across 73 Google reviews from Dartmouth and the Halifax Regional Municipality.",
+      "Licensed and insured in Nova Scotia, working in the Halifax Regional Municipality since 2009."
+    ],
+    "confirmationEmail": {
+      "subject": "Booked: [date] between [window]",
+      "body": "Hi [First name],\n\nThat is confirmed. [Technician] will be with you on [date] between [window].\n\nBefore they arrive, please clear access — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.\n\n— The team at Harbourline"
+    },
+    "reminderEmail24h": {
+      "subject": "Tomorrow between [window]",
+      "body": "Hi [First name],\n\nA quick reminder that [Technician] is booked to visit tomorrow between [window].\n\nTwo things that help: clear access, and a note of anything that has changed since you booked.\n\nIf tomorrow no longer works, reply and we will move it.\n\n— The team at Harbourline"
+    },
+    "dayOfReminderSms": "Harbourline here — [Technician] is on the way and should reach you inside your [window] slot. Reply if anything has changed.",
+    "noShowRecoveryEmail": {
+      "subject": "We came by today",
+      "body": "Hi [First name],\n\n[Technician] came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at [booking link], and we will get you back in the calendar.\n\n— The team at Harbourline"
+    },
+    "noShowRecoverySms1": "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week.",
+    "noShowRecoverySms2": "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: [booking link]",
+    "rescheduleFraming": "Rescheduling is offered as a one-word reply on every message, because a customer who cannot easily move an appointment tends to simply not be home for it.",
+    "showUpQualityNotes": "The reminders exist to keep attendance where it is as booking volume moves online and the wait between booking and visit gets longer.",
+    "implementation": [
+      "Host the page inside the GoHighLevel sub-account so bookings write straight to the pipeline.",
+      "Sync availability with the dispatch calendar rather than maintaining a second one.",
+      "Send the confirmation within sixty seconds; a slow confirmation reads as a failed booking.",
+      "Keep the reschedule reply to a single character on SMS."
+    ]
+  },
+  "intelligence": {
+    "executiveSummary": {
+      "narrative": "No after-hours capture is the largest recoverable number in this report: an estimated CAD $500–CAD $1,000 a month, computed from the volumes and job value set out beside that finding and the industry rates cited with them. The missed calls with no recovery slice of the same chain is an estimated CAD $1,785–CAD $3,570 a month, and where it overlaps the figure above it is a share of it rather than a second loss on top. Underneath all of it sits one pattern: every route into Harbourline ends at a person who has to be free at that exact moment, and nothing sits behind any of them when that person is on a job. What this business is missing is the layer between an enquiry arriving and somebody getting to it.",
+      "biggestOpportunities": [
+        "Instant acknowledgement on the phone line and the form, which is the cheapest change on this list and touches every enquiry you already receive.",
+        "A bookable calendar that stays open through the evenings and weekends your listing currently shows as closed.",
+        "Scoring at the point of capture, so a panel upgrade stops waiting behind a single dead outlet.",
+        "A past-customer list that has already bought from you once and is currently being contacted by nobody."
+      ],
+      "biggestThreats": [
+        "A published review already describes an enquiry that got no reply, which is the one kind of review a homeowner reads as a warning.",
+        "Competitors in Dartmouth carry noticeably more review volume, which makes speed of reply the cheaper place for you to win.",
+        "Demand arrives in short bursts around storm season, and capture problems cost the most in exactly those weeks."
+      ],
+      "mostUrgentFixes": [
+        "Missed-call text-back on the main line.",
+        "Instant auto-reply and qualification behind the contact form.",
+        "After-hours auto-response covering evenings and weekends."
+      ],
+      "quickWins": [
+        "Webchat that continues in SMS, so a small question does not need a phone call.",
+        "The social page inbox pulled into the same queue as calls and texts.",
+        "Call tracking switched on, so answered-versus-missed stops being a guess."
+      ]
+    },
+    "scorecard": {
+      "overallReadout": "Harbourline converts well once a person is actually in the conversation. The reviews describe competent work at a fair price, and booked jobs get attended. Everything scoring low here sits in front of that conversation: the enquiry arriving, being acknowledged, being sorted and being followed up. That is a capture and response problem, not a reputation problem, and it is the cheaper of the two to fix.",
+      "metrics": [
+        {
+          "name": "Speed to Lead",
+          "score": 68,
+          "rubric": "Measures how long a new enquiry waits before a human or an automation replies, against the under-five-minute window where close rates hold up.",
+          "evidence": "Nothing automated sits behind the contact form, and a recent review describes an enquiry that waited days.",
+          "diagnosis": "First reply is set by the day's job list rather than by the enquiry.",
+          "whyItMatters": "A homeowner with a dead circuit is contacting three companies, and the first real reply usually takes the work.",
+          "cause": "No automation between the form arriving and a person reading it.",
+          "expectedBenefit": "First reply becomes yours on enquiries you already receive, with no new demand needed."
+        },
+        {
+          "name": "Call & Message Capture",
+          "score": 16,
+          "rubric": "Measures what happens to an inbound call that nobody picks up, and whether the volume is recorded at all.",
+          "evidence": "One published line, no text-back path anywhere on the site, and no answered-versus-missed record.",
+          "diagnosis": "A call that rings out has nothing behind it and leaves no trace.",
+          "whyItMatters": "The caller dials the next company within minutes, and nothing tells you it happened.",
+          "cause": "The phone is the only channel and it has no fallback.",
+          "expectedBenefit": "Every ring-out gets a text back within seconds and lands in the pipeline with a timestamp."
+        },
+        {
+          "name": "After-Hours Coverage",
+          "score": 52,
+          "rubric": "Measures whether an enquiry arriving outside office hours gets anything at all before the next working day.",
+          "evidence": "The Google listing shows evenings and weekends closed, with no booking path and no chat to catch demand in those hours.",
+          "diagnosis": "Out-of-hours enquiries have nowhere to land.",
+          "whyItMatters": "A tripped main does not wait for office hours, and those are the hours with the highest urgency behind them.",
+          "cause": "Every route into the business needs somebody at a desk.",
+          "expectedBenefit": "An enquiry at 11pm is acknowledged, sorted and holding a slot before the office opens."
+        },
+        {
+          "name": "Online Booking",
+          "score": 58,
+          "rubric": "Measures whether a ready customer can hold a real slot without a phone conversation.",
+          "evidence": "No scheduler on the site or the Google profile.",
+          "diagnosis": "Booking requires a phone call during office hours.",
+          "whyItMatters": "Intent formed at 10pm has to survive until somebody is free to answer the phone.",
+          "cause": "There is no bookable calendar anywhere a customer can reach.",
+          "expectedBenefit": "Evening intent becomes a held slot against real electrician availability."
+        },
+        {
+          "name": "Lead Qualification & On-Page Conversion",
+          "score": 22,
+          "rubric": "Measures how much an enquiry tells you before a person spends time on it, and how clearly the page asks for it.",
+          "evidence": "The form collects four generic fields and nothing that identifies the job, the urgency or the area.",
+          "diagnosis": "Every enquiry arrives looking identical.",
+          "whyItMatters": "a panel upgrade waits behind a single dead outlet because nothing tells anybody which is which.",
+          "cause": "The form was built to be short rather than to be useful.",
+          "expectedBenefit": "The biggest job of the week becomes the first one somebody calls back."
+        },
+        {
+          "name": "Follow-Up & Nurture",
+          "score": 21,
+          "rubric": "Measures what reaches a quote that goes quiet, and for how long.",
+          "evidence": "Nothing visible reaches an unbooked quote, and this is not something a scan can see from outside.",
+          "diagnosis": "A quote that goes quiet depends on somebody remembering it.",
+          "whyItMatters": "Work on electrical panel is decided across weeks, and the company still present at the decision usually wins it.",
+          "cause": "Follow-up is a person's memory rather than a sequence.",
+          "expectedBenefit": "Quotes already written convert without a single new enquiry entering the business."
+        },
+        {
+          "name": "Show-Rate Protection",
+          "score": 95,
+          "rubric": "Measures what protects a booked slot between the booking and the visit.",
+          "evidence": "The review record describes appointments that happen as arranged.",
+          "diagnosis": "Attendance holds up.",
+          "whyItMatters": "A wasted slot costs twice, and this business is not paying that today.",
+          "cause": "Bookings are made close to the visit and confirmed by a person.",
+          "expectedBenefit": "Reminders keep this true as booking moves online and the wait gets longer."
+        },
+        {
+          "name": "Pipeline & Tracking",
+          "score": 64,
+          "rubric": "Measures whether there is one shared record of every enquiry and its next action.",
+          "evidence": "Whether enquiries are tracked is not visible from outside, and nothing on the site suggests a shared record.",
+          "diagnosis": "Enquiries are held informally.",
+          "whyItMatters": "An enquiry that only exists in one person's head loses to whatever happened that afternoon.",
+          "cause": "There is no single place an enquiry lives.",
+          "expectedBenefit": "Every enquiry has one home, one owner and one next action."
+        },
+        {
+          "name": "Reputation & Social Proof",
+          "score": 86,
+          "rubric": "Measures review volume, recency and rating against the nearest local set.",
+          "evidence": "73 reviews at 4.4 stars against a local set carrying 186, 124, 65.",
+          "diagnosis": "Review volume sits behind the nearest competitors.",
+          "whyItMatters": "Side by side on a phone, volume is what a homeowner reads as safety.",
+          "cause": "Completed jobs are not being asked.",
+          "expectedBenefit": "One automatic ask per completed job, and the gap closes on its own."
+        }
+      ]
+    },
+    "leakAnalysis": [
+      {
+        "area": "No after-hours capture",
+        "leakName": "No after-hours capture",
+        "scorecardArea": "After-Hours Coverage",
+        "evidenceTier": "OBSERVED",
+        "evidenceGrade": "observed",
+        "evidence": "Your Google listing shows evenings and weekends closed, and the scan found neither an online booking path nor a chat window anywhere on the site to catch demand outside those hours. You told us at intake that an after-hours enquiry gets nothing back until somebody checks in the morning.",
+        "explanation": "A tripped main does not wait for office hours. The homeowner is awake, uncomfortable and working down a list of three companies, and the one that answers is the one that gets the work — but the listing says you are shut and the site offers no way to leave a job in the queue.",
+        "businessImpact": "The hours when urgency is highest are the hours with no capture at all. Those enquiries do not politely wait until Monday morning; they go to whoever responded first.",
+        "dollarImpact": {
+          "leadVolumeBasis": "Based on your 80 enquiries/mo (estimated projection)",
+          "effectSize": "28% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared — the conservative end of a 28–43% range)",
+          "avgValueBasis": "CAD $1,250 average customer value — your number",
+          "monthlyLow": 500,
+          "monthlyHigh": 1000,
+          "formula": "CAD $1,785–CAD $3,570/mo missed-call exposure × 28% arriving after hours = CAD $500–CAD $1,000/mo",
+          "usesBenchmarkValue": false
+        },
+        "difficulty": "low",
+        "priority": "critical",
+        "recommendedFix": "We deploy an after-hours auto-response on both the phone line and the form, plus a booking link that stays open around the clock, so an enquiry at 11pm is acknowledged, qualified and holding a slot before your first coffee.",
+        "owner": "us",
+        "allowedStats": [
+          "28–43% of inbound calls to local service businesses arrive outside business hours. (NextPhone/AgentZap/RevSquared)",
+          "85% of callers who reach voicemail never call back. (CallRail Benchmark Report)"
+        ],
+        "mathFrame": "≈ CAD $500–CAD $1,000/mo — 28% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared — the conservative end of a 28–43% range), applied to the same missed-call chain above. This is the after-hours share of the missed-call figure above, not additional to it. Estimated.",
+        "intakeConfirmed": true,
+        "quantifiable": true,
+        "overlapsWith": "missed_calls_no_recovery",
+        "overlapNote": "This is the after-hours share of the missed-call figure above, not additional to it."
+      },
+      {
+        "area": "No online booking path",
+        "leakName": "No online booking path",
+        "scorecardArea": "Online Booking",
+        "evidenceTier": "OBSERVED",
+        "evidenceGrade": "observed",
+        "evidence": "There is no booking link on the site or on your Google Business Profile. You told us at intake that jobs are booked by phone and email only.",
+        "explanation": "Every booking currently costs a phone conversation, which means it can only happen while somebody is free to have one. A homeowner who decides at 10pm to lock in a Saturday visit has to remember to call tomorrow, and remembering is where a lot of that intent quietly dies.",
+        "businessImpact": "Booking capacity is capped by the hours somebody can spend on the phone rather than by the number of electricians you can put on the road.",
+        "difficulty": "medium",
+        "priority": "high",
+        "recommendedFix": "We build the booking page inside your GoHighLevel sub-account, wire it to real electrician availability, and put it behind every call-to-action on the site so a visitor can take a slot without speaking to anyone.",
+        "owner": "us",
+        "allowedStats": [
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+        ],
+        "intakeConfirmed": true,
+        "quantifiable": true
+      },
+      {
+        "area": "No lead qualification at intake",
+        "leakName": "No lead qualification at intake",
+        "scorecardArea": "Lead Qualification & On-Page Conversion",
+        "evidenceTier": "OBSERVED",
+        "evidenceGrade": "observed",
+        "evidence": "The contact form collects a name, an email, a phone number and a free-text message. Nothing on it establishes what the job is, where it is, or how urgent it has become.",
+        "explanation": "Every enquiry therefore arrives looking identical, so whoever reads the inbox has to phone each one back just to find out which is a panel upgrade and which is a single dead outlet. That triage happens at whatever speed the day allows, and the big job waits in line behind the small one.",
+        "businessImpact": "The most valuable enquiry in the inbox gets exactly the same treatment as the least valuable one, which means your biggest jobs routinely wait the longest.",
+        "difficulty": "low",
+        "priority": "high",
+        "recommendedFix": "We rebuild the form around lead qualification so each enquiry is scored on job type, urgency and service area as it arrives, and a priority job pages the on-call electrician instead of joining a queue.",
+        "owner": "us",
+        "quantifiable": false
+      },
+      {
+        "area": "Missed calls with no recovery",
+        "leakName": "Missed calls with no recovery",
+        "scorecardArea": "Call & Message Capture",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "Your published number is a single line with no text-back path visible anywhere on the site. You told us at intake that a missed call goes to voicemail and gets returned when somebody is free.",
+        "explanation": "A call that rings out is not a lost customer yet. It becomes one at the moment that homeowner dials the next company on their list, which is typically within a few minutes. Nothing on the site offers a text as a lighter alternative, so a caller who cannot get through has no second route back to Harbourline.",
+        "businessImpact": "Where this holds, every call that rings out is demand you have already paid for arriving and leaving without a record. Because nothing logs it, the size of the problem stays invisible until it is measured.",
+        "dollarImpact": {
+          "leadVolumeBasis": "Based on your 80 enquiries/mo (estimated projection)",
+          "effectSize": "14% home-services missed-call rate × the 85% who never call back (CallRail), closed at 30% (our assumption, not a number we measured)",
+          "avgValueBasis": "CAD $1,250 average customer value — your number",
+          "monthlyLow": 1785,
+          "monthlyHigh": 3570,
+          "formula": "80 enquiries × 14% missed × 85% no-callback × 30% close (our assumption, not a number we measured) × CAD $1,250 = CAD $1,785–CAD $3,570/mo",
+          "usesBenchmarkValue": false
+        },
+        "difficulty": "low",
+        "priority": "critical",
+        "recommendedFix": "We put a missed-call text-back on the line so a caller who does not reach a person receives a message within seconds, and route their reply into the same qualification flow as a form fill.",
+        "owner": "us",
+        "allowedStats": [
+          "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9%. (CallRail)",
+          "85% of callers who reach voicemail never call back. (CallRail Benchmark Report)",
+          "78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next. (CallRail consumer survey)",
+          "Phone calls to home-services businesses convert ~10–15x more than web leads. (BIA/Kelsey)"
+        ],
+        "mathFrame": "≈ CAD $1,785–CAD $3,570/mo — based on the numbers you provided: 80 enquiries/mo × a 14% home-services missed-call rate (CallRail) × the 85% of missed callers who never call back (CallRail) × a 30% close rate on the ones you'd win back (our assumption, not a number we measured) × your CAD $1,250 average customer value, with the low end set at half the high end (our assumption, not a number we measured). Estimated.",
+        "industryPattern": "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9%. (CallRail) 85% of callers who reach voicemail never call back. (CallRail Benchmark Report) 78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next. (CallRail consumer survey) Phone calls to home-services businesses convert ~10–15x more than web leads. (BIA/Kelsey)",
+        "intakeConfirmed": true,
+        "quantifiable": true
+      },
+      {
+        "area": "Weak landing page conversion path",
+        "leakName": "Weak landing page conversion path",
+        "scorecardArea": "Lead Qualification & On-Page Conversion",
+        "evidenceTier": "OBSERVED",
+        "evidenceGrade": "observed",
+        "evidence": "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both need the office to be open before they do anything.",
+        "explanation": "A visitor who arrives outside office hours has no action available that produces a result, so the page quietly converts nobody between five in the evening and eight the next morning. This is an observation about the page, not a project we are proposing.",
+        "businessImpact": "The visitors most likely to act are the ones who arrive with a problem in front of them, and a good share of them arrive when nobody is at a desk.",
+        "difficulty": "low",
+        "priority": "high",
+        "recommendedFix": "We point the existing buttons at the booking page we build, so the same page gives an out-of-hours visitor something that actually completes. What the site looks like stays entirely with whoever looks after it.",
+        "owner": "us",
+        "quantifiable": false
+      },
+      {
+        "area": "No structured follow-up on unbooked leads",
+        "leakName": "No structured follow-up on unbooked leads",
+        "scorecardArea": "Follow-Up & Nurture",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "What happens to a quote that goes quiet is not visible from outside, and we did not see it here. You told us at intake that nothing automated goes out after a quote.",
+        "explanation": "A homeowner who asks for a price on a panel upgrade is often not ready to spend until storm season forces the issue. If nothing reaches them between those two moments, the decision gets made without Harbourline in the room. Where that pattern holds, the quote is not lost on price, it is lost on silence.",
+        "businessImpact": "Quotes that went quiet are the cheapest pipeline you own, because the enquiry was already earned once. If that is how it works today, most of that pipeline is expiring untouched.",
+        "difficulty": "medium",
+        "priority": "critical",
+        "recommendedFix": "We deploy a multi-touch follow-up sequence across email and SMS on every unbooked quote, spaced across the weeks the decision actually takes, with a longer branch for the ones who said not yet.",
+        "owner": "us",
+        "allowedStats": [
+          "Most leads need several touches before they buy, and most businesses stop after one or two.",
+          "The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)"
+        ],
+        "mathFrame": "Most leads need several touches before they buy, and most businesses stop after one or two.",
+        "industryPattern": "Most leads need several touches before they buy, and most businesses stop after one or two. The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)",
+        "intakeConfirmed": true,
+        "quantifiable": true
+      },
+      {
+        "area": "Slow response to web leads",
+        "leakName": "Slow response to web leads",
+        "scorecardArea": "Speed to Lead",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "One of your recent Google reviews describes an enquiry through the site that went unanswered for days. You told us at intake that a new enquiry usually waits a few hours for a reply.",
+        "explanation": "The form is the one route into Harbourline that does not need somebody to pick up a phone, and there is nothing automated behind it. Reply time is therefore set by that day's job list rather than by the enquiry. In a trade where the homeowner is usually contacting three companies at once, the reply that lands first is the one that gets the appointment.",
+        "businessImpact": "A few hours is long enough for somebody with a dead circuit to have already booked a competitor. That enquiry was not lost on price or on reputation, it was lost on answering speed.",
+        "difficulty": "low",
+        "priority": "critical",
+        "recommendedFix": "We put an instant auto-reply behind every form submission and route the enquiry into qualification inside the first minute, so whoever is on the phones receives a scored, ready-to-call lead instead of a raw message.",
+        "owner": "us",
+        "allowedStats": [
+          "Leads contacted within 5 minutes are ~21x more likely to qualify than at 30 minutes, and ~100x more likely to be reached at all. (MIT/InsideSales)",
+          "The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)",
+          "Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). (Optifai)",
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+        ],
+        "mathFrame": "Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). The leads answered in minutes are the ones that close; every hour of silence moves them toward whoever replied first.",
+        "industryPattern": "Leads contacted within 5 minutes are ~21x more likely to qualify than at 30 minutes, and ~100x more likely to be reached at all. (MIT/InsideSales) The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift) Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). (Optifai) 82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)",
+        "intakeConfirmed": true,
+        "quantifiable": true
+      },
+      {
+        "area": "No website chat capture",
+        "leakName": "No website chat capture",
+        "scorecardArea": "Call & Message Capture",
+        "evidenceTier": "OBSERVED",
+        "evidenceGrade": "observed",
+        "evidence": "No chat or messaging widget was detected on any of the scanned pages.",
+        "explanation": "A visitor with one small question has two options today: telephone you, or fill in a form and wait. Both are heavier than the question deserves, and the lighter the question, the more likely that visitor is to close the tab instead of asking it.",
+        "businessImpact": "The visitors you never hear from are the cheapest ones to convert, because they are already on the page and already interested.",
+        "difficulty": "low",
+        "priority": "medium",
+        "recommendedFix": "We install a webchat widget that hands the conversation straight to SMS, so a question asked on the site continues in the visitor's text messages and lands in the same pipeline as a phone call.",
+        "owner": "us",
+        "allowedStats": [
+          "40.5% of consumers say they'd switch to a competitor that offers text messaging. (Podium Business Messaging Trends)"
+        ],
+        "quantifiable": true
+      },
+      {
+        "area": "Dormant customer database",
+        "leakName": "Dormant customer database",
+        "scorecardArea": "Follow-Up & Nurture",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "73 Google reviews point to years of completed jobs, so a list of past customers almost certainly exists somewhere. You told us at intake that the past-customer list has not been contacted in over a year.",
+        "explanation": "A electrical work customer buys again on a schedule: a service visit most years, a replacement eventually. The households already on that list are the warmest demand in Dartmouth and the only demand you never have to compete for.",
+        "businessImpact": "A dormant list is revenue that has already chosen you once. If nothing reaches it seasonally, that demand simply goes to whichever company reaches them first.",
+        "difficulty": "low",
+        "priority": "high",
+        "recommendedFix": "We load the past-customer list into the pipeline and run a seasonal reactivation sequence ahead of storm season, sent from your number so it reads as a reminder from their own electrician.",
+        "owner": "us",
+        "intakeConfirmed": true,
+        "quantifiable": false
+      },
+      {
+        "area": "No pipeline — leads are untracked",
+        "leakName": "No pipeline — leads are untracked",
+        "scorecardArea": "Pipeline & Tracking",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "Whether enquiries are tracked in a pipeline is not something a scan can establish. You told us at intake that there is no CRM — enquiries live in an inbox and a notebook.",
+        "explanation": "Without a shared record, an enquiry only really exists in the head of whoever took it. The callback promised on Tuesday then competes with Wednesday's emergency, and the one that loses is the one nobody can see.",
+        "businessImpact": "You cannot manage a number you cannot see. Where enquiries are held informally, the loss shows up as a quiet flat month rather than as anything anybody can point at.",
+        "difficulty": "medium",
+        "priority": "high",
+        "recommendedFix": "We build the pipeline inside your GoHighLevel sub-account using the stages your business actually runs, so every enquiry has one home, one owner and one next action.",
+        "owner": "us",
+        "intakeConfirmed": true,
+        "quantifiable": false
+      },
+      {
+        "area": "Social DMs outside the system",
+        "leakName": "Social DMs outside the system",
+        "scorecardArea": "Call & Message Capture",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "The site links out to a Facebook page. You told us at intake that enquiries do arrive as Instagram and Facebook messages.",
+        "explanation": "A message on a social page usually lands separately from the phone line and separately from the inbox. Where that is the case, it typically gets answered when that person next opens the app rather than when the customer sent it.",
+        "businessImpact": "A channel nobody owns is a channel with no response time attached. Where enquiries arrive there, they are landing in a queue with no service level behind it.",
+        "difficulty": "low",
+        "priority": "medium",
+        "recommendedFix": "We connect the social page inbox into the same conversation view as calls, texts and form fills, so a direct message is answered on the same clock as everything else.",
+        "owner": "us",
+        "allowedStats": [
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+        ],
+        "industryPattern": "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)",
+        "intakeConfirmed": true,
+        "quantifiable": true
+      },
+      {
+        "area": "Google reviews going unanswered",
+        "leakName": "Google reviews going unanswered",
+        "scorecardArea": "Reputation & Social Proof",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "You told us at intake that nobody replies to your Google reviews today.",
+        "explanation": "A review with no reply under it is the only part of your reputation a future customer reads unedited. The reply is not for the person who wrote it; it is for the next twenty people comparing three companies on a phone.",
+        "businessImpact": "Silence under a negative review lets it speak for the business, and silence under a positive one wastes the best thing anybody has said about you this year.",
+        "difficulty": "low",
+        "priority": "medium",
+        "recommendedFix": "We draft a reply to every new review the same day it lands and put it in front of you to approve, so the answer is yours and the work is not.",
+        "owner": "us",
+        "intakeConfirmed": true,
+        "quantifiable": false
+      },
+      {
+        "area": "No visibility into call performance",
+        "leakName": "No visibility into call performance",
+        "scorecardArea": "Pipeline & Tracking",
+        "evidenceTier": "BENCHMARK",
+        "evidenceGrade": "disclosed",
+        "evidence": "Whether calls are tracked is not visible from outside. You told us at intake that answered-versus-missed call volume is not recorded anywhere.",
+        "explanation": "Without a record of how many calls came in and how many reached a person, the size of the capture problem is a matter of opinion. Every other fix in this report becomes easier to sequence the moment that number exists.",
+        "businessImpact": "Where call volume is not recorded, staffing and capacity decisions get made without knowing how much demand never reached anybody.",
+        "difficulty": "low",
+        "priority": "medium",
+        "recommendedFix": "We turn on call tracking and recording across the numbers we deploy, so answered, missed and after-hours volume arrives as a number in the monthly report instead of a guess.",
+        "owner": "us",
+        "intakeConfirmed": true,
+        "quantifiable": false
+      }
+    ],
+    "fastestWins": [
+      {
+        "opportunity": "Missed-call text-back on the published line",
+        "impact": "Recovers the largest single figure in this report, estimated beside that finding",
+        "difficulty": "low",
+        "speed": "live in under a week"
+      },
+      {
+        "opportunity": "Instant auto-reply on the contact form",
+        "impact": "Closes the reply delay a review already describes",
+        "difficulty": "low",
+        "speed": "live in under a week"
+      },
+      {
+        "opportunity": "After-hours auto-response on both channels",
+        "impact": "Covers the evenings and weekends the listing shows closed",
+        "difficulty": "low",
+        "speed": "live in under a week"
+      },
+      {
+        "opportunity": "Qualifying fields plus scoring on the form",
+        "impact": "Puts the highest-value job at the front of the callback queue",
+        "difficulty": "low",
+        "speed": "about a week"
+      },
+      {
+        "opportunity": "Booking page wired to electrician availability",
+        "impact": "Turns evening intent into a held slot without a phone call",
+        "difficulty": "medium",
+        "speed": "two weeks"
+      }
+    ],
+    "strategicRecommendations": [
+      "We deploy the qualification and routing engine in front of every channel, and we run it for you every month rather than handing you a tool to operate.",
+      "We build the whole conversion path inside a GoHighLevel sub-account you own: instant response, qualification, follow-up, booking, reminders and the pipeline behind them.",
+      "We treat capture as the first priority and booking as the second, because a booking page only pays for itself on enquiries that reached the system.",
+      "We put a seasonal reactivation sequence on your past-customer list, which is demand you have already earned and are currently not contacting.",
+      "We report monthly on answered, missed and after-hours volume, so the next round of decisions is made against numbers rather than impressions."
+    ]
+  },
+  "infrastructure": {
+    "funnel": {
+      "overview": "This is the path an enquiry takes from the moment it arrives to the moment the electrician is standing at the door, and the version below is the one we build for you. Every stage that can run without a person waiting on it does. The two that cannot are the ones where judgement or a licensed trade is the whole point.",
+      "stages": [
+        {
+          "stage": "Capture",
+          "role": "Get every enquiry into one system regardless of which channel it arrived on.",
+          "currentWeakness": "Three separate routes into the business today, none of which share a queue: a phone line with no fallback, a form with nothing behind it, and a social page sitting on its own.",
+          "whatWeDeploy": "One tracked number with missed-call text-back, a webchat widget that continues in SMS, the social inbox connected, and the site form rewritten to feed the same queue.",
+          "owner": "us",
+          "isRetainer": false,
+          "kpi": "Share of inbound enquiries that reach the system with a timestamp on them."
+        },
+        {
+          "stage": "Qualify",
+          "role": "Score and sort every enquiry before a human spends a minute on it. This is the stage we run for you every month.",
+          "currentWeakness": "The form collects a name, an email, a phone number and a message, so every enquiry looks identical and triage happens by phone.",
+          "whatWeDeploy": "Scoring on job type, urgency and service area at the point of capture, with routing rules that page the on-call electrician for priority work and hold the rest for the office.",
+          "owner": "us",
+          "isRetainer": true,
+          "kpi": "Median time from enquiry to a scored, routed lead."
+        },
+        {
+          "stage": "Speed to Lead",
+          "role": "Make sure the first reply is ours, on every channel, every time.",
+          "currentWeakness": "A review describes an enquiry through the site that waited days, and nothing automated sits behind that form today.",
+          "whatWeDeploy": "Instant auto-reply on form and chat, missed-call text-back on the phone, and an after-hours response that covers the evenings and weekends your listing shows as closed.",
+          "owner": "us",
+          "isRetainer": false,
+          "kpi": "Median first-response time, measured in minutes rather than hours."
+        },
+        {
+          "stage": "Nurture",
+          "role": "Stay present between the quote and the decision, and between one job and the next.",
+          "currentWeakness": "What reaches an unbooked quote is not visible from outside, and most local trades stop after one or two attempts.",
+          "whatWeDeploy": "A multi-touch email and SMS sequence on every unbooked quote, a longer branch for the not-yet leads, and a seasonal reactivation run at the past-customer list.",
+          "owner": "us",
+          "isRetainer": false,
+          "kpi": "Share of quoted jobs that book within ninety days."
+        },
+        {
+          "stage": "Book",
+          "role": "Let a ready customer hold a real slot without needing a phone conversation.",
+          "currentWeakness": "Booking runs through phone and email only, so it can only happen while somebody in the office is free.",
+          "whatWeDeploy": "The booking page inside your GoHighLevel sub-account, wired to electrician availability, with a text-to-pay deposit link that turns a held slot into a committed one.",
+          "owner": "us",
+          "isRetainer": false,
+          "kpi": "Share of bookings taken without a phone call."
+        },
+        {
+          "stage": "Show-Up and Recovery",
+          "role": "Protect the booked slot and pick up the ones that fall over.",
+          "currentWeakness": "Nothing between the booking and the visit currently reminds anybody, and the wait grows as booking moves online.",
+          "whatWeDeploy": "Confirmation and reminder messages on every booking, a same-day text before arrival, and a two-step recovery sequence on any appointment that does not happen.",
+          "owner": "us",
+          "isRetainer": false,
+          "kpi": "Share of booked appointments attended."
+        }
+      ]
+    },
+    "crmPipeline": {
+      "overview": "One pipeline, six stages, and a rule for what moves an enquiry between them. The point is that at any moment you can see how many jobs are sitting at each stage and who owes the next action, which is the thing an inbox can never tell you.",
+      "stages": [
+        {
+          "stage": "New Lead",
+          "entryCriteria": "Any first contact at all — a form, a call, a chat on the site, a message on Facebook or Instagram, a text to your number.",
+          "exitCriteria": "Somebody works out what they want and moves them on, or the follow-up sequence runs its course without them booking.",
+          "ownership": "Automation, with the office notified on priority scores.",
+          "reviewProcess": "Anything sitting here more than fifteen minutes during business hours raises an alert."
+        },
+        {
+          "stage": "Qualified",
+          "entryCriteria": "The qualifying questions come back with an answer worth your time, or you talk to them and decide it is worth pursuing.",
+          "exitCriteria": "They take a time on the calendar, or they go quiet and drop into follow-up.",
+          "ownership": "Office, working from the score and the answers behind it.",
+          "reviewProcess": "Reviewed daily; anything over two days without a quote gets chased."
+        },
+        {
+          "stage": "Booked",
+          "entryCriteria": "An appointment is confirmed — booked by them online, or put in by you or your team.",
+          "exitCriteria": "The appointment happens, or it does not.",
+          "ownership": "Automation for the reminders, dispatch for the scheduling.",
+          "reviewProcess": "Checked each morning against the day's route."
+        },
+        {
+          "stage": "Showed",
+          "entryCriteria": "The appointment is marked as attended.",
+          "exitCriteria": "They go ahead, or they decide against it.",
+          "ownership": "The electrician on site, with the office picking up the paperwork.",
+          "reviewProcess": "Reviewed at the end of each day against what was on the calendar that morning."
+        },
+        {
+          "stage": "Won",
+          "entryCriteria": "They say yes — or a deposit lands, which says yes for them.",
+          "exitCriteria": "It does not. This is the end of the line, and reaching it is what asks the customer for a review.",
+          "ownership": "Office.",
+          "reviewProcess": "Review request fires automatically once the job is marked complete."
+        },
+        {
+          "stage": "Lost",
+          "entryCriteria": "They say no, they go elsewhere, or the 60-day follow-up sequence finishes without a booking and closes them out.",
+          "exitCriteria": "They come back in as a New Lead the day they get in touch again — nothing is deleted, the history stays with them.",
+          "ownership": "Automation.",
+          "reviewProcess": "Nothing is deleted — the record stays with its history and the seasonal reactivation run picks it up again."
+        }
+      ],
+      "leadTiers": [
+        {
+          "tier": "Priority Lead",
+          "range": "90–100",
+          "meaning": "A dead circuit, or a replacement-sized job, inside the service area.",
+          "action": "Page the on-call electrician and call back immediately.",
+          "responseTime": "Under five minutes, day or night.",
+          "owner": "On-call electrician, with the office copied.",
+          "followUpMethod": "Phone first, SMS as the fallback if the call is not picked up."
+        },
+        {
+          "tier": "Qualified Lead",
+          "range": "70–89",
+          "meaning": "A real job in the service area with no immediate urgency behind it.",
+          "action": "Call back the same business day and put a quote in writing.",
+          "responseTime": "Within one hour during business hours.",
+          "owner": "Office.",
+          "followUpMethod": "Phone, then the standard quote follow-up sequence."
+        },
+        {
+          "tier": "Nurture Lead",
+          "range": "40–69",
+          "meaning": "Interested but not ready, or planning work for a future season.",
+          "action": "Send the information they asked for and place them in the longer sequence.",
+          "responseTime": "Same day, automated.",
+          "owner": "Automation.",
+          "followUpMethod": "Email and SMS, spaced across the weeks the decision actually takes."
+        },
+        {
+          "tier": "Low Fit Lead",
+          "range": "0–39",
+          "meaning": "Outside the service area, or asking about work you do not take on.",
+          "action": "Reply honestly, point them somewhere useful, and keep the record.",
+          "responseTime": "Same day, automated.",
+          "owner": "Automation.",
+          "followUpMethod": "A single courteous email; no sequence."
+        }
+      ]
+    }
+  },
+  "supportingAssets": {
+    "reviewAssets": {
+      "postJobRequest": "Hi [First name], thanks for having Harbourline out today. If the work was up to standard, a short Google review helps other Dartmouth homeowners work out who to call. Here is the link: [Google review link]. If anything was not right, reply to this message and we will sort it out first."
+    },
+    "thankYouAssets": {
+      "thankYouPageCopy": "Thanks — that is booked. You will get a confirmation text within a minute with your time slot and the name of the electrician coming out. If you need to move it, reply to that text and we will find another slot.",
+      "nextStepMessaging": "Two things happen next. You will get a reminder the day before, and another on the morning of the visit once the electrician is on the way. Nothing else is needed from you.",
+      "postPurchaseSequence": [
+        "Immediately: confirmation text with the slot, the electrician's name and a reply-to-reschedule line.",
+        "Day before: reminder with the arrival window and a note about clearing access.",
+        "Morning of: a text when the electrician leaves the previous job, with a live arrival estimate.",
+        "Same evening: a short thank-you and the review request, once the job is marked complete.",
+        "Eleven months later: a maintenance reminder timed to storm season."
+      ]
+    }
+  },
+  "roadmap": {
+    "overview": "A fortnight of build, one day when it starts answering for you, then the months where it earns its keep. The order below is set by this report: capture first, because everything downstream only works on enquiries that reached the system, then booking, then the follow-up that runs on its own once it is built.",
+    "phases": [
+      {
+        "phase": "Build",
+        "window": "Days 1–14",
+        "objective": "Close the capture and response gaps, in the order the figures in this report put them.",
+        "deployActions": [
+          "Stand up your GoHighLevel sub-account, port a tracked number and turn on call recording.",
+          "Deploy missed-call text-back on the published line.",
+          "Put instant auto-reply behind the site form and connect it to the qualification screen the monthly service runs and tunes for you.",
+          "Turn on after-hours auto-response covering evenings and weekends.",
+          "Install the webchat widget and connect the social page inbox to the same queue.",
+          "Build the booking page against real electrician availability and put it behind every call to action."
+        ],
+        "owner": "us",
+        "doneDefinition": [
+          "Median first response to a new enquiry is under five minutes during business hours.",
+          "Every inbound channel lands in one queue with a timestamp attached.",
+          "A customer can hold a slot at 11pm without speaking to anybody."
+        ],
+        "isRetainerPhase": false,
+        "investment": "CAD $6,500, one-time",
+        "workflowsInThisWindow": [
+          "Instant Lead Response (week one)",
+          "Missed Call Text-Back (week one)",
+          "After-Hours Auto-Reply (week one)",
+          "Booking Confirmation + Reminders (week one)",
+          "Appointment Cancelled — Stop Reminders (week one)",
+          "Owner Hot-Lead Notification (week one)",
+          "Webchat Capture (week one)",
+          "No-Show Recovery (week two)",
+          "Review Request (week two)",
+          "Lead Nurture — No Booking (week two)",
+          "Social DM Capture (week two)",
+          "Text-to-Pay (week two)",
+          "Database Reactivation (week two)",
+          "Review Response (week two)"
+        ]
+      },
+      {
+        "phase": "Go-Live",
+        "window": "Day 14 — the day it starts answering for you",
+        "objective": "Turn the build on in one pass, in an order that means no enquiry falls between the old setup and the new one.",
+        "deployActions": [
+          "Point the tracked number at the phone you already answer and start recording.",
+          "Open the booking calendar to real bookings against the availability you confirmed.",
+          "Move every workflow from draft to live in one pass.",
+          "Switch the pipeline on so new enquiries start landing at New Lead."
+        ],
+        "owner": "us",
+        "doneDefinition": [
+          "A real enquiry through your own number gets an answer inside about a minute.",
+          "Nothing arrives in a channel that has no automation behind it."
+        ],
+        "isRetainerPhase": false,
+        "investment": "Included in the build",
+        "workflowsInThisWindow": [
+          "Instant Lead Response",
+          "Missed Call Text-Back",
+          "After-Hours Auto-Reply",
+          "Booking Confirmation + Reminders",
+          "Appointment Cancelled — Stop Reminders",
+          "No-Show Recovery",
+          "Review Request",
+          "Lead Nurture — No Booking",
+          "Owner Hot-Lead Notification",
+          "Webchat Capture",
+          "Social DM Capture",
+          "Text-to-Pay",
+          "Database Reactivation",
+          "Review Response"
+        ],
+        "goLive": {
+          "whatSwitchesOn": [
+            "The tracked number starts taking calls and forwarding to the phone you already answer.",
+            "The booking calendar starts accepting real bookings.",
+            "Every workflow moves from draft to live.",
+            "The pipeline starts receiving, and new enquiries land at New Lead.",
+            "The chat box goes onto the site if whoever runs it can place the snippet."
+          ],
+          "whatWeNeedFromYou": [
+            "Approve the copy — one pass, and say what you would not put your name to.",
+            "Confirm the hours and the electrician availability the calendar books against.",
+            "Forward your existing number, or publish the new one.",
+            "Get the chat snippet onto your site, or tell us who can.",
+            "Confirm who controls the Google listing.",
+            "Hand over the past-customer list if there is one."
+          ],
+          "whatLiveMeans": "A real enquiry arriving through your own number or your own form gets an answer inside about a minute, appears in the pipeline at New Lead, and is followed up without anybody at your end doing anything."
+        }
+      },
+      {
+        "phase": "Ongoing",
+        "window": "Days 15–90 and beyond",
+        "objective": "Run the qualification engine, keep the sequences honest, and report on what changed.",
+        "deployActions": [
+          "Run qualification and routing on every enquiry, every day.",
+          "Review scoring accuracy monthly and adjust the thresholds against booked outcomes.",
+          "Rotate follow-up and reactivation copy each season so it stays relevant around storm season.",
+          "Load the past-customer list and run the first seasonal reactivation batch.",
+          "Deliver a monthly report covering answered, missed and after-hours volume, response times and booked outcomes."
+        ],
+        "owner": "us",
+        "doneDefinition": [
+          "Median first response stays under five minutes month over month.",
+          "Share of quoted jobs booking within ninety days is trending up.",
+          "Every month starts with a written read on what moved and what did not."
+        ],
+        "isRetainerPhase": true,
+        "investment": "CAD $1,000 per month",
+        "workflowsInThisWindow": [
+          "No-Show Recovery",
+          "Review Request",
+          "Lead Nurture — No Booking",
+          "Text-to-Pay",
+          "Database Reactivation",
+          "Review Response"
+        ]
+      }
+    ]
+  },
+  "surfaces": {
+    "bookingPage": {
+      "where": "GoHighLevel → Sites → Booking page (the one page we build for you)",
+      "honestyNote": "Any response time promised on the page has to match what the automation actually does, or the page becomes a liability.",
+      "headlineOptions": [
+        "A dead circuit in Dartmouth? We can usually be there the same day.",
+        "Electrical work across Dartmouth and the Halifax Regional Municipality.",
+        "Electrical work that gets answered, not just advertised."
+      ],
+      "subheadlineOptions": [
+        "Licensed, insured and working in Dartmouth since 2009. Tell us what is happening and we will tell you when we can be there.",
+        "Same-week service on most jobs, a written price before any work starts, and an answer whatever time you send this.",
+        "Electrical panel work, emergency callouts and planned jobs across the Halifax Regional Municipality."
+      ],
+      "primaryButton": "Book a service visit",
+      "secondaryButton": "Request a written quote",
+      "reassuranceLine": "4.4 stars across 73 Google reviews. Licensed and insured in Nova Scotia.",
+      "proofLine": "Rated 4.4 by 73 Dartmouth homeowners, and answering after hours since this system went in.",
+      "sectionOrder": [
+        {
+          "name": "Hero",
+          "purpose": "Answer the question the visitor arrived with in one line.",
+          "copy": "A dead circuit in Dartmouth? We can usually be there the same day. Licensed, insured and working across the Halifax Regional Municipality since 2009 — tell us what is happening and we will tell you when we can be there."
+        },
+        {
+          "name": "The problem, in their words",
+          "purpose": "Show that you understand the situation the visitor is actually in.",
+          "copy": "A tripped main does not wait for office hours. By the time it happens the question is not who is cheapest but who picks up. The frustrating part for most homeowners is not the bill. It is ringing three companies, leaving three messages, and waiting to see which one calls back."
+        },
+        {
+          "name": "How the work actually goes",
+          "purpose": "Remove the uncertainty about what happens after they book.",
+          "copy": "Send us what is happening and you get an answer within minutes, whatever time it is. If it is urgent, the on-call electrician is paged straight away. If it can wait, you get a written price and a slot you can hold online without another phone call."
+        },
+        {
+          "name": "Proof",
+          "purpose": "Let real customers do the persuading.",
+          "copy": "Harbourline has been working in the Halifax Regional Municipality since 2009, licensed and insured in Nova Scotia. The rating is 4.4 across 73 Google reviews. [Paste three real Google reviews here, first name and neighbourhood only — never write one that nobody left.]"
+        },
+        {
+          "name": "Book a time",
+          "purpose": "Give a ready customer a way to hold a slot without a phone call.",
+          "copy": "Pick a window that suits you. You will get a written confirmation within a minute, a reminder the day before, and a text on the morning of the visit when the electrician leaves the previous job."
+        },
+        {
+          "name": "Questions",
+          "purpose": "Answer the objections that otherwise become a phone call or a closed tab.",
+          "copy": "Cost, timing, service area and what happens out of hours — answered plainly below, with no hedging."
+        },
+        {
+          "name": "Close",
+          "purpose": "Repeat the offer to act for anybody who read the whole page.",
+          "copy": "Book a service visit, request a written quote, or call 902-555-0117. Whichever you choose, you get an acknowledgement within a minute."
+        }
+      ],
+      "faq": [
+        {
+          "question": "How quickly can somebody get here?",
+          "answer": "Urgent a dead circuit calls are usually same day. Everything else is normally within the same week, and you will be given a real window rather than a vague morning or afternoon."
+        },
+        {
+          "question": "What does it cost to have somebody look at it?",
+          "answer": "There is a callout fee for the visit, quoted to you before it is booked, and it comes off the bill if you go ahead with the work. Nothing starts without a written price you have agreed to."
+        },
+        {
+          "question": "What happens if I message you in the evening?",
+          "answer": "You get an acknowledgement within a minute confirming we have it, and a real reply first thing. If it is an emergency, the message routes to the on-call electrician rather than waiting for the office to open."
+        },
+        {
+          "question": "Which areas do you cover?",
+          "answer": "Dartmouth and the Halifax Regional Municipality. If you are outside that we will say so straight away rather than leaving you waiting on a callback."
+        },
+        {
+          "question": "Should I repair the electrical panel or replace it?",
+          "answer": "That depends on age, what has failed and what the repair costs against a replacement. The electrician will give you both numbers and tell you honestly which one they would choose."
+        }
+      ]
+    },
+    "leadCaptureForm": {
+      "where": "GoHighLevel → Sites → Forms → Lead capture, and the confirmation shown after it is sent",
+      "formHeadline": "Tell us what is happening",
+      "formIntro": "Four lines is plenty. The more we know about the job and the urgency, the faster the right person calls you back.",
+      "submitButton": "Send it to Harbourline",
+      "postSubmitHeadline": "Got it — this is with us now",
+      "postSubmitCopy": "A confirmation is on its way to your phone. A person will follow it within the hour during office hours, or first thing tomorrow if you sent this overnight. You do not need to send it again.",
+      "emergencyRoute": "If it is an emergency, call 902-555-0117 — it will route straight to the on-call electrician instead of waiting on a sequence."
+    },
+    "leadGate": {
+      "where": "GoHighLevel → Sites → Forms → qualifying questions, and the on-screen replies LeadGate gives",
+      "openingLine": "Five quick questions so the right person calls you back with the right answer, instead of phoning to work out what the job is.",
+      "questionIntros": [
+        "This one decides whether it goes to the on-call electrician tonight or to the office in the morning.",
+        "Knowing the make and rough age of the electrical panel means the electrician arrives carrying the likely part.",
+        "The postal area tells us straight away whether you are inside the service area — if you are not, we will say so rather than leave you waiting."
+      ],
+      "priorityAcknowledgement": "That sounds like it cannot wait. The on-call electrician has been paged and will call you on this number — if it is a full outage, ring 902-555-0117 as well rather than waiting.",
+      "standardAcknowledgement": "Thanks — that is everything we need. Somebody from the office will call you back within the hour during business hours, or first thing tomorrow if you sent this overnight."
+    },
+    "webchat": {
+      "where": "GoHighLevel → Sites → Chat widget (the bubble on your website)",
+      "launcherLabel": "Ask a quick question",
+      "greeting": "Hi — this is Harbourline. Ask away and somebody will answer. If you have a dead circuit, say so and it goes to the on-call electrician.",
+      "detailsAsk": "Can I take a name and a mobile number? That way we can carry on by text if you have to close the tab, and nothing gets lost.",
+      "awayMessage": "The office is closed but this is monitored. Send it through and you will get a real reply first thing. If it is urgent, call 902-555-0117 and it routes straight to the on-call electrician. You can also grab a slot now: [booking link]"
+    },
+    "siteAdvisory": {
+      "where": "Hand this to whoever looks after your website — it is advice, not work we do",
+      "scopeNote": "These are advisory notes for whoever maintains the website; the page we build and host is the GoHighLevel booking page.",
+      "standingRules": [
+        "These are advisory notes for whoever maintains the website; the page we build and host is the GoHighLevel booking page.",
+        "The fastest version of all of this is repointing the existing buttons at the booking page and leaving the rest of the site alone.",
+        "Never publish a review, a name or a photo that did not come from a real customer, however good the placeholder reads.",
+        "Any response time promised on the page has to match what the automation actually does, or the page becomes a liability."
+      ],
+      "summary": "The page does the honest things well: the headline says what you do and where, the phone number is tappable, and there is a clear request-a-quote button above the fold. What it does not do is give a visitor any way to act outside the hours your office is open. Measured on mobile the page scores 68 with a largest contentful paint of 3.3 seconds, and 88 at 1.7 seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.",
+      "notes": [
+        {
+          "area": "Buttons",
+          "whatWeSaw": "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both routes need the office to be open.",
+          "recommendation": "Point the existing buttons at the booking page and keep one visible at every scroll position. This is the cheapest change on the list and the one with the most behind it.",
+          "priority": "critical"
+        },
+        {
+          "area": "Hero",
+          "whatWeSaw": "The headline describes the trade and the service area accurately, with the licensing line directly beneath it. It does not answer the question a visitor arrives with, which is how quickly somebody can be there.",
+          "recommendation": "Lead with response and availability, and move the licensing line down to the proof row where it still does its job.",
+          "priority": "high"
+        },
+        {
+          "area": "Proof placement",
+          "whatWeSaw": "The proof section states the rating and the review count in a sentence. There is no review text on the page and no named customer anywhere.",
+          "recommendation": "Pull three real Google reviews onto the page verbatim, each with a first name and a neighbourhood, and place one immediately under the hero.",
+          "priority": "high"
+        },
+        {
+          "area": "The form",
+          "whatWeSaw": "The form asks four generic questions — name, email, phone and a message box — so every submission looks identical until somebody phones back to find out what it is.",
+          "recommendation": "Add job type, urgency and postal area to the form. It is what lets an enquiry be sorted before anybody picks up a phone.",
+          "priority": "high"
+        },
+        {
+          "area": "Response expectations",
+          "whatWeSaw": "Nothing beside either button tells a visitor when to expect an answer, and your listing shows evenings and weekends closed.",
+          "recommendation": "State the response commitment next to the button — and only a commitment the automation behind it actually keeps.",
+          "priority": "medium"
+        },
+        {
+          "area": "Measurement",
+          "whatWeSaw": "Form submissions and tap-to-call clicks are not recorded as separate events, so there is no way to tell which route people actually take.",
+          "recommendation": "Track the two as separate conversion events and tag every enquiry with the hour it arrived. That is the only way to size the after-hours question with real data rather than a benchmark.",
+          "priority": "medium"
+        }
+      ]
+    }
+  },
+  "workflowCopy": {
+    "assets": [
+      {
+        "workflowId": "instant-lead-response",
+        "workflowName": "Instant Lead Response",
+        "trigger": "A form is submitted — on your website, on your booking page, or anywhere else the form is placed.",
+        "where": "GoHighLevel → Automation → Workflows → Instant Lead Response",
+        "messages": [
+          {
+            "step": "Step 1 · text, within a minute",
+            "channel": "Text",
+            "timing": "Within about a minute of the form arriving, day or night",
+            "body": "Hi [First name], it is Harbourline. We have your message about [Job type] and somebody will call you back. If it cannot wait, reply URGENT and it goes to the on-call electrician.",
+            "mergeFields": [
+              "First name",
+              "Job type"
+            ]
+          },
+          {
+            "step": "Step 2 · email, immediately after",
+            "channel": "Email",
+            "timing": "Sent in the same minute as the text above",
+            "subject": "We have your message — Harbourline",
+            "body": "Hi [First name],\n\nThanks for getting in touch. We have your message about [Job type] and it is in the queue with a real person's name against it.\n\nDuring office hours somebody will call you back within the hour. Outside them you will hear from us first thing.\n\nIf you would rather just hold a slot, you can pick one here: [booking link]\n\n— The team at Harbourline",
+            "mergeFields": [
+              "First name",
+              "Job type"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "missed-call-text-back",
+        "workflowName": "Missed Call Text-Back",
+        "trigger": "A call to your business number rings out unanswered, or lands in voicemail.",
+        "where": "GoHighLevel → Automation → Workflows → Missed Call Text-Back",
+        "messages": [
+          {
+            "step": "Step 1 · text, within seconds of the missed call",
+            "channel": "Text",
+            "timing": "Fires the moment a call is not answered",
+            "body": "Sorry we missed you — this is Harbourline. Tell us what is happening and we will call you straight back. If it is urgent, reply URGENT and it pages the on-call electrician.",
+            "mergeFields": []
+          }
+        ]
+      },
+      {
+        "workflowId": "after-hours-auto-reply",
+        "workflowName": "After-Hours Auto-Reply",
+        "trigger": "A call or a message arrives outside your opening hours — an evening, a weekend, a holiday.",
+        "where": "GoHighLevel → Automation → Workflows → After-Hours Auto-Reply",
+        "messages": [
+          {
+            "step": "Step 1 · text, immediately",
+            "channel": "Text",
+            "timing": "Any enquiry between 4:30pm and 8am, or at a weekend",
+            "body": "Thanks — this is Harbourline. The office is shut but this is monitored. You will get a real reply first thing. If it cannot wait until then, reply URGENT.",
+            "mergeFields": []
+          },
+          {
+            "step": "Step 2 · email, immediately",
+            "channel": "Email",
+            "timing": "Sent alongside the text above",
+            "subject": "We have it — Harbourline",
+            "body": "Hi [First name],\n\nYour message came in outside office hours and we have it. Somebody will be back to you first thing.\n\nIf you would rather hold a slot now, the calendar is open: [booking link]\n\n— The team at Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "appointment-cancelled-stop-reminders",
+        "workflowName": "Appointment Cancelled — Stop Reminders",
+        "trigger": "An appointment is cancelled or rescheduled, by the customer or by you.",
+        "where": "GoHighLevel → Automation → Workflows → Appointment Cancelled — Stop Reminders",
+        "messages": [
+          {
+            "step": "Step 1 · text, on cancellation",
+            "channel": "Text",
+            "timing": "The moment an appointment is cancelled",
+            "body": "That is cancelled and no more reminders will come through. Whenever it suits, you can pick a new slot here: [booking link] — Harbourline",
+            "mergeFields": []
+          }
+        ]
+      },
+      {
+        "workflowId": "owner-hot-lead-notification",
+        "workflowName": "Owner Hot-Lead Notification",
+        "trigger": "A new enquiry scores as high intent — the job type, the urgency or the size crosses the line you set with us.",
+        "where": "GoHighLevel → Automation → Workflows → Owner Hot-Lead Notification — this one goes to the owner's phone, never to the customer",
+        "messages": [
+          {
+            "step": "Step 1 · internal text to the owner",
+            "channel": "Text",
+            "timing": "Within seconds of a priority-scored enquiry arriving",
+            "body": "Priority lead: [First name], [Job type], [Postal area]. Scored [Score]. Nobody has called them yet. Full record in the pipeline.",
+            "mergeFields": [
+              "First name",
+              "Job type",
+              "Postal area",
+              "Score"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "social-dm-capture",
+        "workflowName": "Social DM Capture",
+        "trigger": "Somebody sends a message to your Facebook page or your Instagram account.",
+        "where": "GoHighLevel → Automation → Workflows → Social DM Capture — the first reply, sent inside Facebook or Instagram",
+        "messages": [
+          {
+            "step": "Step 1 · reply in the social inbox",
+            "channel": "Direct message",
+            "timing": "Within a minute of the message arriving",
+            "body": "Hi [First name] — this is Harbourline. Happy to help. Can I take a mobile number so we can carry this on by text and get somebody out to you? If it is urgent, say so and it goes to the on-call electrician.",
+            "mergeFields": [
+              "First name"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "text-to-pay",
+        "workflowName": "Text-to-Pay",
+        "trigger": "A lead is marked as agreed, or a booking needs a deposit before the slot is held.",
+        "where": "GoHighLevel → Automation → Workflows → Text-to-Pay",
+        "messages": [
+          {
+            "step": "Step 1 · text with the deposit link",
+            "channel": "Text",
+            "timing": "Once the slot is agreed and the job is written up",
+            "body": "Hi [First name], that is [Date] between [Window]. The deposit link is here: [payment link]. Once it is paid the slot is held and you will get the confirmation. — Harbourline",
+            "mergeFields": [
+              "First name",
+              "Date",
+              "Window"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "database-reactivation",
+        "workflowName": "Database Reactivation",
+        "trigger": "You hand the list over once and we send it in batches, then it runs again on whatever rhythm you agree — usually seasonal.",
+        "where": "GoHighLevel → Automation → Workflows → Database Reactivation",
+        "messages": [
+          {
+            "step": "Step 1 · email, seasonal batch",
+            "channel": "Email",
+            "timing": "Sent ahead of storm season",
+            "subject": "Worth a look before storm season",
+            "body": "Hi [First name],\n\nIt has been a while since we were out. Ahead of storm season it is worth a look at the electrical panel before it becomes an emergency call.\n\nIf you want one booked in, the calendar is here: [booking link]\n\n— The team at Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          },
+          {
+            "step": "Step 2 · text, four days later",
+            "channel": "Text",
+            "timing": "Four days after the email, only to those who did not book",
+            "body": "Hi [First name], it is Harbourline. Still worth getting the electrical panel looked at before storm season? Slots are here: [booking link]",
+            "mergeFields": [
+              "First name"
+            ]
+          },
+          {
+            "step": "Step 3 · email, ten days later",
+            "channel": "Email",
+            "timing": "Ten days after step 1, and the last message in the run",
+            "subject": "Last one from us this season",
+            "body": "Hi [First name],\n\nLast message from us on this. If you would rather we checked back next year instead, reply LATER and we will leave you be until then.\n\n— The team at Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          }
+        ]
+      },
+      {
+        "workflowId": "review-response",
+        "workflowName": "Review Response",
+        "trigger": "A new Google review is posted about your business.",
+        "where": "GoHighLevel → Reputation → Reviews → the reply posted publicly under each new review",
+        "messages": [
+          {
+            "step": "Reply · a five-star review",
+            "channel": "Public review reply",
+            "timing": "Drafted the same day the review lands, sent once you approve it",
+            "body": "Thanks [First name] — glad we got that sorted for you. If anything else comes up, you know where we are. — Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          },
+          {
+            "step": "Reply · a middling review",
+            "channel": "Public review reply",
+            "timing": "Drafted the same day, sent once you approve it",
+            "body": "Thanks for taking the time, [First name]. Sounds like the work was fine but getting hold of us was not. That is the part we are fixing. — Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          },
+          {
+            "step": "Reply · a negative review",
+            "channel": "Public review reply",
+            "timing": "Drafted the same day, sent once you approve it",
+            "body": "[First name], that is not the standard we hold ourselves to and we would like to put it right. Call the office on 902-555-0117 and ask for whoever is on today. — Harbourline",
+            "mergeFields": [
+              "First name"
+            ]
+          }
+        ]
+      }
+    ],
+    "coverage": [
+      {
+        "workflowId": "instant-lead-response",
+        "workflowName": "Instant Lead Response",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Instant Lead Response\""
+      },
+      {
+        "workflowId": "missed-call-text-back",
+        "workflowName": "Missed Call Text-Back",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Missed Call Text-Back\""
+      },
+      {
+        "workflowId": "after-hours-auto-reply",
+        "workflowName": "After-Hours Auto-Reply",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"After-Hours Auto-Reply\""
+      },
+      {
+        "workflowId": "booking-confirmation-reminders",
+        "workflowName": "Booking Confirmation + Reminders",
+        "inThisBuild": true,
+        "copyLivesIn": "Booking & reminder assets — the confirmation email, the 24-hour reminder and the day-of text"
+      },
+      {
+        "workflowId": "appointment-cancelled-stop-reminders",
+        "workflowName": "Appointment Cancelled — Stop Reminders",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Appointment Cancelled — Stop Reminders\""
+      },
+      {
+        "workflowId": "no-show-recovery",
+        "workflowName": "No-Show Recovery",
+        "inThisBuild": true,
+        "copyLivesIn": "Booking & reminder assets — the no-show recovery email and its two follow-up texts"
+      },
+      {
+        "workflowId": "review-request",
+        "workflowName": "Review Request",
+        "inThisBuild": true,
+        "copyLivesIn": "Thank-you & post-job assets — the single review request that fires when a job is marked complete"
+      },
+      {
+        "workflowId": "lead-nurture-no-booking",
+        "workflowName": "Lead Nurture — No Booking",
+        "inThisBuild": true,
+        "copyLivesIn": "The 60-day nurture sequence — seven emails and six texts, numbered onto this workflow's steps"
+      },
+      {
+        "workflowId": "owner-hot-lead-notification",
+        "workflowName": "Owner Hot-Lead Notification",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Owner Hot-Lead Notification\""
+      },
+      {
+        "workflowId": "webchat-capture",
+        "workflowName": "Webchat Capture",
+        "inThisBuild": true,
+        "copyLivesIn": "Conversion surfaces — the webchat launcher, greeting, details ask and away-message"
+      },
+      {
+        "workflowId": "social-dm-capture",
+        "workflowName": "Social DM Capture",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Social DM Capture\""
+      },
+      {
+        "workflowId": "text-to-pay",
+        "workflowName": "Text-to-Pay",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Text-to-Pay\""
+      },
+      {
+        "workflowId": "database-reactivation",
+        "workflowName": "Database Reactivation",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Database Reactivation\""
+      },
+      {
+        "workflowId": "review-response",
+        "workflowName": "Review Response",
+        "inThisBuild": true,
+        "copyLivesIn": "Written in this pack, under \"Review Response\""
+      }
+    ]
+  }
+}

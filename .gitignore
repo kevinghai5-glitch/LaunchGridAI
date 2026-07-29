@@ -35,8 +35,18 @@ yarn-error.log*
 next-env.d.ts
 
 
-# Local sample deliverable output (gen:check)
+# Local sample deliverable output (gen:check). STAYS IGNORED: every pack in here
+# is generated from a REAL prospect's scraped site, reviews and phone number, and
+# none of that belongs in git. The committed stand-in is _fixtures/ below.
 _samples/
+
+# _fixtures/ is deliberately NOT ignored. golden-pack.json is a synthetic
+# business (invented name, .example domain, invented reviews) built by
+# `npm run sample:golden`, and it is what verify:all validates — so the
+# verification suite runs in a fresh clone instead of only on one laptop.
+# The four rendered HTML deliverables are derived from that JSON on demand
+# (`npm run samples:render`), so they are ignored rather than committed.
+_fixtures/*.html
 
 # Local Claude Code worktree checkouts (embedded repos — not project files)
 .claude/worktrees/

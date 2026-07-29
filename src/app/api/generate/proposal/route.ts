@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { generateProposalSchema } from "@/lib/validations";
 import { buildProposalDefaults } from "@/lib/proposal-defaults";
 import { runColdAuditPipeline } from "@/lib/cold-audit-pipeline";
+import { persistColdAudit } from "@/lib/cold-audit-store";
 import type { AssetPack, ColdAuditReport } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -65,13 +66,13 @@ export async function POST(req: NextRequest) {
         const fresh = await runColdAuditPipeline(business);
         const rebuilt = buildProposalDefaults(business, { audit: fresh });
         if (rebuilt.roi.recovered) {
-          await prisma.generatedSystem.create({
-            data: {
-              businessId: business.id,
-              userId: session.user.id,
-              type: "COLD_AUDIT",
-              content: fresh as unknown as object,
-            },
+          // Goes through persistColdAudit, not a bare create(): this path used to
+          // mint a fresh publicId and leave the previous audit row live, which is
+          // exactly the stale-share-link bug F3 removed from /api/generate/cold-audit.
+          await persistColdAudit({
+            businessId: business.id,
+            userId: session.user.id,
+            report: fresh,
           });
           proposalData = rebuilt;
         }

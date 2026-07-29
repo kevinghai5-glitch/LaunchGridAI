@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Zap } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 import type { ProposalContent } from "@/types";
 
 // The client-facing conversion proposal. Self-contained light/consulting design
@@ -78,13 +79,59 @@ function annotate(text: string, used: Set<string>): React.ReactNode {
   return nodes;
 }
 
-function fmtMoney(n: number): string {
-  return `$${n.toLocaleString("en-US")}`;
+// ── MONEY: the CAD marker goes BEFORE the figure, everywhere ──────────────────
+// The audit this prospect read before opening this page prints "CAD $1,290"
+// (leak-narrative's cad()). A proposal printing "$6,500 CAD" beside it reads as
+// two documents from two different companies — and this is the one page where a
+// prospect puts the two side by side and decides whether to pay. So there is one
+// formatter, formatCurrency() in lib/utils, and nothing in this file builds a
+// dollar string by hand.
+//
+// The prose and the pre-formatted cost lines arrive already built (the proposal
+// generator runs them through the same formatter). But that content is SAVED on
+// the proposal row and is editable afterwards, so a proposal written before the
+// convention was fixed — or one hand-edited since — can still reach this page
+// carrying a bare "$2,400" or a trailing "$18,500 CAD". This component is the
+// last thing between that text and the buyer, so the marker is enforced here
+// rather than assumed upstream.
+//
+// What cadMarker does, precisely: puts "CAD " in front of any "$1,234" that
+// doesn't already have it, leaves one that does alone (so running it twice
+// changes nothing), drops a now-redundant trailing "CAD", and never touches the
+// digits — it cannot change, re-round, or invent a number.
+const MONEY_TOKEN = /(CAD )?([A-Za-z]?)\$(\d[\d,]*(?:\.\d+)?)(\s*CAD\b)?/g;
+
+function cadMarker(text: string): string {
+  if (!text) return text;
+  return text.replace(
+    MONEY_TOKEN,
+    // `adjacent` is a letter sitting flush against the "$" — as in "US$84". That
+    // is a different currency someone wrote on purpose, so leave it as found.
+    (whole: string, _lead: string, adjacent: string, figure: string) =>
+      adjacent ? whole : `CAD $${figure}`
+  );
+}
+
+// The two headline prices. formatCurrency() produces the whole string ("CAD
+// $6,500"); we split ITS OWN output so the marker can sit small and muted beside
+// the big figure. We never reassemble the money string by hand, so the type size
+// is a styling choice and can't drift into a different money convention.
+function PriceFigure({ amount }: { amount: number }) {
+  const s = formatCurrency(amount);
+  const i = s.indexOf("$");
+  if (i <= 0) return <>{s}</>; // formatter changed shape — print it verbatim
+  return (
+    <>
+      <span className="lgp-cad">{s.slice(0, i).trim()}</span> {s.slice(i)}
+    </>
+  );
 }
 
 export function PublicProposal({ business, content, mobile }: PublicProposalProps) {
   const used = new Set<string>(); // shared across the whole document for ⓘ markers
-  const a = (t: string) => annotate(t, used);
+  // Every piece of prose in the document goes through the money guard on its way
+  // to the page, so a saved or hand-edited "$2,400" can't reach the buyer bare.
+  const a = (t: string) => annotate(cadMarker(t), used);
 
   const date = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -120,7 +167,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
       {/* 1 — Header */}
       <header className="lgp-header">
         <div className="lgp-eyebrow">Client Conversion Proposal</div>
-        <h1 className="lgp-title">{content.title}</h1>
+        <h1 className="lgp-title">{cadMarker(content.title)}</h1>
         <div className="lgp-meta">
           <div className="lgp-mi">
             <span className="lgp-k">Prepared for</span>
@@ -149,14 +196,16 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
         {content.problem?.basis && (
           <div className="lgp-basis">
             <span className="lgp-ico">&#9432;</span>
-            <span>{content.problem.basis}</span>
+            {/* Carries the audit's headline dollar line — the figure the whole
+                document is anchored to, so it goes through the guard too. */}
+            <span>{cadMarker(content.problem.basis)}</span>
           </div>
         )}
         {(content.problem?.leaks ?? []).map((l, i) => (
           <div className="lgp-leak" key={i}>
             <div className="lgp-leak-head">
               <span className="lgp-leak-t">{a(l.title)}</span>
-              {l.monthlyCost && <span className="lgp-cost">{l.monthlyCost}</span>}
+              {l.monthlyCost && <span className="lgp-cost">{cadMarker(l.monthlyCost)}</span>}
             </div>
             <p>{a(l.detail)}</p>
           </div>
@@ -188,7 +237,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
           <div className="lgp-price">
             <div className="lgp-price-k">One-time setup</div>
             <div className="lgp-price-v">
-              {fmtMoney(content.setupFee)} <span className="lgp-cad">CAD</span>
+              <PriceFigure amount={content.setupFee} />
             </div>
             <p className="lgp-price-d">
               Done-for-you build of every component in your scope — we design, build,
@@ -198,7 +247,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
           <div className="lgp-price">
             <div className="lgp-price-k">Monthly retainer</div>
             <div className="lgp-price-v">
-              {fmtMoney(content.monthlyPrice)} <span className="lgp-cad">CAD / mo</span>
+              <PriceFigure amount={content.monthlyPrice} /> <span className="lgp-cad">/ mo</span>
             </div>
             <p className="lgp-price-d">
               {a(
@@ -216,7 +265,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
           {content.roi.recovered && (
             <div className="lgp-callout">
               <div className="lgp-callout-k">Estimated conversions recovered</div>
-              <div className="lgp-callout-v">{content.roi.recovered}</div>
+              <div className="lgp-callout-v">{cadMarker(content.roi.recovered)}</div>
             </div>
           )}
           {content.roi.points?.length > 0 && (
@@ -261,7 +310,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
               <div className="lgp-phase" key={i}>
                 <div className="lgp-phase-n">{i + 1}</div>
                 <div className="lgp-phase-body">
-                  <div className="lgp-phase-l">{p.label}</div>
+                  <div className="lgp-phase-l">{cadMarker(p.label)}</div>
                   <p>{a(p.detail)}</p>
                 </div>
               </div>
@@ -276,12 +325,12 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
           {content.proof.testimonials.length > 0 ? (
             content.proof.testimonials.map((t, i) => (
               <blockquote className="lgp-quote" key={i}>
-                <p>&ldquo;{t.quote}&rdquo;</p>
+                <p>&ldquo;{cadMarker(t.quote)}&rdquo;</p>
                 <cite>— {t.attribution}</cite>
               </blockquote>
             ))
           ) : (
-            <p className="lgp-muted">{content.proof.note}</p>
+            <p className="lgp-muted">{cadMarker(content.proof.note)}</p>
           )}
         </Section>
       )}
@@ -296,7 +345,7 @@ export function PublicProposal({ business, content, mobile }: PublicProposalProp
         <Section n="09" title="Common questions">
           {content.faq.map((f, i) => (
             <div className="lgp-faq" key={i}>
-              <div className="lgp-faq-q">{f.q}</div>
+              <div className="lgp-faq-q">{cadMarker(f.q)}</div>
               <p>{a(f.a)}</p>
             </div>
           ))}

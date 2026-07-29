@@ -612,6 +612,59 @@ export function shell(
   /* Kickoff-verification line on BENCHMARK leaks (Defect 3). */
   .kickoff-line { margin: 8px 0 0; font-style: italic; color: var(--ink-muted); }
 
+  /* ── Evidence-grade chips (Phase 1 · what this finding rests on) ───────── */
+  /* The grade used to be visible only inside the closed Evidence tab. It now
+     rides on the card header, so a reader skimming knows whether we measured a
+     thing, were told it, or are quoting a pattern — before they read the claim.
+     Colour follows the same three semantics as the rest of the report: measured
+     is solid (good), told is the accent (their word), pattern is muted. */
+  .ev-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-muted); white-space: nowrap; }
+  .ev-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .ev-chip.ev-observed { color: var(--good); }
+  .ev-chip.ev-disclosed { color: var(--accent); background: var(--accent-tint); }
+  .ev-chip.ev-inferred { color: var(--ink-muted); }
+  .ev-chip.is-clean { color: var(--good); background: var(--surface-2); text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 11px; }
+  .score-body .name .ev-chip { margin-left: 10px; vertical-align: middle; }
+  /* A clean axis is a PASS, and it reads like one rather than like a ninth
+     problem in a grid of problems. */
+  .score-row.is-clean { border-color: var(--good); }
+
+  /* ── Advisory band (work we are NOT delivering) ─────────────────────────── */
+  /* Everything under it is a recommendation about a website we neither build nor
+     host. Rendered by the composer, never by the model, so the scope promise
+     cannot go missing on a generation that forgot to write it. */
+  .advisory-band { display: flex; gap: 14px; align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 0 0 20px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+  .advisory-band .ab-tag { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--warn); border: 1px solid var(--warn); border-radius: 99px; padding: 3px 10px; margin-top: 2px; }
+
+  /* ── Reconciliation + cap notes on the headline total ───────────────────── */
+  /* Both say the itemized figures below will NOT add up to the number above, so
+     they sit directly under the amount rather than under the working. */
+  .dc-note { margin-top: 12px; padding: 11px 14px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+  .dc-note .dcn-k { display: block; font-family: 'Inter', sans-serif; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 4px; }
+  .dc-note.is-capped { border-left: 3px solid var(--warn); }
+  .dc-note.is-capped .dcn-k { color: var(--warn); }
+  .dc-note.is-checked { border-left: 3px solid var(--good); }
+  .dc-note.is-checked .dcn-k { color: var(--good); }
+  .dollar-callout.dc-total { border-left-width: 4px; }
+  .dollar-callout.dc-total .dc-formula { margin-top: 12px; }
+
+  /* ── Asset destinations (D3: where each piece of copy actually goes) ────── */
+  .dest { margin: 6px 0 10px; padding: 8px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+  .dest .dest-k { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin-bottom: 2px; }
+
+  /* ── Engagement spine (D4: the two windows and what each one costs) ─────── */
+  .spine { display: grid; gap: 0; margin: 6px 0 4px; }
+  .spine-band { display: grid; grid-template-columns: 108px minmax(0, 1fr) 176px; gap: 22px; align-items: start; border: 1px solid var(--border); border-radius: 6px; padding: 22px 24px; background: var(--surface); }
+  .spine-band.is-run { border-color: var(--accent); background: var(--accent-tint); }
+  .spine-band .sb-when { font-family: var(--heading); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); padding-top: 4px; }
+  .spine-band .sb-title { font-family: var(--heading); font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+  .spine-band p { font-size: 13.5px; margin: 0; }
+  .spine-band .sb-price { text-align: right; border-left: 1px solid var(--border); padding-left: 20px; }
+  .spine-band .sb-amount { font-family: var(--heading); font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); line-height: 1.1; }
+  .spine-band .sb-note { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-top: 4px; }
+  .spine-golive { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 14px 24px; font-size: 13.5px; color: var(--ink); border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--surface-2); }
+  .spine-golive .sg-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--good); margin-top: 6px; }
+
   /* ── Owner tags (done-for-you framing) ─────────────────────────────────── */
   .owner-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
   .owner-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -669,6 +722,11 @@ export function shell(
     .cmd-btn .cb-btxt { display: none; }
     .cmd-btn { padding: 0 9px; }
     .grid2, .ba, .shots-row, .exec-grid, .tiers, .phase-cols, .gl-item { grid-template-columns: 1fr; }
+    /* The spine stacks: the price stops being a right-hand column and becomes a
+       line under the description, still attached to its own window. */
+    .spine-band { grid-template-columns: 1fr; gap: 12px; }
+    .spine-band .sb-price { text-align: left; border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 12px; }
+    .advisory-band { flex-direction: column; gap: 10px; }
     .gl-item { gap: 2px; }
     .metric-grid { grid-template-columns: repeat(2, 1fr); }
     .score-kv { grid-template-columns: 1fr; gap: 8px; }
@@ -684,7 +742,12 @@ export function shell(
     html, body { background: #fff; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .rail, .cmdbar { display: none; }
     .layout, .layout.solo { display: block; padding: 0; max-width: none; }
-    .sec, .card, .leak, .phase-card, .score-row, .fn-card, .exec-card, .tier, .dollar-callout { break-inside: avoid; }
+    .sec, .card, .leak, .phase-card, .score-row, .fn-card, .exec-card, .tier, .dollar-callout,
+    .spine-band, .advisory-band, .dc-note { break-inside: avoid; }
+    /* Colour-carrying markers keep their colour on paper: the advisory band, the
+       cap note and the evidence chips are all things a printed copy must not
+       silently lose. */
+    .advisory-band, .dc-note, .ev-chip, .spine-band, .dest { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .leak-pane[hidden] { display: block; }
     .leak-tabs { display: none; }
     .leak.is-hidden { display: grid; }
@@ -900,9 +963,18 @@ export function renderFramingClose(framing: DeliverableFraming | undefined): str
   return `${guide}${impact}`;
 }
 
-export function emailBlock(label: string, e: { subject: string; body: string }): string {
+/** One email asset. `whereHtml` is the caller's already-rendered "Where this goes"
+ *  line — an asset a client is meant to act on has to say which automation sends
+ *  it, and that belongs directly under the label, above the subject. Optional so
+ *  callers with nothing useful to say about the destination stay unchanged rather
+ *  than being forced to invent one. */
+export function emailBlock(
+  label: string,
+  e: { subject: string; body: string },
+  whereHtml = ""
+): string {
   if (!e?.subject && !e?.body) return "";
-  return `<div class="email">${label ? `<div class="label">${esc(label)}</div>` : ""}<div class="subj">${esc(
-    e.subject
-  )}</div>${para(e.body)}</div>`;
+  return `<div class="email">${
+    label ? `<div class="label">${esc(label)}</div>` : ""
+  }${whereHtml}<div class="subj">${esc(e.subject)}</div>${para(e.body)}</div>`;
 }

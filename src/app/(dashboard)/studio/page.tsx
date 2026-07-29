@@ -10,7 +10,27 @@ import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
 import { ColdAuditView } from "@/components/businesses/ColdAuditView";
-import type { AssetPack, ColdAuditReport, SavedBusiness, DeliverableId } from "@/types";
+import { IntakeGaps } from "@/components/businesses/IntakeGaps";
+import {
+  PackGateDialog,
+  parsePackGateFailure,
+  type PackGateBoundary,
+  type PackGateFailure,
+  type PackOverridePayload,
+} from "@/components/businesses/PackOverrideDialog";
+import {
+  SETUP_FEE_CAD,
+  MONTHLY_RETAINER_CAD,
+  FIRST_YEAR_VALUE_CAD,
+} from "@/lib/constants";
+import { formatCurrency } from "@/lib/utils";
+import type {
+  AssetPack,
+  ColdAuditReport,
+  PackGovernance,
+  SavedBusiness,
+  DeliverableId,
+} from "@/types";
 
 type StudioView = "pack" | "audit";
 
@@ -94,7 +114,26 @@ export default function StudioPage() {
   const [view, setView] = useState<StudioView>(viewParam === "audit" ? "audit" : "pack");
   const [saving, setSaving] = useState(false);
   const [savedPack, setSavedPack] = useState(false);
+  // A blocked governance gate, held open until the operator deals with it. Both
+  // gates that can land here return a multi-check report, and a toast can only
+  // ever show one truncated line of one of them — so it is rendered in full.
+  // Save may be overridden; generation may not (a pack that fails at generation
+  // gets regenerated, never forced), which is what `boundary` selects.
+  const [gate, setGate] = useState<{
+    boundary: PackGateBoundary;
+    failure: PackGateFailure;
+  } | null>(null);
+  // The governance block the save route hands back when a save was forced. The
+  // pack object below was built before the server stamped it, so this is what
+  // lets the pack view show its "shipped over a failing check" marker straight
+  // away instead of only after the pack is reloaded from the database.
+  const [saveOverride, setSaveOverride] = useState<PackGovernance | null>(null);
   const [coldAudit, setColdAudit] = useState<ColdAuditReport | null>(null);
+  // Public id of the saved audit on screen — powers "Copy preview link". Set for
+  // an audit generated in this session AND for one restored from
+  // /api/cold-audit/latest, which returns publicId. Null only when there is no
+  // saved audit, so the button hides rather than copying a URL we can't vouch for.
+  const [coldPublicId, setColdPublicId] = useState<string | null>(null);
   // Previously-saved generations, loaded but NOT auto-shown — Studio opens fresh.
   // Surfaced behind an explicit "View previous generation" button instead.
   const [archivedPack, setArchivedPack] = useState<AssetPack | null>(null);
@@ -106,6 +145,9 @@ export default function StudioPage() {
   // regenerate banner (parallels restoredAt for the asset pack).
   const [coldRestoredAt, setColdRestoredAt] = useState<string | null>(null);
   const [coldProgress, setColdProgress] = useState<GenProgress | null>(null);
+  // Refetch token for the "still guessed" panel. Bumped after a run that can have
+  // changed the stored research snapshot the panel reads.
+  const [gapsKey, setGapsKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const coldAbortRef = useRef<AbortController | null>(null);
   const coldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -142,7 +184,12 @@ export default function StudioPage() {
     setDone(false);
     setRestoredAt(null);
     setSavedPack(false);
+    // A different business's forced-save marker must not follow the operator
+    // onto this one. A pack restored from the Library carries its own record in
+    // `pack.governance`, which is where it belongs.
+    setSaveOverride(null);
     setColdAudit(null);
+    setColdPublicId(null);
     setColdRestoredAt(null);
     setArchivedPack(null);
     setArchivedAt(null);
@@ -194,7 +241,12 @@ export default function StudioPage() {
       cache: "no-store",
     })
       .then((r) => r.json())
-      .then((data: { audit: ColdAuditReport | null; generatedAt?: string }) => {
+      .then(
+        (data: {
+          audit: ColdAuditReport | null;
+          generatedAt?: string;
+          publicId?: string;
+        }) => {
         if (cancelled) return;
         if (data.audit) {
           setArchivedAudit(data.audit);
@@ -204,6 +256,9 @@ export default function StudioPage() {
           const openFromLibrary = viewParam === "audit" && selected.id === businessId;
           if (openFromLibrary || isSameDayAsNow(data.generatedAt)) {
             setColdAudit(data.audit);
+            // The share id travels with the restored audit, so "Copy preview link"
+            // works on a page refresh — not only right after a generation.
+            setColdPublicId(data.publicId ?? null);
             setColdRestoredAt(
               openFromLibrary && !isSameDayAsNow(data.generatedAt)
                 ? data.generatedAt ?? null
@@ -211,7 +266,8 @@ export default function StudioPage() {
             );
           }
         }
-      })
+        }
+      )
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -236,6 +292,7 @@ export default function StudioPage() {
     setPack(null);
     setDone(false);
     setRestoredAt(null);
+    setSaveOverride(null);
     setGenProgress(null);
   };
 
@@ -243,29 +300,60 @@ export default function StudioPage() {
   const viewArchivedPack = () => {
     if (!archivedPack) return;
     setPack(archivedPack);
+    // Different pack on screen — the archived one carries its own record inside
+    // `governance` if it has one.
+    setSaveOverride(null);
     setRestoredAt(isSameDayAsNow(archivedAt) ? null : archivedAt);
     setDone(true);
     setSavedPack(true); // archived packs come from the Library — already saved
   };
 
-  const saveToLibrary = async () => {
+  const saveToLibrary = async (override?: PackOverridePayload) => {
     if (!selected || !pack || saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/assets/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: selected.id, assetPack: pack }),
+        body: JSON.stringify({
+          businessId: selected.id,
+          assetPack: pack,
+          ...(override ? { override } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // 422 is the governance gate — nothing was written and the body carries
+        // every failing check with its stable id. Those ids are what an override
+        // has to echo back, so the dialog is both the report and the only place
+        // the override can legitimately start.
+        const failure = res.status === 422 ? parsePackGateFailure(data) : null;
+        if (failure) {
+          setGate({ boundary: "save", failure });
+          return;
+        }
+        setGate(null);
         toast.error(data.error || "Failed to save");
         return;
       }
+      setGate(null);
       setSavedPack(true);
       setArchivedPack(pack);
       setArchivedAt(data.savedAt ?? new Date().toISOString());
-      toast.success("Saved to library");
+      // The route echoes the governance block back on a forced save, so this
+      // never reports as a plain success when it was not one.
+      setSaveOverride((data.override as PackGovernance | undefined) ?? null);
+      if (data.override) {
+        const n = Array.isArray(data.override.checks) ? data.override.checks.length : 0;
+        toast.warning("Saved with an override on the record", {
+          description: `This pack entered the Library over ${n} failing check${
+            n === 1 ? "" : "s"
+          }. Your reason and those checks are stored on the row — internal only.`,
+          duration: 12000,
+        });
+      } else {
+        toast.success("Saved to library");
+      }
     } catch {
       toast.error("Failed to save");
     } finally {
@@ -284,6 +372,7 @@ export default function StudioPage() {
     coldAbortRef.current?.abort();
     setColdRunning(false);
     setColdAudit(null);
+    setColdPublicId(null);
     setColdRestoredAt(null);
     setColdProgress(null);
   };
@@ -300,6 +389,7 @@ export default function StudioPage() {
     setDone(false);
     setPack(null);
     setSavedPack(false);
+    setSaveOverride(null);
     // Real progress streamed from the server. Starts at 0/10 ("gathering data").
     setGenProgress({
       completed: 0,
@@ -331,6 +421,7 @@ export default function StudioPage() {
       let buffer = "";
       let fresh: AssetPack | null = null;
       let streamError: string | null = null;
+      let streamFailure: PackGateFailure | null = null;
 
       for (;;) {
         const { done: streamDone, value } = await reader.read();
@@ -362,12 +453,22 @@ export default function StudioPage() {
             });
           } else if (msg.type === "error") {
             streamError = msg.error ?? "Failed to generate assets";
+            // A `reason:"invalid"` frame carries the full list of laws that
+            // broke. There is NO override at this boundary — a pack that fails
+            // at generation gets regenerated, not forced — but the operator
+            // still has to be able to read why, which one toast line cannot do.
+            streamFailure = parsePackGateFailure(msg);
           } else if (msg.type === "done") {
             fresh = msg.assetPack ?? null;
           }
         }
       }
 
+      if (streamFailure) {
+        setGate({ boundary: "generate", failure: streamFailure });
+        setGenProgress(null);
+        return;
+      }
       if (streamError || !fresh) {
         toast.error(streamError || "Failed to generate assets");
         setGenProgress(null);
@@ -383,6 +484,11 @@ export default function StudioPage() {
       setArchivedPack(fresh);
       setArchivedAt(now);
       setDone(true);
+      // A first generation is also what CAPTURES the research snapshot, and a
+      // "refresh research" run replaces it. Either way the gaps panel is now
+      // reading a different picture than the one it loaded, so re-read it — the
+      // alternative is a panel that says "nothing scanned yet" next to a pack.
+      setGapsKey((n) => n + 1);
       toast.success("Asset pack generated");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -403,6 +509,7 @@ export default function StudioPage() {
     coldAbortRef.current = controller;
     setColdRunning(true);
     setColdAudit(null);
+    setColdPublicId(null);
     setColdRestoredAt(null);
 
     // Simulated progress — the endpoint is a single POST, so we walk through the
@@ -440,6 +547,7 @@ export default function StudioPage() {
       stopTimer();
       setColdProgress({ completed: total, total, label: "Done" });
       setColdAudit(data.coldAudit as ColdAuditReport);
+      setColdPublicId((data.system?.publicId as string | undefined) ?? null);
       const now = new Date().toISOString();
       setArchivedAudit(data.coldAudit as ColdAuditReport);
       setArchivedAuditAt(now);
@@ -483,9 +591,16 @@ export default function StudioPage() {
             >
               {selected ? selected.name : "Save a business to begin"}
             </h1>
+            {/* This line used to read "You deliver the strategy; the client's team
+                implements it." That was the PREVIOUS business model and it is the
+                opposite of what is sold now: ReclaimedHQ is done-for-you. We build
+                the system inside a GoHighLevel sub-account we own and operate, and
+                we run it. Nothing is handed to the client to implement — do not
+                reintroduce a sentence that says otherwise. */}
             <p style={{ margin: "8px 0 0", color: "var(--text-3)", fontSize: 13 }}>
-              Builds 4 consulting-grade deliverables — diagnosis, infrastructure, assets, and a
-              90-day plan. You deliver the strategy; the client&apos;s team implements it.
+              Builds the four consultant-grade deliverables — the diagnosis, what gets built,
+              the copy that goes live, and the schedule. Done-for-you: we build the system
+              inside a GoHighLevel sub-account we own and operate, then run it.
             </p>
           </div>
           {done && selected && !isAudit && pack && (
@@ -493,7 +608,10 @@ export default function StudioPage() {
               <LgButton
                 variant={savedPack ? "ghost" : "primary"}
                 icon={savedPack ? "check" : "bookmark"}
-                onClick={saveToLibrary}
+                // Wrapped, not passed by reference: saveToLibrary's first
+                // argument is the override payload, and a bare handler would
+                // hand it the click event.
+                onClick={() => saveToLibrary()}
                 disabled={saving || savedPack}
               >
                 {saving ? "Saving…" : savedPack ? "Saved to library" : "Save to library"}
@@ -541,12 +659,20 @@ export default function StudioPage() {
                 <Eyebrow>What you get</Eyebrow>
               </div>
               <div className="flex flex-col" style={{ padding: 16, gap: 10 }}>
+                {/* Titles are the canonical DELIVERABLES titles from
+                    src/lib/exporters/deliverables.ts. Repeated as literals (not
+                    imported) so this client page doesn't pull the whole HTML
+                    renderer into the bundle — same trade the Library page makes.
+                    If a title changes there, change it here. */}
                 {[
-                  "Growth Leak Intelligence Report — website audit, visual competitor comparison, landing page conversion intelligence, technical UX, growth leak scorecard, revenue leak analysis",
+                  "Growth Leak Intelligence Report — competitor comparison, technical UX read, growth leak scorecard, revenue leak analysis. Anything about their own site is advisory only",
                   "Client Acquisition Infrastructure Blueprint — funnel, qualification, follow-up & CRM",
-                  "Conversion Asset Pack — landing page copy, CTA options, email, SMS, booking, review & thank-you assets",
-                  "90-Day Growth Execution Roadmap — phased, owned plan",
-                  "Strategy & architecture you hand off — client's team executes",
+                  "Conversion Asset Pack — GoHighLevel booking page copy, lead-capture form, LeadGate front-end and webchat copy, email, SMS, review & thank-you assets",
+                  "Implementation & Optimization Timeline — what we deploy, then the ongoing retainer cadence",
+                  // The count comes from the real catalogue in
+                  // src/lib/workflow-catalogue.ts, which asserts WORKFLOWS.length
+                  // === 14 at load. If that ever changes, change this number too.
+                  "Done-for-you: we build the 14 GoHighLevel workflows, the CRM pipeline, and their booking page inside a sub-account we own and operate. Nothing is handed to their team",
                 ].map((line) => (
                   <div
                     key={line}
@@ -581,6 +707,12 @@ export default function StudioPage() {
               >
                 <Eyebrow>Deal economics</Eyebrow>
               </div>
+              {/* Both figures come from src/lib/constants.ts — the SAME constants the
+                  proposal builder uses — so this screen and a proposal he sends can
+                  never quote a client two different prices. Written marker-first
+                  ("CAD $6,500") by formatCurrency, the product-wide money convention.
+                  The caption under each figure exists to keep the two halves of the
+                  offer apart: LeadGate is what the MONTHLY buys, never the build. */}
               <div className="flex flex-col" style={{ padding: 14, gap: 10 }}>
                 <div
                   style={{
@@ -595,8 +727,11 @@ export default function StudioPage() {
                     className="lg-display tnum"
                     style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--text)" }}
                   >
-                    $6,500
+                    {formatCurrency(SETUP_FEE_CAD)}
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>one-time</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 6, lineHeight: 1.45 }}>
+                    The four deliverables + the GoHighLevel build
                   </div>
                 </div>
                 <div
@@ -612,18 +747,48 @@ export default function StudioPage() {
                     className="lg-display tnum"
                     style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--money)" }}
                   >
-                    $1,000
+                    {formatCurrency(MONTHLY_RETAINER_CAD)}
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400, marginLeft: 4 }}>/mo</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 6, lineHeight: 1.45 }}>
+                    LeadGate qualification, us running the system, monthly report
                   </div>
                 </div>
                 <div className="flex justify-between" style={{ padding: "2px 2px", fontSize: 11.5 }}>
                   <span style={{ color: "var(--text-3)" }}>12-mo deal value</span>
                   <span className="lg-mono tnum" style={{ color: "var(--text)", fontWeight: 500 }}>
-                    $18,500
+                    {formatCurrency(FIRST_YEAR_VALUE_CAD)}
                   </span>
                 </div>
               </div>
             </LgCard>
+
+            {/* What's still guessed — directly above the Generate button, because
+                this is the last moment before the hedges are written into the
+                deliverables. Asset-pack view ONLY: intake answers change what
+                D1–D4 say, and change nothing about the free cold audit, which is
+                a pre-sale document that structurally cannot use anything the
+                client told us. Showing it there would offer him a to-do list that
+                could not affect the document he was about to generate. */}
+            {selected && !isAudit && (
+              <LgCard padded={false} style={flatCard}>
+                <div
+                  style={{
+                    padding: "16px 20px 12px",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <Eyebrow>Still guessed</Eyebrow>
+                </div>
+                <div style={{ padding: 16 }}>
+                  <IntakeGaps
+                    businessId={selected.id}
+                    reloadKey={gapsKey}
+                    density="comfortable"
+                  />
+                </div>
+              </LgCard>
+            )}
 
             <LgCard padded={false} style={flatCard}>
               <div style={{ padding: 16 }}>
@@ -850,7 +1015,11 @@ export default function StudioPage() {
                     onClear={clearAudit}
                     busy={coldRunning}
                   />
-                  <ColdAuditView report={coldAudit} businessId={selected.id} />
+                  <ColdAuditView
+                    report={coldAudit}
+                    businessId={selected.id}
+                    publicId={coldPublicId}
+                  />
                 </>
               )}
 
@@ -888,7 +1057,16 @@ export default function StudioPage() {
                   <AssetPackView
                     pack={pack}
                     businessId={selected.id}
-                    onUpdate={setPack}
+                    // "Regenerate pack" inside the view produces a DIFFERENT
+                    // pack: it is no longer the one that was saved, and any
+                    // override recorded against the old one does not describe
+                    // it. Both facts have to be dropped together.
+                    onUpdate={(next) => {
+                      setPack(next);
+                      setSavedPack(false);
+                      setSaveOverride(null);
+                    }}
+                    governance={saveOverride}
                     initialTab={
                       deliverableParam && selected.id === businessId
                         ? deliverableParam
@@ -901,6 +1079,21 @@ export default function StudioPage() {
           </LgCard>
         </div>
       </div>
+
+      {gate && (
+        <PackGateDialog
+          boundary={gate.boundary}
+          failure={gate.failure}
+          busy={saving}
+          onClose={() => setGate(null)}
+          // Save can be forced with a written reason; generation cannot.
+          onConfirm={
+            gate.boundary === "save"
+              ? (payload) => void saveToLibrary(payload)
+              : undefined
+          }
+        />
+      )}
     </>
   );
 }
@@ -1130,9 +1323,10 @@ function EmptyState({
         Ready to generate
       </h3>
       <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, lineHeight: 1.55 }}>
-        Four consulting-grade deliverables for <strong style={{ color: "var(--text)" }}>{business.name}</strong> —
-        a growth-leak intelligence report, acquisition infrastructure blueprint, conversion asset
-        pack, and 90-day execution roadmap, built from their real website and Places data.
+        Four consultant-grade deliverables for <strong style={{ color: "var(--text)" }}>{business.name}</strong> —
+        a Growth Leak Intelligence Report, Client Acquisition Infrastructure Blueprint, Conversion
+        Asset Pack, and Implementation &amp; Optimization Timeline, built from their real website
+        and Places data.
       </p>
       {hasArchived && (
         <ArchiveLink

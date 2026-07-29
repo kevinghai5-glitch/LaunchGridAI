@@ -18,6 +18,7 @@ import {
 import { TopBar } from "@/components/dashboard/TopBar";
 import { KpiCard } from "@/components/dashboard/os";
 import { LgButton } from "@/components/ui/lg-button";
+import { formatCurrency } from "@/lib/utils";
 import {
   CRM_STAGES,
   type CrmStageId,
@@ -197,15 +198,15 @@ export default function CrmPage() {
             CRM
           </h1>
           <div style={{ fontSize: 13.5, color: "var(--text-3)", marginTop: 6 }}>
-            {stats.total} leads · ${stats.activeMRR.toLocaleString()} active MRR · $
-            {stats.pipelineMRR.toLocaleString()} in motion
+            {stats.total} leads · {formatCurrency(stats.activeMRR)} active MRR ·{" "}
+            {formatCurrency(stats.pipelineMRR)} in motion
           </div>
         </div>
 
         {/* KPIs */}
         <div className="rise grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }}>
-          <KpiCard label="Active MRR" value={`$${stats.activeMRR.toLocaleString()}`} sub={`${stats.won} retainers live`} color="money" />
-          <KpiCard label="In pipeline" value={`$${stats.pipelineMRR.toLocaleString()}`} sub={`${stats.inMotion} leads in motion`} />
+          <KpiCard label="Active MRR" value={formatCurrency(stats.activeMRR)} sub={`${stats.won} retainers live`} color="money" />
+          <KpiCard label="In pipeline" value={formatCurrency(stats.pipelineMRR)} sub={`${stats.inMotion} leads in motion`} />
           <KpiCard label="Total leads" value={stats.total.toLocaleString()} sub="Across all stages" />
         </div>
 
@@ -268,7 +269,7 @@ export default function CrmPage() {
                       </span>
                     </div>
                     <div style={{ fontSize: 10.5, color: "var(--text-4)" }}>
-                      {s.money && mrr > 0 ? `$${mrr.toLocaleString()}/mo` : s.hint}
+                      {s.money && mrr > 0 ? `${formatCurrency(mrr)}/mo` : s.hint}
                     </div>
                   </div>
 

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { generateColdAuditSchema } from "@/lib/validations";
 import { checkPlanLimit } from "@/lib/limits";
 import { runColdAuditPipeline } from "@/lib/cold-audit-pipeline";
+import { assertNoDisclosedFindings } from "@/lib/cold-audit";
+import { persistColdAudit } from "@/lib/cold-audit-store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -46,13 +48,21 @@ export async function POST(req: NextRequest) {
 
     const report = await runColdAuditPipeline(business);
 
-    const system = await prisma.generatedSystem.create({
-      data: {
-        businessId: business.id,
-        userId: session.user.id,
-        type: "COLD_AUDIT",
-        content: report as unknown as object,
-      },
+    // Nothing is disclosed before the sale. The generator checked this already;
+    // it is checked again HERE because persisting is the irreversible step — this
+    // row is what the public /a/[publicId] teaser renders from, so a disclosure
+    // that gets written is a disclosure already on a URL we hand to a prospect.
+    // It throws (→ 500) instead of saving a repaired copy: a breach of a guarantee
+    // this strong is worth a failed generation, not a quiet correction.
+    assertNoDisclosedFindings(report, "before persist");
+
+    // F3 · the share link must be stable per business. persistColdAudit owns the
+    // publicId hand-over and the soft-delete of the superseded row; it is the only
+    // sanctioned way to write a COLD_AUDIT. See src/lib/cold-audit-store.ts.
+    const system = await persistColdAudit({
+      businessId: business.id,
+      userId: session.user.id,
+      report,
     });
 
     return NextResponse.json({ system, coldAudit: report });

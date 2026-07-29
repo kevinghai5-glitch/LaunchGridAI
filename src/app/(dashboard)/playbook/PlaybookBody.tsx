@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Surface, Pill } from "@/components/dashboard/os";
 import { LgButton } from "@/components/ui/lg-button";
+import { formatCurrency } from "@/lib/utils";
 
 /* ───────────────────────── section registry ───────────────────────── */
 
@@ -631,10 +632,10 @@ function Economics() {
         </div>
 
         <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          <ResultTile label="Added revenue / mo" value={`$${monthlyGain.toLocaleString()}`} tone="money" />
+          <ResultTile label="Added revenue / mo" value={formatCurrency(monthlyGain)} tone="money" />
           <ResultTile
             label="Net after retainer"
-            value={`${netMonthly >= 0 ? "+" : "−"}$${Math.abs(netMonthly).toLocaleString()}/mo`}
+            value={`${netMonthly >= 0 ? "+" : "−"}${formatCurrency(Math.abs(netMonthly))}/mo`}
             tone={netMonthly >= 0 ? "money" : "warn"}
           />
           <ResultTile label="Setup pays back in" value={`${paybackCustomers} customers`} tone="accent" />

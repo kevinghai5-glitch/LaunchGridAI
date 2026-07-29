@@ -4,7 +4,11 @@
  * from the DB will report the v2 structure failures, confirming it needs a
  * regenerate).
  *
- *   npm run check:pack -- _samples/pack.json
+ *   npm run check:pack -- _fixtures/golden-pack.json
+ *
+ * `npm run check:pack:sample` runs exactly that against the COMMITTED golden
+ * sample, which is why it works in a fresh clone: the pack it validates is in
+ * git, unlike anything under _samples/ (real client data, deliberately ignored).
  */
 
 import { readFileSync } from "node:fs";

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Growth Leak Intelligence Report — Pinecrest Roofing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* v3 light/consulting palette — single muted-gold accent, hairline borders,
+       three semantic colors. No blues, neons, gradients, or stray hex. */
+    --bg: #FBFAF7;
+    --surface: #FFFFFF;
+    --surface-2: #F4F2EC;
+    --ink: #1A1814;
+    --ink-muted: #6B6659;
+    --accent: #9A7B3F;
+    --accent-tint: #F2ECDD;
+    --border: #E7E3D8;
+    --good: #3F7D5A;
+    --warn: #B5862F;
+    --critical: #A8443B;
+    --heading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --shadow: 0 1px 2px rgba(26,24,20,.05);
+  }
+  * { box-sizing: border-box; }
+  /* Law 9: no motion. Anchor offset only — no smooth-scroll animation. */
+  html { scroll-padding-top: 78px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65; font-size: 16px; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    font-variant-numeric: tabular-nums;
+  }
+  h1, h2, h3, h4 { font-family: var(--heading); }
+  /* Law 9: reading column clamped to ~860px even with the contents rail. */
+  .layout {
+    max-width: 1152px; margin: 0 auto; padding: 36px 28px 100px;
+    display: grid; grid-template-columns: 244px minmax(0, 860px); gap: 48px;
+    justify-content: center;
+  }
+  .layout.solo { grid-template-columns: minmax(0, 860px); max-width: 860px; }
+
+  /* ── Internal-test marker (no client intake) ───────────────────────────── */
+  .testbar {
+    position: sticky; top: 54px; z-index: 49;
+    background: var(--critical); color: #fff;
+    font-weight: 700; font-size: 13px; letter-spacing: .02em;
+    text-align: center; padding: 8px 24px;
+    text-transform: uppercase;
+  }
+  .test-stamp {
+    display: inline-block; margin-bottom: 14px;
+    border: 1.5px solid var(--critical); color: var(--critical);
+    font-weight: 700; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; border-radius: 4px; padding: 4px 10px;
+  }
+  @media print {
+    .testbar { position: static; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .test-stamp { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  /* ── Command bar ───────────────────────────────────────────────────────── */
+  .cmdbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 24px; height: 54px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .cmdbar .cb-brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--heading); font-weight: 700; font-size: 14px; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
+  .cmdbar .cb-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .cmdbar .cb-idx { font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--ink-muted); text-transform: uppercase; padding-left: 14px; border-left: 1px solid var(--border); }
+  .cmdbar .cb-center { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+  .cmdbar .cb-biz { font-weight: 600; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
+  .cmdbar .cb-sep { color: var(--border); }
+  .cmdbar .cb-meta { font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmdbar .cb-conf { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--good); background: var(--surface-2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 99px; }
+  .cmdbar .cb-conf .cdot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+  .cmdbar .cb-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .cmd-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
+  .cmd-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cmd-btn svg { width: 14px; height: 14px; }
+  .cmd-btn.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+
+  /* ── Contents rail ─────────────────────────────────────────────────────── */
+  .rail { position: sticky; top: 78px; align-self: start; max-height: calc(100vh - 98px); overflow-y: auto; padding: 2px 2px 8px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; }
+  .rail::-webkit-scrollbar { width: 7px; } .rail::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  .toc { padding: 0; }
+  .toc-label { font-family: var(--heading); text-transform: uppercase; letter-spacing: .2em; font-size: 10.5px; font-weight: 700; color: var(--ink-muted); margin: 0 10px 12px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li { margin: 0; }
+  .toc a {
+    display: grid; grid-template-columns: 24px 1fr; gap: 9px; align-items: baseline;
+    text-decoration: none; color: var(--ink-muted); font-size: 13px;
+    padding: 7px 11px; border-radius: 6px; line-height: 1.4;
+    border-left: 2px solid transparent;
+  }
+  .toc a:hover { background: var(--surface-2); color: var(--ink); }
+  .toc a.is-active { background: var(--accent-tint); color: var(--ink); border-left-color: var(--accent); }
+  .toc-n { font-family: var(--heading); font-size: 11px; font-weight: 700; color: var(--accent); }
+  .toc-t { font-weight: 500; }
+  .main { min-width: 0; }
+
+  /* ── Key actions panel (rail) ──────────────────────────────────────────── */
+  .keyactions { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 16px 16px 6px; }
+  .keyactions .ka-h { font-family: var(--heading); font-size: 10.5px; text-transform: uppercase; letter-spacing: .14em; font-weight: 700; color: var(--ink-muted); margin-bottom: 12px; }
+  .ka-group { margin-bottom: 14px; }
+  .ka-group .ka-t { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; color: var(--accent); }
+  .ka-group.urgent .ka-t { color: var(--warn); } .ka-group.threat .ka-t { color: var(--critical); } .ka-group.win .ka-t { color: var(--good); }
+  .ka-group ul { list-style: none; margin: 0; padding: 0; }
+  .ka-group li { position: relative; padding: 5px 0 5px 16px; font-size: 12px; line-height: 1.4; color: var(--ink); border-bottom: 1px solid var(--border); }
+  .ka-group li:last-child { border-bottom: none; }
+  .ka-group li::before { content: ""; position: absolute; left: 0; top: 11px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .ka-group.urgent li::before { background: var(--warn); }
+  .ka-group.threat li::before { background: var(--critical); }
+  .ka-group.win li::before { background: var(--good); }
+
+  /* ── Cover header ──────────────────────────────────────────────────────── */
+  header.doc {
+    position: relative; background: var(--surface); color: var(--ink);
+    border: 1px solid var(--border); border-top: 3px solid var(--accent);
+    border-radius: 4px; padding: 44px 46px 36px; margin-bottom: 30px;
+  }
+  .doc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); font-weight: 600; }
+  header.doc .eyebrow { font-family: var(--heading); text-transform: uppercase; letter-spacing: .26em; font-size: 11px; color: var(--accent); margin-bottom: 16px; font-weight: 700; }
+  header.doc h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.1; letter-spacing: -.015em; font-weight: 700; max-width: 20ch; color: var(--ink); }
+  header.doc .subtitle { font-size: 16px; line-height: 1.55; color: var(--ink-muted); max-width: 60ch; margin: 0 0 28px; }
+  .cover-meta { display: flex; flex-wrap: wrap; gap: 0; border-top: 1px solid var(--border); padding-top: 20px; }
+  .cover-meta .cm { padding-right: 32px; margin-right: 32px; border-right: 1px solid var(--border); }
+  .cover-meta .cm:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+  .cover-meta .cm .k { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-muted); margin-bottom: 5px; font-weight: 600; }
+  .cover-meta .cm .v { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .cover-meta .cm .v.chip { display: inline-block; background: var(--accent-tint); border: 1px solid var(--border); color: var(--accent); padding: 3px 11px; border-radius: 99px; font-size: 11.5px; }
+
+  /* ── Methodology note ──────────────────────────────────────────────────── */
+  .assumptions {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted);
+    border-radius: 8px; padding: 14px 18px; font-size: 13.5px; margin-bottom: 28px;
+  }
+  .assumptions strong { color: var(--ink); }
+  .assumptions .ico { flex: none; color: var(--accent); font-size: 16px; line-height: 1.3; }
+
+  /* ── Sections ──────────────────────────────────────────────────────────── */
+  .sec {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 34px 38px; margin-bottom: 20px; position: relative;
+  }
+  .sec-head { display: flex; align-items: center; gap: 16px; margin: 0 0 22px; padding: 0 0 16px; border-bottom: 1px solid var(--border); }
+  .sec-num { font-family: var(--heading); font-size: 13px; font-weight: 700; color: var(--accent); background: var(--accent-tint); padding: 5px 11px; border-radius: 6px; line-height: 1; flex: none; }
+  h2 { font-size: 24px; margin: 0; letter-spacing: -.015em; font-weight: 700; line-height: 1.2; max-width: 36ch; }
+  h3 { font-size: 15.5px; margin: 24px 0 9px; color: var(--ink); letter-spacing: -.01em; }
+  p { margin: 0 0 13px; color: var(--ink); max-width: 70ch; }
+  p:last-child { margin-bottom: 0; }
+  ul, ol { margin: 0 0 13px; padding-left: 22px; color: var(--ink); max-width: 70ch; }
+  li { margin: 0 0 7px; }
+  li::marker { color: var(--accent); }
+  strong { color: var(--ink); font-weight: 600; }
+  .muted { color: var(--ink-muted); }
+  .label { font-family: var(--heading); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 700; color: var(--accent); margin: 26px 0 10px; display: flex; align-items: center; gap: 10px; }
+  .label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── Tables ────────────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { background: var(--surface-2); color: var(--ink); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; border-bottom: 1px solid var(--border); }
+  tbody tr:last-child td { border-bottom: none; }
+  .score { font-weight: 700; font-family: var(--heading); color: var(--accent); }
+
+  /* ── Pills / chips ─────────────────────────────────────────────────────── */
+  .pill { display: inline-block; padding: 3px 11px; border-radius: 99px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-muted); }
+  .pill.crit { background: var(--surface-2); color: var(--critical); border-color: var(--critical); }
+  .pill.high { color: var(--warn); border-color: var(--warn); }
+  .pill.medium { color: var(--ink-muted); border-color: var(--border); }
+  .pill.low { color: var(--good); border-color: var(--good); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 99px; font-size: 11.5px; font-weight: 600; background: var(--accent-tint); color: var(--accent); border: 1px solid var(--border); }
+
+  /* ── Generic cards / callouts ──────────────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px; margin: 0 0 12px; }
+  .hero-quote { background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 20px 24px; font-family: var(--heading); font-size: 22px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; letter-spacing: -.01em; color: var(--ink); }
+  .strategy-block { background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 14px 0 18px; font-size: 15px; color: var(--ink); }
+  .lead { font-size: 17px; line-height: 1.6; color: var(--ink); }
+
+  /* Structured diagnostic / asset cards. */
+  .diag-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px; margin: 0 0 12px; }
+  .diag-card .dt { font-family: var(--heading); font-size: 16px; font-weight: 700; color: var(--ink); margin: 0 0 4px; letter-spacing: -.01em; }
+  .diag-card .dt .pill { vertical-align: middle; margin-left: 8px; }
+  .diag-row { margin: 11px 0; }
+  .diag-row .dk { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-weight: 700; color: var(--ink-muted); margin-bottom: 3px; }
+  .diag-row p { margin: 0; font-size: 14px; color: var(--ink); }
+  .diag-row.fix { background: var(--accent-tint); border-radius: 6px; padding: 11px 14px; margin-top: 12px; }
+  .diag-row.fix .dk { color: var(--accent); }
+  .struct-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: 11.5px; font-weight: 700; margin-right: 9px; }
+  .opt-list { list-style: none; padding: 0; margin: 0 0 6px; counter-reset: opt; }
+  .opt-list li { counter-increment: opt; position: relative; padding: 11px 15px 11px 40px; margin: 0 0 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: 15px; color: var(--ink); }
+  .opt-list li::before { content: counter(opt); position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 5px; background: var(--accent-tint); color: var(--accent); font-size: 10.5px; font-weight: 700; display: grid; place-items: center; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+  .ba > div { padding: 18px 20px; font-size: 14px; }
+  .ba .before { background: var(--surface-2); border-right: 1px solid var(--border); }
+  .ba .after { background: var(--surface); }
+  .ba .t { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; margin-bottom: 7px; }
+  .ba .before .t { color: var(--critical); }
+  .ba .after .t { color: var(--good); }
+  .email { border: 1px solid var(--border); border-radius: 6px; padding: 20px 22px; margin-bottom: 12px; background: var(--surface); position: relative; }
+  .email::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px; border-radius: 3px; background: var(--accent); }
+  .email .subj { font-weight: 700; margin-bottom: 6px; font-size: 15.5px; color: var(--ink); }
+
+  /* ── Screenshots ───────────────────────────────────────────────────────── */
+  .shots-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 16px; }
+  .shot { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot .cap { background: var(--surface-2); color: var(--ink-muted); padding: 10px 14px; font-size: 12px; font-weight: 500; border-top: 1px solid var(--border); }
+
+  /* ── Metric tiles ──────────────────────────────────────────────────────── */
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8px 0 16px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px 18px; }
+  .metric .v { font-family: var(--heading); font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); }
+  .metric .v.muted { color: var(--ink-muted); }
+  .metric .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-top: 3px; font-weight: 600; }
+
+  /* ── Executive summary grid ────────────────────────────────────────────── */
+  .exec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 6px; }
+  .exec-card { border: 1px solid var(--border); border-radius: 6px; padding: 20px 22px; background: var(--surface); position: relative; overflow: hidden; }
+  .exec-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+  .exec-card.threat::before { background: var(--critical); }
+  .exec-card.urgent::before { background: var(--warn); }
+  .exec-card.win::before { background: var(--good); }
+  .exec-card .h { display: flex; align-items: center; gap: 9px; font-family: var(--heading); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .exec-card .h .dotc { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .exec-card.threat .h .dotc { background: var(--critical); }
+  .exec-card.urgent .h .dotc { background: var(--warn); }
+  .exec-card.win .h .dotc { background: var(--good); }
+  .exec-card ul { margin: 0; padding-left: 18px; font-size: 14px; }
+
+  /* ── Score hero + scorecard (flat: number in accent + thin semantic bar) ── */
+  .grade-strong { --sem: var(--good); }
+  .grade-mid { --sem: var(--warn); }
+  .grade-weak { --sem: var(--critical); }
+  .score-hero { display: grid; grid-template-columns: 104px 1fr; gap: 26px; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 24px 28px; margin: 6px 0 22px; }
+  .ring { position: relative; width: 104px; height: 104px; border-radius: 8px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--border); }
+  .ring .rv { font-family: var(--heading); font-weight: 700; font-size: 36px; letter-spacing: -.03em; color: var(--sem, var(--accent)); line-height: 1; }
+  .ring .rl { font-size: 9.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-muted); margin-top: 3px; font-weight: 600; }
+  .ring::before { content: ""; position: absolute; left: 12px; right: 12px; bottom: 10px; height: 3px; border-radius: 2px; background: var(--border); }
+  .ring::after { content: ""; position: absolute; left: 12px; bottom: 10px; height: 3px; border-radius: 2px; background: var(--sem, var(--accent)); width: calc((100% - 24px) * var(--ring, 0) / 100); }
+  .score-hero .sh-grade { font-family: var(--heading); font-size: 21px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+  .scorecard { display: grid; gap: 12px; margin: 8px 0 6px; }
+  .score-row { border: 1px solid var(--border); border-radius: 6px; padding: 20px 22px; background: var(--surface); display: grid; grid-template-columns: 64px 1fr; gap: 20px; align-items: start; }
+  .score-dial { position: relative; width: 64px; height: 64px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); }
+  .score-dial span { font-family: var(--heading); font-weight: 700; font-size: 22px; color: var(--sem, var(--accent)); }
+  .score-dial::before { content: ""; position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: var(--border); }
+  .score-dial::after { content: ""; position: absolute; left: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: var(--sem, var(--accent)); width: calc((100% - 16px) * var(--dial, 0) / 100); }
+  .score-body .name { font-family: var(--heading); font-weight: 700; font-size: 16px; margin-bottom: 5px; letter-spacing: -.01em; }
+  .score-body .name .pct { color: var(--ink-muted); font-weight: 600; font-size: 13px; font-family: 'Inter', sans-serif; }
+  .score-body .diag { font-size: 14px; margin-bottom: 12px; color: var(--ink); }
+  .score-kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; font-size: 13px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .score-kv .k { text-transform: uppercase; letter-spacing: .08em; font-size: 9.5px; font-weight: 700; color: var(--ink-muted); margin-bottom: 3px; }
+
+  /* ── Leak analysis ─────────────────────────────────────────────────────── */
+  .leak { border: 1px solid var(--border); border-radius: 6px; padding: 0; margin-bottom: 14px; background: var(--surface); overflow: hidden; display: grid; grid-template-columns: 4px 1fr; }
+  .leak .rail { background: var(--accent); }
+  .leak.crit .rail { background: var(--critical); }
+  .leak.high .rail { background: var(--warn); }
+  .leak.medium .rail { background: var(--ink-muted); }
+  .leak.low .rail { background: var(--good); }
+  .leak .lk-body { padding: 20px 24px; }
+  .leak .lh { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+  .leak .lt { font-family: var(--heading); font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .leak .badges { display: flex; gap: 7px; flex-shrink: 0; flex-wrap: wrap; }
+  .leak .kv { margin: 11px 0; }
+  .leak .kv .k { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; font-weight: 700; color: var(--ink-muted); margin-bottom: 3px; }
+  .leak .kv p { margin: 0; font-size: 14px; }
+  .leak .fix { background: var(--accent-tint); border-radius: 6px; padding: 12px 15px; margin-top: 12px; }
+  .leak .fix .k { color: var(--accent); }
+
+  /* ── Funnel ────────────────────────────────────────────────────────────── */
+  .funnel { display: grid; gap: 0; margin: 10px 0; }
+  .funnel-row { display: grid; grid-template-columns: 48px 1fr; gap: 18px; position: relative; padding-bottom: 16px; }
+  .funnel-row::before { content: ""; position: absolute; left: 23px; top: 44px; bottom: -2px; width: 1px; background: var(--border); }
+  .funnel-row:last-child { padding-bottom: 0; }
+  .funnel-row:last-child::before { display: none; }
+  .fn-node { width: 48px; height: 48px; border-radius: 8px; display: grid; place-items: center; font-family: var(--heading); font-weight: 700; font-size: 17px; color: var(--accent); background: var(--accent-tint); border: 1px solid var(--border); position: relative; z-index: 1; }
+  .fn-card { border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px; background: var(--surface); }
+  .fn-card .st { font-family: var(--heading); font-weight: 700; font-size: 16.5px; margin: 0 0 10px; letter-spacing: -.01em; }
+  .fn-card p { font-size: 13.5px; margin: 0 0 7px; }
+  .fn-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+
+  /* ── Tiers ─────────────────────────────────────────────────────────────── */
+  .tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0; }
+  .tier { border: 1px solid var(--border); border-radius: 6px; padding: 20px 22px; background: var(--surface); position: relative; overflow: hidden; }
+  .tier::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); }
+  .tier:nth-child(1)::before { background: var(--good); }
+  .tier:nth-child(2)::before { background: var(--ink-muted); }
+  .tier:nth-child(3)::before { background: var(--warn); }
+  .tier .tn { font-family: var(--heading); font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--ink-muted); margin-bottom: 6px; }
+  .tier .rng { font-family: var(--heading); font-size: 28px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 8px; color: var(--accent); }
+  .tier p { font-size: 13.5px; }
+
+  /* ── Timeline / roadmap ────────────────────────────────────────────────── */
+  .timeline { display: grid; gap: 0; margin: 12px 0; }
+  .phase-row { display: grid; grid-template-columns: 56px 1fr; gap: 22px; position: relative; padding-bottom: 26px; }
+  .phase-row::before { content: ""; position: absolute; left: 27px; top: 52px; bottom: -4px; width: 1px; background: var(--border); }
+  .phase-row:last-child { padding-bottom: 0; }
+  .phase-row:last-child::before { display: none; }
+  .phase-node { width: 56px; height: 56px; border-radius: 8px; display: grid; place-items: center; font-family: var(--heading); font-weight: 700; font-size: 22px; color: var(--accent); background: var(--accent-tint); border: 1px solid var(--border); position: relative; z-index: 1; }
+  .phase-card { border: 1px solid var(--border); border-radius: 6px; padding: 24px 26px; background: var(--surface); }
+  .phase-card .ph-h { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+  .phase-card .ph-n { font-family: var(--heading); font-weight: 700; font-size: 20px; letter-spacing: -.01em; }
+  .phase-card .ph-w { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); background: var(--accent-tint); border: 1px solid var(--border); padding: 4px 12px; border-radius: 99px; }
+  .phase-card .ph-obj { font-size: 15px; color: var(--ink); margin-bottom: 6px; }
+  .phase-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; }
+
+  /* ── Checklist ─────────────────────────────────────────────────────────── */
+  .checklist { list-style: none; padding: 0; margin: 8px 0; }
+  .checklist li { position: relative; padding: 8px 0 8px 28px; font-size: 14px; border-bottom: 1px solid var(--border); color: var(--ink); }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before { content: ""; position: absolute; left: 0; top: 11px; width: 15px; height: 15px; border: 1.5px solid var(--accent); border-radius: 4px; background: var(--accent-tint); }
+  .checklist li::after { content: "✓"; position: absolute; left: 3px; top: 8px; font-size: 11px; font-weight: 800; color: var(--accent); }
+
+  /* ── Asset cards (D3) ──────────────────────────────────────────────────── */
+  .asset-frame { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .asset-frame .chip.where { background: var(--surface-2); color: var(--ink-muted); border-color: var(--border); }
+
+  /* ── Leak filter bar ──────────────────────────────────────────────────── */
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 18px; }
+  .filterbar .fb-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-muted); margin-right: 4px; }
+  .fchip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--ink-muted); background: var(--surface); border: 1px solid var(--border); cursor: pointer; }
+  .fchip:hover { color: var(--ink); border-color: var(--ink-muted); }
+  .fchip .fc-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .fchip[data-f="crit"] { color: var(--critical); } .fchip[data-f="high"] { color: var(--warn); }
+  .fchip[data-f="medium"] { color: var(--ink-muted); } .fchip[data-f="low"] { color: var(--good); }
+  .fchip .fc-n { font-size: 10.5px; opacity: .7; font-weight: 700; }
+  .fchip.is-on { background: var(--accent-tint); border-color: var(--accent); }
+  .fchip[data-f="all"] { color: var(--ink); }
+  .leak.is-hidden { display: none; }
+
+  /* ── Leak card tabs ───────────────────────────────────────────────────── */
+  .leak-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); margin: 4px 0 14px; }
+  .leak-tab { appearance: none; border: none; background: none; font: inherit; cursor: pointer; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--ink-muted); }
+  .leak-tab:hover { color: var(--ink); }
+  .leak-tab.is-on { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .leak-pane[hidden] { display: none; }
+  /* Scorecard-axis tag beside a leak title (Defect 2). */
+  .lk-area { display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 99px; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--border); vertical-align: middle; }
+  /* Whitelisted industry stats + computed math (Defect 1). */
+  .lk-stats { margin: 6px 0 0; padding-left: 18px; }
+  .lk-stats li { margin: 3px 0; font-size: 13px; color: var(--ink); }
+  .lk-math { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; color: var(--ink); }
+  .lk-math-label { display: block; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 4px; }
+  /* Kickoff-verification line on BENCHMARK leaks (Defect 3). */
+  .kickoff-line { margin: 8px 0 0; font-style: italic; color: var(--ink-muted); }
+
+  /* ── Evidence-grade chips (Phase 1 · what this finding rests on) ───────── */
+  /* The grade used to be visible only inside the closed Evidence tab. It now
+     rides on the card header, so a reader skimming knows whether we measured a
+     thing, were told it, or are quoting a pattern — before they read the claim.
+     Colour follows the same three semantics as the rest of the report: measured
+     is solid (good), told is the accent (their word), pattern is muted. */
+  .ev-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-muted); white-space: nowrap; }
+  .ev-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .ev-chip.ev-observed { color: var(--good); }
+  .ev-chip.ev-disclosed { color: var(--accent); background: var(--accent-tint); }
+  .ev-chip.ev-inferred { color: var(--ink-muted); }
+  .ev-chip.is-clean { color: var(--good); background: var(--surface-2); text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 11px; }
+  .score-body .name .ev-chip { margin-left: 10px; vertical-align: middle; }
+  /* A clean axis is a PASS, and it reads like one rather than like a ninth
+     problem in a grid of problems. */
+  .score-row.is-clean { border-color: var(--good); }
+
+  /* ── Advisory band (work we are NOT delivering) ─────────────────────────── */
+  /* Everything under it is a recommendation about a website we neither build nor
+     host. Rendered by the composer, never by the model, so the scope promise
+     cannot go missing on a generation that forgot to write it. */
+  .advisory-band { display: flex; gap: 14px; align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 0 0 20px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+  .advisory-band .ab-tag { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--warn); border: 1px solid var(--warn); border-radius: 99px; padding: 3px 10px; margin-top: 2px; }
+
+  /* ── Reconciliation + cap notes on the headline total ───────────────────── */
+  /* Both say the itemized figures below will NOT add up to the number above, so
+     they sit directly under the amount rather than under the working. */
+  .dc-note { margin-top: 12px; padding: 11px 14px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+  .dc-note .dcn-k { display: block; font-family: 'Inter', sans-serif; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 4px; }
+  .dc-note.is-capped { border-left: 3px solid var(--warn); }
+  .dc-note.is-capped .dcn-k { color: var(--warn); }
+  .dc-note.is-checked { border-left: 3px solid var(--good); }
+  .dc-note.is-checked .dcn-k { color: var(--good); }
+  .dollar-callout.dc-total { border-left-width: 4px; }
+  .dollar-callout.dc-total .dc-formula { margin-top: 12px; }
+
+  /* ── Asset destinations (D3: where each piece of copy actually goes) ────── */
+  .dest { margin: 6px 0 10px; padding: 8px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+  .dest .dest-k { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin-bottom: 2px; }
+
+  /* ── Engagement spine (D4: the two windows and what each one costs) ─────── */
+  .spine { display: grid; gap: 0; margin: 6px 0 4px; }
+  .spine-band { display: grid; grid-template-columns: 108px minmax(0, 1fr) 176px; gap: 22px; align-items: start; border: 1px solid var(--border); border-radius: 6px; padding: 22px 24px; background: var(--surface); }
+  .spine-band.is-run { border-color: var(--accent); background: var(--accent-tint); }
+  .spine-band .sb-when { font-family: var(--heading); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); padding-top: 4px; }
+  .spine-band .sb-title { font-family: var(--heading); font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+  .spine-band p { font-size: 13.5px; margin: 0; }
+  .spine-band .sb-price { text-align: right; border-left: 1px solid var(--border); padding-left: 20px; }
+  .spine-band .sb-amount { font-family: var(--heading); font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); line-height: 1.1; }
+  .spine-band .sb-note { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-top: 4px; }
+  .spine-golive { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 14px 24px; font-size: 13.5px; color: var(--ink); border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--surface-2); }
+  .spine-golive .sg-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--good); margin-top: 6px; }
+
+  /* ── Owner tags (done-for-you framing) ─────────────────────────────────── */
+  .owner-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+  .owner-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .owner-tag.owner-us { color: var(--accent); background: var(--accent-tint); border: 1px solid var(--border); }
+  .owner-tag.owner-you { color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--border); }
+  .fix-owner { margin-top: 10px; }
+
+  /* ── Retainer badge (the continuously-running engine) ──────────────────── */
+  .retainer-badge { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px; border-radius: 99px; font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); background: var(--accent-tint); border: 1px solid var(--border); vertical-align: middle; }
+  .retainer-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .fn-card.is-retainer, .phase-card.is-retainer { border-color: var(--accent); background: var(--accent-tint); }
+
+  /* ── Dollar-impact callout (every leak quantified, Law 5) ──────────────── */
+  .dollar-callout { position: relative; margin: 16px 0; padding: 18px 20px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--accent-tint); }
+  .dc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .dc-label { font-family: var(--heading); font-size: 10.5px; text-transform: uppercase; letter-spacing: .14em; font-weight: 700; color: var(--ink-muted); }
+  .dc-amount { font-family: var(--heading); font-size: 27px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); line-height: 1.05; }
+  .dc-amount .per { font-size: 13px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0; margin-left: 6px; }
+  .dc-formula { margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+  .dc-assume { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+  .dc-assume li { font-size: 12.5px; color: var(--ink); line-height: 1.45; }
+  .dc-assume li span { display: inline-block; min-width: 112px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; font-size: 10px; letter-spacing: .06em; margin-right: 8px; }
+  .bench-flag { margin-top: 12px; font-size: 12px; line-height: 1.45; color: var(--warn); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; }
+
+  /* ── Plain-language clarification markers (Law 14) ──────────────────────── */
+  .lg-info { display: inline; position: relative; }
+  .lg-info > summary { display: inline; list-style: none; cursor: pointer; color: var(--accent); font-weight: 700; font-size: .72em; vertical-align: super; line-height: 0; margin-left: 1px; }
+  .lg-info > summary::-webkit-details-marker { display: none; }
+  .lg-info[open] > summary { color: var(--ink-muted); }
+  .lg-pop { display: block; margin: 6px 0; padding: 10px 13px; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.5; color: var(--ink); font-weight: 400; }
+  .lg-pop strong { color: var(--accent); }
+
+  /* ── Glossary block ────────────────────────────────────────────────────── */
+  .glossary .gl { margin: 16px 0 0; display: grid; gap: 0; }
+  .gl-item { padding: 12px 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 180px 1fr; gap: 18px; }
+  .gl-item:last-child { border-bottom: none; }
+  .gl-item dt { font-family: var(--heading); font-weight: 700; font-size: 14px; color: var(--accent); }
+  .gl-item dd { margin: 0; font-size: 14px; color: var(--ink); }
+
+  /* ── Presentation mode (no animation) ───────────────────────────────────── */
+  body.present .layout { grid-template-columns: minmax(0, 1fr); max-width: 920px; }
+  body.present .rail { display: none; }
+  body.present .sec { padding: 44px 50px; margin-bottom: 26px; }
+  body.present .sec h2 { font-size: 28px; }
+  body.present header.doc h1 { font-size: 44px; }
+
+  /* ── Footer ────────────────────────────────────────────────────────────── */
+  footer.doc { display: flex; justify-content: space-between; align-items: center; gap: 16px; color: var(--ink-muted); font-size: 12px; margin-top: 42px; padding-top: 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  footer.doc .conf { text-transform: uppercase; letter-spacing: .1em; font-size: 10px; font-weight: 600; }
+
+  @media (max-width: 940px) {
+    .layout, .layout.solo { grid-template-columns: 1fr; gap: 0; padding: 26px 18px 64px; max-width: 720px; }
+    .rail { display: none; }
+    .cmdbar .cb-meta, .cmdbar .cb-sep, .cmdbar .cb-idx { display: none; }
+    .cmd-btn .cb-btxt { display: none; }
+    .cmd-btn { padding: 0 9px; }
+    .grid2, .ba, .shots-row, .exec-grid, .tiers, .phase-cols, .gl-item { grid-template-columns: 1fr; }
+    /* The spine stacks: the price stops being a right-hand column and becomes a
+       line under the description, still attached to its own window. */
+    .spine-band { grid-template-columns: 1fr; gap: 12px; }
+    .spine-band .sb-price { text-align: left; border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 12px; }
+    .advisory-band { flex-direction: column; gap: 10px; }
+    .gl-item { gap: 2px; }
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    .score-kv { grid-template-columns: 1fr; gap: 8px; }
+    .score-hero { grid-template-columns: 1fr; text-align: center; justify-items: center; }
+    header.doc { padding: 32px 24px; }
+    header.doc h1 { font-size: 28px; }
+    .cover-meta { flex-direction: column; gap: 12px; }
+    .cover-meta .cm { width: 100%; border-right: none; padding-right: 0; margin-right: 0; }
+    .sec { padding: 24px 20px; }
+  }
+
+  @media print {
+    html, body { background: #fff; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .rail, .cmdbar { display: none; }
+    .layout, .layout.solo { display: block; padding: 0; max-width: none; }
+    .sec, .card, .leak, .phase-card, .score-row, .fn-card, .exec-card, .tier, .dollar-callout,
+    .spine-band, .advisory-band, .dc-note { break-inside: avoid; }
+    /* Colour-carrying markers keep their colour on paper: the advisory band, the
+       cap note and the evidence chips are all things a printed copy must not
+       silently lose. */
+    .advisory-band, .dc-note, .ev-chip, .spine-band, .dest { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .leak-pane[hidden] { display: block; }
+    .leak-tabs { display: none; }
+    .leak.is-hidden { display: grid; }
+    /* Inline markers hidden in print — the glossary block is the backstop. */
+    .lg-info { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="cmdbar">
+    <span class="cb-brand"><span class="dot"></span>ReclaimedHQ</span>
+    <span class="cb-idx">01 / 04</span>
+    <div class="cb-center">
+      <span class="cb-biz">Pinecrest Roofing</span>
+      <span class="cb-sep">·</span><span class="cb-meta">Sudbury · Roofing</span>
+      <span class="cb-conf"><span class="cdot"></span>HIGH confidence</span>
+    </div>
+    <div class="cb-right">
+      <button class="cmd-btn" type="button" data-present aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span class="cb-btxt">Present</span>
+      </button>
+      <button class="cmd-btn" type="button" data-print>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+        <span class="cb-btxt">Print / PDF</span>
+      </button>
+    </div>
+  </div>
+  
+  <div class="layout">
+    <aside class="rail"><nav class="toc" aria-label="Document sections"><div class="toc-label">Contents</div><ol><li><a href="#sec-01-executive-summary"><span class="toc-n">01</span><span class="toc-t">Executive Summary</span></a></li><li><a href="#sec-02-technical-ux-performance"><span class="toc-n">02</span><span class="toc-t">Technical UX &amp; Performance</span></a></li><li><a href="#sec-03-website-conversion-intelligence-advisory"><span class="toc-n">03</span><span class="toc-t">Website Conversion Intelligence — Advisory</span></a></li><li><a href="#sec-04-conversion-leak-scorecard"><span class="toc-n">04</span><span class="toc-t">Conversion Leak Scorecard</span></a></li><li><a href="#sec-05-growth-leak-analysis"><span class="toc-n">05</span><span class="toc-t">Growth Leak Analysis</span></a></li><li><a href="#sec-06-fastest-revenue-wins"><span class="toc-n">06</span><span class="toc-t">Fastest Revenue Wins</span></a></li><li><a href="#sec-07-what-we-deploy"><span class="toc-n">07</span><span class="toc-t">What We Deploy</span></a></li></ol></nav><div class="keyactions"><div class="ka-h">Key actions</div><div class="ka-group urgent"><div class="ka-t">Fix now</div><ul><li>Missed-call text-back on the main line.</li><li>Instant auto-reply and qualification behind the contact form.</li><li>After-hours auto-response covering evenings and weekends.</li></ul></div><div class="ka-group win"><div class="ka-t">Quick wins</div><ul><li>Webchat that continues in SMS, so a small question does not need a phone call.</li><li>The social page inbox pulled into the same queue as calls and texts.</li><li>Call tracking switched on, so answered-versus-missed stops being a guess.</li></ul></div><div class="ka-group threat"><div class="ka-t">Watch-outs</div><ul><li>A published review already describes an enquiry that got no reply, which is the one kind of review a homeowner reads as a warning.</li><li>Competitors in Sudbury carry noticeably more review volume, which makes speed of reply the cheaper place for you to win.</li><li>Demand arrives in short bursts around the spring thaw, and capture problems cost the most in exactly those weeks.</li></ul></div></div></aside>
+    <main class="main">
+      <header class="doc">
+        
+        <div class="eyebrow">Conversion Intelligence</div>
+        <h1>Growth Leak Intelligence Report</h1>
+        <p class="subtitle">Diagnosis — where revenue is quietly leaking and why</p>
+        <div class="cover-meta">
+          <div class="cm"><div class="k">Prepared for</div><div class="v">Pinecrest Roofing</div></div>
+          <div class="cm"><div class="k">Market</div><div class="v">Sudbury · Roofing</div></div>
+          <div class="cm"><div class="k">Date</div><div class="v">July 28, 2026</div></div>
+          <div class="cm"><div class="k">Data confidence</div><div class="v chip">HIGH</div></div>
+        </div>
+      </header>
+      
+      <section class="sec" id="sec-01-executive-summary"><div class="sec-head"><div class="sec-num">01</div><h2>Executive Summary</h2></div><div class="sec-inner"><p>No after-hours capture is the largest recoverable number in this report: an estimated CAD $500–CAD $1,000 a month, computed from the volumes and job value set out beside that finding and the industry rates cited with them. The missed calls with no recovery slice of the same chain is an estimated CAD $1,785–CAD $3,570 a month, and where it overlaps the figure above it is a share of it rather than a second loss on top. Underneath all of it sits one pattern: every route into Pinecrest ends at a person who has to be free at that exact moment, and nothing sits behind any of them when that person is on a job. What this business is missing is the layer between an enquiry arriving and somebody getting to it.</p><div class="dollar-callout dc-total"><div class="dc-head"><span class="dc-label">Total recoverable revenue leak</span><span class="dc-amount">CAD $1,785–CAD $3,570<span class="per">/mo</span></span></div><div class="dc-formula">Sum of the 1 itemized conversion leak below — fix the leaks and this is the monthly upside in play.</div><div class="dc-note"><span class="dcn-k">What is not in this number</span>&quot;No after-hours capture&quot; is not added to this total. This is the after-hours share of the missed-call figure above, not additional to it. It is shown with its own leak below, but counted once — not twice.</div><div class="dc-note is-checked"><span class="dcn-k">Checked against your numbers</span>Sense-checked against your own numbers. This report caps its monthly total at 50% of what your own numbers imply you bill in a month — your 80 enquiries a month at your CAD $1,250 average job, closed at 30% (that close rate and the 50% ceiling are both our assumption, not a number we measured). The figure above sits under that ceiling, so nothing has been trimmed.</div></div><div class="exec-grid"><div class="exec-card win"><div class="h">Biggest Opportunities</div><ul><li>Instant acknowledgement on the phone line and the form, which is the cheapest change on this list and touches every enquiry you already receive.</li><li>A bookable calendar that stays open through the evenings and weekends your listing currently shows as closed.</li><li>Scoring at the point of capture, so a full tear-off and reshingle stops waiting behind a single flashing repair.</li><li>A past-customer list that has already bought from you once and is currently being contacted by nobody.</li></ul></div><div class="exec-card threat"><div class="h">Biggest Threats</div><ul><li>A published review already describes an enquiry that got no reply, which is the one kind of review a homeowner reads as a warning.</li><li>Competitors in Sudbury carry noticeably more review volume, which makes speed of reply the cheaper place for you to win.</li><li>Demand arrives in short bursts around the spring thaw, and capture problems cost the most in exactly those weeks.</li></ul></div><div class="exec-card urgent"><div class="h">Most Urgent Fixes</div><ul><li>Missed-call text-back on the main line.</li><li>Instant auto-reply and qualification behind the contact form.</li><li>After-hours auto-response covering evenings and weekends.</li></ul></div><div class="exec-card win"><div class="h">Quick Wins</div><ul><li>Webchat that continues in SMS, so a small question does not need a phone call.</li><li>The social page inbox pulled into the same queue as calls and texts.</li><li>Call tracking switched on, so answered-versus-missed stops being a guess.</li></ul></div></div></div></section>
+<section class="sec" id="sec-02-technical-ux-performance"><div class="sec-head"><div class="sec-num">02</div><h2>Technical UX &amp; Performance</h2></div><div class="sec-inner"><div class="label">Mobile (measured)</div><div class="metric-grid"><div class="metric"><div class="v">73/100</div><div class="k">Perf score</div></div><div class="metric"><div class="v">2.9s</div><div class="k">LCP<details class="lg-info"><summary aria-label="What does LCP mean?">&#9432;</summary><span class="lg-pop"><strong>LCP.</strong> Largest Contentful Paint — how long the main content takes to appear. Slow loads quietly cost you leads.</span></details></div></div><div class="metric"><div class="v">0.04</div><div class="k">CLS<details class="lg-info"><summary aria-label="What does CLS mean?">&#9432;</summary><span class="lg-pop"><strong>CLS.</strong> Cumulative Layout Shift — how much the page jumps around while loading. Lots of shifting frustrates visitors and hurts trust.</span></details></div></div><div class="metric"><div class="v">205ms</div><div class="k">INP<details class="lg-info"><summary aria-label="What does INP mean?">&#9432;</summary><span class="lg-pop"><strong>INP.</strong> Interaction to Next Paint — how quickly the page reacts when someone taps or clicks. Laggy pages feel broken.</span></details></div></div></div><div class="label">Desktop (measured)</div><div class="metric-grid"><div class="metric"><div class="v">91/100</div><div class="k">Perf score</div></div><div class="metric"><div class="v">1.4s</div><div class="k">LCP</div></div><div class="metric"><div class="v">0.02</div><div class="k">CLS</div></div><div class="metric"><div class="v">88ms</div><div class="k">INP</div></div></div><div class="strategy-block">Site performance sits outside this engagement — worth flagging to whoever manages your website. Everything we fix below works within your existing site.</div></div></section>
+<section class="sec" id="sec-03-website-conversion-intelligence-advisory"><div class="sec-head"><div class="sec-num">03</div><h2>Website Conversion Intelligence — Advisory</h2></div><div class="sec-inner"><div class="advisory-band"><span class="ab-tag">Advisory</span><div><strong>These are notes for whoever looks after your website — not work we are delivering.</strong> We do not build or host websites. Hand this section to whoever runs your site; the fastest version of all of it is repointing your existing buttons at the booking page and leaving the rest alone. The one page we build and brand for you is the booking page inside your GoHighLevel sub-account.</div></div><div class="label">CTA<details class="lg-info"><summary aria-label="What does CTA mean?">&#9432;</summary><span class="lg-pop"><strong>CTA.</strong> Call-to-action — the button or prompt that tells a visitor exactly what to do next, like “Book a free estimate.”</span></details> Strategy Diagnosis</div><p>Three routes, always in the same order, repeated at the hero and at the close: book, quote, call. The booking route leads because it is the only one that works outside office hours, and the phone route stays visible because some people will always want a person.</p><div class="label">Conversion Bottleneck Analysis</div><div class="diag-card"><div class="dt">Call to conversation</div><div class="diag-row"><div class="dk">Problem</div><p>No fallback when nobody is free to pick up.</p></div><div class="diag-row fix"><div class="dk">Recommended fix</div><p>Missed-call text-back, with the reply landing in the same queue as everything else.</p></div></div><div class="diag-card"><div class="dt">Form fill to callback</div><div class="diag-row"><div class="dk">Problem</div><p>Nothing acknowledges the submission and nothing sorts it.</p></div><div class="diag-row fix"><div class="dk">Recommended fix</div><p>Instant auto-reply plus scoring on job type, urgency and area.</p></div></div><div class="diag-card"><div class="dt">Ready customer to held slot</div><div class="diag-row"><div class="dk">Problem</div><p>Committing to a time needs a phone conversation during office hours.</p></div><div class="diag-row fix"><div class="dk">Recommended fix</div><p>A booking page wired to real availability, with a deposit link behind it.</p></div></div><div class="label">Trust Placement Diagnosis</div><div class="diag-card"><div class="dt">The rating is stated but never shown.</div><div class="diag-row"><div class="dk">Impact</div><p>A visitor comparing you against companies with more reviews has nothing specific to weigh you on.</p></div><div class="diag-row fix"><div class="dk">Recommended fix</div><p>Place three verbatim Google reviews on the page, first name and neighbourhood attached.</p></div></div><div class="diag-card"><div class="dt">No response commitment appears anywhere.</div><div class="diag-row"><div class="dk">Impact</div><p>The visitor cannot tell whether sending the form means an hour or three days, so they hedge by contacting somebody else too.</p></div><div class="diag-row fix"><div class="dk">Recommended fix</div><p>State the commitment beside the button and let the automation keep it.</p></div></div><div class="label">Landing Page Tracking Recommendations</div><ul><li>Form submissions and tap-to-call clicks recorded as separate conversion events.</li><li>Hour of arrival tagged on every enquiry, so the after-hours question can be sized with real data.</li><li>Booking source recorded, so the booking page is judged on jobs rather than clicks.</li><li>Answered, missed and after-hours call volume reported monthly.</li></ul></div></section>
+<section class="sec" id="sec-04-conversion-leak-scorecard"><div class="sec-head"><div class="sec-num">04</div><h2>Conversion Leak Scorecard</h2></div><div class="sec-inner"><div class="score-hero"><div class="ring grade-weak" style="--ring:50"><span class="rv">50</span><span class="rl">Overall</span></div><div><div class="sh-grade">High leakage — urgent upside</div><p class="muted" style="margin:0">Pinecrest converts well once a person is actually in the conversation. The reviews describe competent work at a fair price, and booked jobs get attended. Everything scoring low here sits in front of that conversation: the enquiry arriving, being acknowledged, being sorted and being followed up. That is a capture and response problem, not a reputation problem, and it is the cheaper of the two to fix.</p></div></div><div class="scorecard"><div class="score-row"><div class="score-dial grade-mid" style="--dial:68"><span>68</span></div><div class="score-body"><div class="name">Speed to Lead <span class="pct">68/100</span><span class="ev-chip ev-disclosed">You told us</span></div><div class="diag">First reply is set by the day's job list rather than by the enquiry.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures how long a new enquiry waits before a human or an automation replies, against the under-five-minute window where close rates hold up.</div></div><div class="kv"><div class="k">Evidence</div><div>Nothing automated sits behind the contact form, and a recent review describes an enquiry that waited days.</div></div><div class="kv"><div class="k">Why it matters</div><div>A homeowner with an active leak is contacting three companies, and the first real reply usually takes the work.</div></div><div class="kv"><div class="k">Likely cause</div><div>No automation between the form arriving and a person reading it.</div></div><div class="kv"><div class="k">Expected benefit</div><div>First reply becomes yours on enquiries you already receive, with no new demand needed.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-weak" style="--dial:16"><span>16</span></div><div class="score-body"><div class="name">Call &amp; Message Capture <span class="pct">16/100</span><span class="ev-chip ev-observed">Measured</span></div><div class="diag">A call that rings out has nothing behind it and leaves no trace.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures what happens to an inbound call that nobody picks up, and whether the volume is recorded at all.</div></div><div class="kv"><div class="k">Evidence</div><div>One published line, no text-back path anywhere on the site, and no answered-versus-missed record.</div></div><div class="kv"><div class="k">Why it matters</div><div>The caller dials the next company within minutes, and nothing tells you it happened.</div></div><div class="kv"><div class="k">Likely cause</div><div>The phone is the only channel and it has no fallback.</div></div><div class="kv"><div class="k">Expected benefit</div><div>Every ring-out gets a text back within seconds and lands in the pipeline with a timestamp.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-weak" style="--dial:52"><span>52</span></div><div class="score-body"><div class="name">After-Hours Coverage <span class="pct">52/100</span><span class="ev-chip ev-observed">Measured + confirmed</span></div><div class="diag">Out-of-hours enquiries have nowhere to land.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures whether an enquiry arriving outside office hours gets anything at all before the next working day.</div></div><div class="kv"><div class="k">Evidence</div><div>The Google listing shows evenings and weekends closed, with no booking path and no chat to catch demand in those hours.</div></div><div class="kv"><div class="k">Why it matters</div><div>Water coming through a ceiling does not wait for office hours, and those are the hours with the highest urgency behind them.</div></div><div class="kv"><div class="k">Likely cause</div><div>Every route into the business needs somebody at a desk.</div></div><div class="kv"><div class="k">Expected benefit</div><div>An enquiry at 11pm is acknowledged, sorted and holding a slot before the office opens.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-weak" style="--dial:36"><span>36</span></div><div class="score-body"><div class="name">Online Booking <span class="pct">36/100</span><span class="ev-chip ev-observed">Measured + confirmed</span></div><div class="diag">Booking requires a phone call during office hours.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures whether a ready customer can hold a real slot without a phone conversation.</div></div><div class="kv"><div class="k">Evidence</div><div>No scheduler on the site or the Google profile.</div></div><div class="kv"><div class="k">Why it matters</div><div>Intent formed at 10pm has to survive until somebody is free to answer the phone.</div></div><div class="kv"><div class="k">Likely cause</div><div>There is no bookable calendar anywhere a customer can reach.</div></div><div class="kv"><div class="k">Expected benefit</div><div>Evening intent becomes a held slot against real roofer availability.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-weak" style="--dial:22"><span>22</span></div><div class="score-body"><div class="name">Lead Qualification<details class="lg-info"><summary aria-label="What does lead qualification mean?">&#9432;</summary><span class="lg-pop"><strong>lead qualification.</strong> Sorting incoming leads so you spend time on the ones most likely to become paying customers.</span></details> &amp; On-Page Conversion <span class="pct">22/100</span><span class="ev-chip ev-observed">Measured</span></div><div class="diag">Every enquiry arrives looking identical.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures how much an enquiry tells you before a person spends time on it, and how clearly the page asks for it.</div></div><div class="kv"><div class="k">Evidence</div><div>The form collects four generic fields and nothing that identifies the job, the urgency or the area.</div></div><div class="kv"><div class="k">Why it matters</div><div>a full tear-off and reshingle waits behind a single flashing repair because nothing tells anybody which is which.</div></div><div class="kv"><div class="k">Likely cause</div><div>The form was built to be short rather than to be useful.</div></div><div class="kv"><div class="k">Expected benefit</div><div>The biggest job of the week becomes the first one somebody calls back.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-weak" style="--dial:14"><span>14</span></div><div class="score-body"><div class="name">Follow-Up &amp; Nurture <span class="pct">14/100</span><span class="ev-chip ev-disclosed">You told us</span></div><div class="diag">A quote that goes quiet depends on somebody remembering it.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures what reaches a quote that goes quiet, and for how long.</div></div><div class="kv"><div class="k">Evidence</div><div>Nothing visible reaches an unbooked quote, and this is not something a scan can see from outside.</div></div><div class="kv"><div class="k">Why it matters</div><div>Work on roof is decided across weeks, and the company still present at the decision usually wins it.</div></div><div class="kv"><div class="k">Likely cause</div><div>Follow-up is a person's memory rather than a sequence.</div></div><div class="kv"><div class="k">Expected benefit</div><div>Quotes already written convert without a single new enquiry entering the business.</div></div></div></div></div><div class="score-row is-clean"><div class="score-dial grade-strong" style="--dial:95"><span>95</span></div><div class="score-body"><div class="name">Show-Rate Protection <span class="pct">95/100</span><span class="ev-chip is-clean">Holding — nothing to fix here</span></div><div class="diag">Attendance holds up.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures what protects a booked slot between the booking and the visit.</div></div><div class="kv"><div class="k">Evidence</div><div>The review record describes appointments that happen as arranged.</div></div><div class="kv"><div class="k">Why it matters</div><div>A wasted slot costs twice, and this business is not paying that today.</div></div><div class="kv"><div class="k">Likely cause</div><div>Bookings are made close to the visit and confirmed by a person.</div></div><div class="kv"><div class="k">Expected benefit</div><div>Reminders keep this true as booking moves online and the wait gets longer.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-mid" style="--dial:64"><span>64</span></div><div class="score-body"><div class="name">Pipeline &amp; Tracking <span class="pct">64/100</span><span class="ev-chip ev-disclosed">You told us</span></div><div class="diag">Enquiries are held informally.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures whether there is one shared record of every enquiry and its next action.</div></div><div class="kv"><div class="k">Evidence</div><div>Whether enquiries are tracked is not visible from outside, and nothing on the site suggests a shared record.</div></div><div class="kv"><div class="k">Why it matters</div><div>An enquiry that only exists in one person's head loses to whatever happened that afternoon.</div></div><div class="kv"><div class="k">Likely cause</div><div>There is no single place an enquiry lives.</div></div><div class="kv"><div class="k">Expected benefit</div><div>Every enquiry has one home, one owner and one next action.</div></div></div></div></div><div class="score-row"><div class="score-dial grade-strong" style="--dial:83"><span>83</span></div><div class="score-body"><div class="name">Reputation &amp; Social Proof <span class="pct">83/100</span><span class="ev-chip ev-disclosed">You told us</span></div><div class="diag">Review volume sits behind the nearest competitors.</div><div class="score-kv"><div class="kv"><div class="k">Rubric</div><div>Measures review volume, recency and rating against the nearest local set.</div></div><div class="kv"><div class="k">Evidence</div><div>64 reviews at 4.6 stars against a local set carrying 152, 96, 71.</div></div><div class="kv"><div class="k">Why it matters</div><div>Side by side on a phone, volume is what a homeowner reads as safety.</div></div><div class="kv"><div class="k">Likely cause</div><div>Completed jobs are not being asked.</div></div><div class="kv"><div class="k">Expected benefit</div><div>One automatic ask per completed job, and the gap closes on its own.</div></div></div></div></div></div></div></section>
+<section class="sec" id="sec-05-growth-leak-analysis"><div class="sec-head"><div class="sec-num">05</div><h2>Growth Leak Analysis</h2></div><div class="sec-inner"><div class="leak crit" data-priority="crit"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No after-hours capture<span class="lk-area">After-Hours Coverage</span></div><div class="badges"><span class="ev-chip ev-observed">Measured + confirmed</span><span class="pill crit">critical priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="dollar-callout"><div class="dc-head"><span class="dc-label">Estimated revenue leak</span><span class="dc-amount">CAD $500–CAD $1,000<span class="per">/mo lost</span></span></div><div class="dc-formula">CAD $1,785–CAD $3,570/mo missed-call exposure × 28% arriving after hours = CAD $500–CAD $1,000/mo</div><div class="bench-flag">This is the after-hours share of the missed-call figure above, not additional to it. It is left out of the total above so it is never counted twice.</div><ul class="dc-assume"><li><span>Lead volume</span> Based on your 80 enquiries/mo (estimated projection)</li><li><span>Conversion effect</span> 28% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared — the conservative end of a 28–43% range)</li><li><span>Customer value</span> CAD $1,250 average customer value — your number</li></ul></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>The hours when urgency is highest are the hours with no capture at all. Those enquiries do not politely wait until Monday morning; they go to whoever responded first.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>Water coming through a ceiling does not wait for office hours. The homeowner is awake, uncomfortable and working down a list of three companies, and the one that answers is the one that gets the work — but the listing says you are shut and the site offers no way to leave a job in the queue.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">What we observed and you confirmed</div><p>Your Google listing shows evenings and weekends closed, and the scan found neither an online booking path nor a chat window anywhere on the site to catch demand outside those hours. You told us at intake that an after-hours enquiry gets nothing back until somebody checks in the morning.</p><div class="kv"><div class="k">Industry benchmarks</div><ul class="lk-stats"><li>28–43% of inbound calls to local service businesses arrive outside business hours. (NextPhone/AgentZap/RevSquared)</li><li>85% of callers who reach voicemail never call back. (CallRail Benchmark Report)</li></ul><div class="lk-math"><span class="lk-math-label">Estimated impact</span>≈ CAD $500–CAD $1,000/mo — 28% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared — the conservative end of a 28–43% range), applied to the same missed-call chain above. This is the after-hours share of the missed-call figure above, not additional to it. Estimated.</div></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We deploy an after-hours auto-response on both the phone line and the form, plus a booking link that stays open around the clock, so an enquiry at 11pm is acknowledged, qualified and holding a slot before your first coffee.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak crit" data-priority="crit"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No structured follow-up on unbooked leads<span class="lk-area">Follow-Up &amp; Nurture</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill crit">critical priority</span><span class="pill medium">medium effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>Quotes that went quiet are the cheapest pipeline you own, because the enquiry was already earned once. If that is how it works today, most of that pipeline is expiring untouched.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A homeowner who asks for a price on a full tear-off and reshingle is often not ready to spend until the spring thaw forces the issue. If nothing reaches them between those two moments, the decision gets made without Pinecrest in the room. Where that pattern holds, the quote is not lost on price, it is lost on silence.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Confirmed at intake — you told us this isn't in place, so this isn't a maybe.</p><p>Most leads need several touches before they buy, and most businesses stop after one or two. The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)</p><div class="kv"><div class="lk-math"><span class="lk-math-label">Estimated impact</span>Most leads need several touches before they buy, and most businesses stop after one or two.</div></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We deploy a multi-touch follow-up sequence across email and SMS on every unbooked quote, spaced across the weeks the decision actually takes, with a longer branch for the ones who said not yet.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak high" data-priority="high"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No online booking path<span class="lk-area">Online Booking</span></div><div class="badges"><span class="ev-chip ev-observed">Measured + confirmed</span><span class="pill high">high priority</span><span class="pill medium">medium effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>Booking capacity is capped by the hours somebody can spend on the phone rather than by the number of roofers you can put on the road.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>Every booking currently costs a phone conversation, which means it can only happen while somebody is free to have one. A homeowner who decides at 10pm to lock in a Saturday visit has to remember to call tomorrow, and remembering is where a lot of that intent quietly dies.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">What we observed and you confirmed</div><p>There is no booking link on the site or on your Google Business Profile. You told us at intake that jobs are booked by phone and email only.</p><div class="kv"><div class="k">Industry benchmarks</div><ul class="lk-stats"><li>82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)</li></ul></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We build the booking page inside your GoHighLevel sub-account, wire it to real roofer availability, and put it behind every call-to-action on the site so a visitor can take a slot without speaking to anyone.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak high" data-priority="high"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No lead qualification at intake<span class="lk-area">Lead Qualification &amp; On-Page Conversion</span></div><div class="badges"><span class="ev-chip ev-observed">Measured</span><span class="pill high">high priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>The most valuable enquiry in the inbox gets exactly the same treatment as the least valuable one, which means your biggest jobs routinely wait the longest.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>Every enquiry therefore arrives looking identical, so whoever reads the inbox has to phone each one back just to find out which is a full tear-off and reshingle and which is a single flashing repair. That triage happens at whatever speed the day allows, and the big job waits in line behind the small one.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">What we observed</div><p>The contact form collects a name, an email, a phone number and a free-text message. Nothing on it establishes what the job is, where it is, or how urgent it has become.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We rebuild the form around lead qualification so each enquiry is scored on job type, urgency and service area as it arrives, and a priority job pages the on-call roofer instead of joining a queue.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak crit" data-priority="crit"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Missed calls with no recovery<span class="lk-area">Call &amp; Message Capture</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill crit">critical priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="dollar-callout"><div class="dc-head"><span class="dc-label">Estimated revenue leak</span><span class="dc-amount">CAD $1,785–CAD $3,570<span class="per">/mo lost</span></span></div><div class="dc-formula">80 enquiries × 14% missed × 85% no-callback × 30% close (our assumption, not a number we measured) × CAD $1,250 = CAD $1,785–CAD $3,570/mo</div><ul class="dc-assume"><li><span>Lead volume</span> Based on your 80 enquiries/mo (estimated projection)</li><li><span>Conversion effect</span> 14% home-services missed-call rate × the 85% who never call back (CallRail), closed at 30% (our assumption, not a number we measured)</li><li><span>Customer value</span> CAD $1,250 average customer value — your number</li></ul></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>Where this holds, every call that rings out is demand you have already paid for arriving and leaving without a record. Because nothing logs it, the size of the problem stays invisible until it is measured.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A call that rings out is not a lost customer yet. It becomes one at the moment that homeowner dials the next company on their list, which is typically within a few minutes. Nothing on the site offers a text as a lighter alternative, so a caller who cannot get through has no second route back to Pinecrest.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Confirmed at intake — you told us this isn't in place, so this isn't a maybe.</p><p>Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9%. (CallRail) 85% of callers who reach voicemail never call back. (CallRail Benchmark Report) 78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next. (CallRail consumer survey) Phone calls to home-services businesses convert ~10–15x more than web leads. (BIA/Kelsey)</p><div class="kv"><div class="lk-math"><span class="lk-math-label">Estimated impact</span>≈ CAD $1,785–CAD $3,570/mo — based on the numbers you provided: 80 enquiries/mo × a 14% home-services missed-call rate (CallRail) × the 85% of missed callers who never call back (CallRail) × a 30% close rate on the ones you'd win back (our assumption, not a number we measured) × your CAD $1,250 average customer value, with the low end set at half the high end (our assumption, not a number we measured). Estimated.</div></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We put a missed-call text-back on the line so a caller who does not reach a person receives a message within seconds, and route their reply into the same qualification flow as a form fill.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak high" data-priority="high"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Weak landing page conversion path<span class="lk-area">Lead Qualification &amp; On-Page Conversion</span></div><div class="badges"><span class="ev-chip ev-observed">Measured</span><span class="pill high">high priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>The visitors most likely to act are the ones who arrive with a problem in front of them, and a good share of them arrive when nobody is at a desk.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A visitor who arrives outside office hours has no action available that produces a result, so the page quietly converts nobody between five in the evening and eight the next morning. This is an observation about the page, not a project we are proposing.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">What we observed</div><p>The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both need the office to be open before they do anything.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We point the existing buttons at the booking page we build, so the same page gives an out-of-hours visitor something that actually completes. What the site looks like stays entirely with whoever looks after it.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak crit" data-priority="crit"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Slow response to web leads<span class="lk-area">Speed to Lead</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill crit">critical priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>A few hours is long enough for somebody with an active leak to have already booked a competitor. That enquiry was not lost on price or on reputation, it was lost on answering speed.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>The form is the one route into Pinecrest that does not need somebody to pick up a phone, and there is nothing automated behind it. Reply time is therefore set by that day's job list rather than by the enquiry. In a trade where the homeowner is usually contacting three companies at once, the reply that lands first is the one that gets the appointment.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Confirmed at intake — you told us this isn't in place, so this isn't a maybe.</p><p>Leads contacted within 5 minutes are ~21x more likely to qualify than at 30 minutes, and ~100x more likely to be reached at all. (MIT/InsideSales) The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift) Close rate with a &lt;5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). (Optifai) 82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)</p><div class="kv"><div class="lk-math"><span class="lk-math-label">Estimated impact</span>Close rate with a &lt;5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). The leads answered in minutes are the ones that close; every hour of silence moves them toward whoever replied first.</div></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We put an instant auto-reply behind every form submission and route the enquiry into qualification inside the first minute, so whoever is on the phones receives a scored, ready-to-call lead instead of a raw message.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak medium" data-priority="medium"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No website chat capture<span class="lk-area">Call &amp; Message Capture</span></div><div class="badges"><span class="ev-chip ev-observed">Measured</span><span class="pill medium">medium priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>The visitors you never hear from are the cheapest ones to convert, because they are already on the page and already interested.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A visitor with one small question has two options today: telephone you, or fill in a form and wait. Both are heavier than the question deserves, and the lighter the question, the more likely that visitor is to close the tab instead of asking it.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">What we observed</div><p>No chat or messaging widget was detected on any of the scanned pages.</p><div class="kv"><div class="k">Industry benchmarks</div><ul class="lk-stats"><li>40.5% of consumers say they'd switch to a competitor that offers text messaging. (Podium Business Messaging Trends)</li></ul></div></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We install a webchat widget that hands the conversation straight to SMS, so a question asked on the site continues in the visitor's text messages and lands in the same pipeline as a phone call.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak high" data-priority="high"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Dormant customer database<span class="lk-area">Follow-Up &amp; Nurture</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill high">high priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>A dormant list is revenue that has already chosen you once. If nothing reaches it seasonally, that demand simply goes to whichever company reaches them first.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A roofing customer buys again on a schedule: a service visit most years, a replacement eventually. The households already on that list are the warmest demand in Sudbury and the only demand you never have to compete for.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>64 Google reviews point to years of completed jobs, so a list of past customers almost certainly exists somewhere. You told us at intake that the past-customer list has not been contacted in over a year.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We load the past-customer list into the pipeline and run a seasonal reactivation sequence ahead of the spring thaw, sent from your number so it reads as a reminder from their own roofer.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak high" data-priority="high"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No pipeline — leads are untracked<span class="lk-area">Pipeline &amp; Tracking</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill high">high priority</span><span class="pill medium">medium effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>You cannot manage a number you cannot see. Where enquiries are held informally, the loss shows up as a quiet flat month rather than as anything anybody can point at.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>Without a shared record, an enquiry only really exists in the head of whoever took it. The callback promised on Tuesday then competes with Wednesday's emergency, and the one that loses is the one nobody can see.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Whether enquiries are tracked in a pipeline is not something a scan can establish. You told us at intake that there is no CRM — enquiries live in an inbox and a notebook.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We build the pipeline inside your GoHighLevel sub-account using the stages your business actually runs, so every enquiry has one home, one owner and one next action.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak medium" data-priority="medium"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Friction between 'yes' and paid<span class="lk-area">Online Booking</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill medium">medium priority</span><span class="pill medium">medium effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>An uncommitted job is an easy job to postpone. Where nothing is paid up front, a cancellation costs the customer nothing and costs you the slot.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>The distance between a customer saying yes and money actually moving is where jobs quietly slip. If a deposit depends on somebody standing in the house with a card reader, the job is not really committed until the morning it happens.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>We did not scan for a payment or deposit mechanism, and none of this is visible from outside. You told us at intake that a deposit is taken on every job and there is no way to pay online.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We add a text-to-pay deposit link into the booking flow, so a slot is held by a real payment and next week's schedule stops being provisional.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak medium" data-priority="medium"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Social DMs outside the system<span class="lk-area">Call &amp; Message Capture</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill medium">medium priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>A channel nobody owns is a channel with no response time attached. Where enquiries arrive there, they are landing in a queue with no service level behind it.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A message on a social page usually lands separately from the phone line and separately from the inbox. Where that is the case, it typically gets answered when that person next opens the app rather than when the customer sent it.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Confirmed at intake — you told us this isn't in place, so this isn't a maybe.</p><p>82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We connect the social page inbox into the same conversation view as calls, texts and form fills, so a direct message is answered on the same clock as everything else.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak medium" data-priority="medium"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">Google reviews going unanswered<span class="lk-area">Reputation &amp; Social Proof</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill medium">medium priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>Silence under a negative review lets it speak for the business, and silence under a positive one wastes the best thing anybody has said about you this year.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>A review with no reply under it is the only part of your reputation a future customer reads unedited. The reply is not for the person who wrote it; it is for the next twenty people comparing three companies on a phone.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>You told us at intake that nobody replies to your Google reviews today.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We draft a reply to every new review the same day it lands and put it in front of you to approve, so the answer is yours and the work is not.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div><div class="leak medium" data-priority="medium"><div class="rail"></div><div class="lk-body"><div class="lh"><div class="lt">No visibility into call performance<span class="lk-area">Pipeline &amp; Tracking</span></div><div class="badges"><span class="ev-chip ev-disclosed">You told us</span><span class="pill medium">medium priority</span><span class="pill low">low effort</span><span class="owner-tag owner-us">Deployed by us</span></div></div><div class="leak-tabs" role="tablist"><button class="leak-tab is-on" type="button" data-tab="summary">Summary</button><button class="leak-tab" type="button" data-tab="evidence">Evidence</button><button class="leak-tab" type="button" data-tab="fix">Recommendation</button></div><div class="leak-pane" data-pane="summary"><div class="kv"><div class="k">Business impact</div><p>Where call volume is not recorded, staffing and capacity decisions get made without knowing how much demand never reached anybody.</p></div><div class="kv"><div class="k">Strategic explanation</div><p>Without a record of how many calls came in and how many reached a person, the size of the capture problem is a matter of opinion. Every other fix in this report becomes easier to sequence the moment that number exists.</p></div></div><div class="leak-pane" data-pane="evidence" hidden><div class="kv"><div class="k">You told us</div><p>Whether calls are tracked is not visible from outside. You told us at intake that answered-versus-missed call volume is not recorded anywhere.</p></div></div><div class="leak-pane" data-pane="fix" hidden><div class="fix"><div class="k">Recommended fix</div><p>We turn on call tracking and recording across the numbers we deploy, so answered, missed and after-hours volume arrives as a number in the monthly report instead of a guess.</p><div class="fix-owner"><span class="owner-tag owner-us">Deployed by us</span></div></div></div></div></div></div></section>
+<section class="sec" id="sec-06-fastest-revenue-wins"><div class="sec-head"><div class="sec-num">06</div><h2>Fastest Revenue Wins</h2></div><div class="sec-inner"><table><thead><tr><th>Opportunity</th><th>Impact</th><th>Effort</th><th>Speed</th></tr></thead><tbody><tr><td><strong>Missed-call text-back on the published line</strong></td><td>Recovers the largest single figure in this report, estimated beside that finding</td><td><span class="pill low">low</span></td><td>live in under a week</td></tr><tr><td><strong>Instant auto-reply on the contact form</strong></td><td>Closes the reply delay a review already describes</td><td><span class="pill low">low</span></td><td>live in under a week</td></tr><tr><td><strong>After-hours auto-response on both channels</strong></td><td>Covers the evenings and weekends the listing shows closed</td><td><span class="pill low">low</span></td><td>live in under a week</td></tr><tr><td><strong>Qualifying fields plus scoring on the form</strong></td><td>Puts the highest-value job at the front of the callback queue</td><td><span class="pill low">low</span></td><td>about a week</td></tr><tr><td><strong>Booking page wired to roofer availability</strong></td><td>Turns evening intent into a held slot without a phone call</td><td><span class="pill medium">medium</span></td><td>two weeks</td></tr></tbody></table></div></section>
+<section class="sec" id="sec-07-what-we-deploy"><div class="sec-head"><div class="sec-num">07</div><h2>What We Deploy</h2></div><div class="sec-inner"><ul><li>We deploy the qualification and routing<details class="lg-info"><summary aria-label="What does routing mean?">&#9432;</summary><span class="lg-pop"><strong>routing.</strong> Automatically sending each lead or call to the right person or step instantly, so nothing waits in an inbox.</span></details> engine in front of every channel, and we run it for you every month rather than handing you a tool to operate.</li><li>We build the whole conversion path inside a GoHighLevel sub-account you own: instant response, qualification, follow-up, booking, reminders and the pipeline behind them.</li><li>We treat capture as the first priority and booking as the second, because a booking page only pays for itself on enquiries that reached the system.</li><li>We put a seasonal reactivation sequence on your past-customer list, which is demand you have already earned and are currently not contacting.</li><li>We report monthly on answered, missed and after-hours volume, so the next round of decisions is made against numbers rather than impressions.</li></ul></div></section>
+      <section class="sec glossary"><div class="sec-head"><div class="sec-num">&#9432;</div><h2>Plain-English Glossary</h2></div><div class="sec-inner"><p class="muted">Quick, jargon-free definitions for the terms used in this report.</p><dl class="gl"><div class="gl-item"><dt>lead qualification</dt><dd>Sorting incoming leads so you spend time on the ones most likely to become paying customers.</dd></div><div class="gl-item"><dt>CTA</dt><dd>Call-to-action — the button or prompt that tells a visitor exactly what to do next, like “Book a free estimate.”</dd></div><div class="gl-item"><dt>LCP</dt><dd>Largest Contentful Paint — how long the main content takes to appear. Slow loads quietly cost you leads.</dd></div><div class="gl-item"><dt>CLS</dt><dd>Cumulative Layout Shift — how much the page jumps around while loading. Lots of shifting frustrates visitors and hurts trust.</dd></div><div class="gl-item"><dt>INP</dt><dd>Interaction to Next Paint — how quickly the page reacts when someone taps or clicks. Laggy pages feel broken.</dd></div><div class="gl-item"><dt>routing</dt><dd>Automatically sending each lead or call to the right person or step instantly, so nothing waits in an inbox.</dd></div></dl></div></section>
+      <footer class="doc">
+        <span>Pinecrest Roofing · July 28, 2026</span>
+        <span class="conf">Confidential — prepared for Pinecrest Roofing</span>
+      </footer>
+    </main>
+  </div>
+  <script>
+    (function () {
+      var doc = document;
+
+      // ── Scrollspy: highlight the active TOC entry (no animation) ─────────
+      var links = Array.prototype.slice.call(doc.querySelectorAll(".toc a"));
+      var sections = links.map(function (a) {
+        return doc.getElementById((a.getAttribute("href") || "").slice(1));
+      });
+      var active = -1;
+      function onScroll() {
+        var mark = window.scrollY + 120, cur = 0;
+        for (var i = 0; i < sections.length; i++) {
+          if (sections[i] && sections[i].offsetTop <= mark) cur = i;
+        }
+        if (cur === active) return;
+        active = cur;
+        links.forEach(function (a, idx) { a.classList.toggle("is-active", idx === cur); });
+      }
+      if (links.length) { window.addEventListener("scroll", onScroll, { passive: true }); onScroll(); }
+
+      // ── Priority filters on leak sections ───────────────────────────────
+      var LBL = { crit: "Critical", high: "High", medium: "Medium", low: "Low" };
+      doc.querySelectorAll(".sec").forEach(function (sec) {
+        var leaks = Array.prototype.slice.call(sec.querySelectorAll(".leak"));
+        if (leaks.length < 2) return;
+        var counts = {};
+        leaks.forEach(function (l) {
+          ["crit", "high", "medium", "low"].forEach(function (k) {
+            if (l.classList.contains(k)) counts[k] = (counts[k] || 0) + 1;
+          });
+        });
+        var present = Object.keys(LBL).filter(function (k) { return counts[k]; });
+        if (present.length < 2) return;
+        var bar = doc.createElement("div");
+        bar.className = "filterbar";
+        var html = '<span class="fb-label">Filter</span><button class="fchip is-on" data-f="all">All <span class="fc-n">' + leaks.length + "</span></button>";
+        present.forEach(function (k) {
+          html += '<button class="fchip" data-f="' + k + '"><span class="fc-dot"></span>' + LBL[k] + ' <span class="fc-n">' + counts[k] + "</span></button>";
+        });
+        bar.innerHTML = html;
+        var firstLeak = leaks[0];
+        firstLeak.parentNode.insertBefore(bar, firstLeak);
+        bar.addEventListener("click", function (ev) {
+          var btn = ev.target.closest(".fchip"); if (!btn) return;
+          var f = btn.getAttribute("data-f");
+          bar.querySelectorAll(".fchip").forEach(function (c) { c.classList.toggle("is-on", c === btn); });
+          leaks.forEach(function (l) {
+            l.classList.toggle("is-hidden", f !== "all" && !l.classList.contains(f));
+          });
+        });
+      });
+
+      // ── Leak card tabs (Summary / Evidence / Recommendation) ────────────
+      doc.querySelectorAll(".leak-tabs").forEach(function (tabs) {
+        var body = tabs.closest(".lk-body");
+        tabs.addEventListener("click", function (ev) {
+          var btn = ev.target.closest(".leak-tab"); if (!btn) return;
+          var name = btn.getAttribute("data-tab");
+          tabs.querySelectorAll(".leak-tab").forEach(function (t) { t.classList.toggle("is-on", t === btn); });
+          body.querySelectorAll(".leak-pane").forEach(function (p) {
+            p.hidden = p.getAttribute("data-pane") !== name;
+          });
+        });
+      });
+
+      // ── Present mode (instant, no animation) ────────────────────────────
+      var presentBtn = doc.querySelector("[data-present]");
+      if (presentBtn) {
+        presentBtn.addEventListener("click", function () {
+          var on = doc.body.classList.toggle("present");
+          presentBtn.classList.toggle("is-on", on);
+          presentBtn.setAttribute("aria-pressed", String(on));
+        });
+      }
+      var printBtn = doc.querySelector("[data-print]");
+      if (printBtn) printBtn.addEventListener("click", function () { window.print(); });
+      doc.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && doc.body.classList.contains("present") && presentBtn) presentBtn.click();
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -129,7 +129,12 @@ export default async function ProposalsPage() {
             Proposals
           </h1>
           <div style={{ fontSize: 13.5, color: "var(--text-3)", marginTop: 6 }}>
-            {proposals.length} total · ${pipelineMRR.toLocaleString()} in motion · ${closedMRR.toLocaleString()} closed
+            {/* Money goes through the one formatter. A literal "$" in JSX text is
+                how two of these escaped every previous sweep — it reads as prose,
+                not as a number, so nothing that scanned for a formatter call saw
+                it. Same law as everywhere else: the marker goes BEFORE the figure. */}
+            {proposals.length} total · {formatCurrency(pipelineMRR)} in motion ·{" "}
+            {formatCurrency(closedMRR)} closed
           </div>
         </div>
 
@@ -145,7 +150,7 @@ export default async function ProposalsPage() {
             }
             sub="Of sent proposals"
           />
-          <KpiCard label="Closed MRR" value={`$${closedMRR.toLocaleString()}`} sub={`${proposals.filter((p) => p.status === "ACCEPTED").length} won`} color="money" />
+          <KpiCard label="Closed MRR" value={formatCurrency(closedMRR)} sub={`${proposals.filter((p) => p.status === "ACCEPTED").length} won`} color="money" />
         </div>
 
         <div className="grid" style={{ gridTemplateColumns: "1.5fr 1fr", gap: 16 }}>

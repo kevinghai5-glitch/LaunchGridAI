@@ -3,6 +3,8 @@
 // failure (timeout, non-HTML, network error) it returns an empty string and the
 // caller falls back to Places metadata only.
 
+import { CRAWLER_USER_AGENT } from "@/lib/constants";
+
 const MAX_CHARS = 6000;
 const MAX_HTML_CHARS = 120000;
 
@@ -34,9 +36,10 @@ export async function fetchWebsitePage(
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        // Identify as a normal browser so most sites return real markup.
-        "User-Agent":
-          "Mozilla/5.0 (compatible; LaunchGridBot/1.0; +https://launchgrid.ai)",
+        // Browser-shaped so most sites return real markup, but honestly named:
+        // this string is what the prospect's admin sees in their access log, so
+        // it has to be the brand they'll hear from, not an internal codename.
+        "User-Agent": CRAWLER_USER_AGENT,
         Accept: "text/html",
       },
     });

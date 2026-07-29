@@ -42,11 +42,16 @@ ${business.address ? `Address: ${business.address}` : ""}
 
 Generate specific, actionable outreach intelligence for this SPECIFIC business. Be direct and concrete.
 
+THE OFFER IS FIXED — never invent a price, a package, or a price range:
+- CAD $6,500 one-time: four done-for-you deliverables plus a built and branded booking page inside GoHighLevel.
+- CAD $1,000/month: LeadGate AI lead qualification, ongoing management, and a monthly report.
+This is NOT lead generation — no ads, no SEO, no "more leads". It converts the leads they already get. It is NOT a website build; anything said about their site is advisory only. Nothing is handed off for their team to implement — it is done for them.
+
 Return ONLY valid JSON with this exact structure:
 {
   "painPoint": "A specific, realistic pain point this type of business likely faces (2-3 sentences, mention the business name)",
   "outreachAngle": "A compelling first-contact message angle — what problem you'd lead with and why they'd care (2-3 sentences)",
-  "suggestedOffer": "A specific monthly retainer offer: what's included, what problem it solves, and a price range ($297-$797/mo)"
+  "suggestedOffer": "How the fixed offer above lands for THIS business: which of their leaks the $6,500 build closes and what the $1,000/mo keeps running. State the prices exactly as given."
 }`;
 
     const response = await openai.chat.completions.create({

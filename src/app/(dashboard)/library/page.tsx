@@ -6,11 +6,18 @@ import { toast } from "sonner";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
 import type { SavedBusiness } from "@/types";
+import { APP_URL } from "@/lib/constants";
+import { formatCurrency } from "@/lib/utils";
+import { IntakeForm, type IntakeValues } from "@/components/businesses/IntakeForm";
+import { IntakeGaps } from "@/components/businesses/IntakeGaps";
+import { WorkflowPanel } from "@/components/businesses/WorkflowPanel";
 import {
-  BOOKING_METHOD_OPTIONS,
-  GBP_MANAGEMENT_OPTIONS,
-  BUILD_PRIORITY_OPTIONS,
-} from "@/lib/intake-options";
+  PackGateDialog,
+  parsePackGateFailure,
+  type PackGateBoundary,
+  type PackGateFailure,
+  type PackOverridePayload,
+} from "@/components/businesses/PackOverrideDialog";
 import {
   Search,
   Library as LibraryIcon,
@@ -32,6 +39,7 @@ import {
   Check,
   ChevronRight,
   ChevronDown,
+  Workflow,
 } from "lucide-react";
 
 type LibraryMode = "workspaces" | "saved";
@@ -80,6 +88,33 @@ interface LibraryItem {
     bookingToolName: string | null;
     gbpManagement: string | null;
     buildPriorities: string | null;
+    // /api/assets/library DOES select these five now (the comment that said it
+    // didn't was stale). They stay optional as a tolerance, not as a description:
+    // a feed that stopped sending one would render it blank rather than break the
+    // build, and the form only PATCHes fields the operator actually changed, so a
+    // blank it never showed a value for can't overwrite what's in the database.
+    // The "still guessed" panel above reads the columns server-side either way, so
+    // it stays right even if this feed ever thins out.
+    hasCallTracking?: boolean | null;
+    hasOnlinePayment?: boolean | null;
+    afterHoursHandling?: string | null;
+    missedCallHandling?: string | null;
+    responseSpeed?: string | null;
+    // THE TWO BUILD-BEARING ANSWERS. Same tolerance as the five above, and named
+    // here because they are the only intake answers that change what gets BUILT
+    // rather than only what a document says: "NO_ACCOUNTS" drops Social DM Capture
+    // and a `false` past-customer list drops Database Reactivation.
+    //
+    // /api/assets/library does not select them today, which is safe but not ideal.
+    // Safe because the build panel resolves them server-side off the row itself,
+    // and because the intake form only PATCHes answers the operator actually
+    // changed — a question it was handed nothing for computes to "not asked" on
+    // both sides of the diff, so it is never written. Not ideal because an answer
+    // already on file shows blank in the Library's intake editor, which invites
+    // him to answer it a second time. The fix is one line in that route's select,
+    // and these two are declared here so it becomes a one-file change.
+    socialEnquiries?: string | null;
+    pastCustomerContact?: string | null;
   };
   audits: AuditRow[];
   proposals: ProposalRow[];
@@ -99,6 +134,28 @@ const DELIVERABLE_META: {
   { id: "d4", label: "Implementation & Optimization Timeline", short: "Execution", icon: CalendarRange },
 ];
 
+// The two affordances under a saved cold audit — an anchor and a button that
+// have to read as siblings, so they share one style object.
+const teaserActionStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  fontSize: 11,
+  fontWeight: 600,
+  color: "var(--text-3)",
+  textDecoration: "none",
+};
+
+// Copies the ABSOLUTE public teaser URL. The "View" anchor beside this can stay
+// relative because the browser resolves it; a link pasted into the pre-call
+// email cannot, so it goes out with the configured host on the front.
+function copyTeaserLink(publicId: string) {
+  navigator.clipboard
+    .writeText(`${APP_URL}/a/${publicId}`)
+    .then(() => toast.success("Teaser link copied — this is what the prospect sees"))
+    .catch(() => toast.error("Couldn't copy"));
+}
+
 function nicheKey(item: LibraryItem): string {
   return (item.business.industry ?? item.business.category ?? "").toLowerCase();
 }
@@ -111,9 +168,13 @@ function fmtDate(iso: string): string {
   });
 }
 
-function money(n: number): string {
-  return "$" + Math.round(n).toLocaleString("en-US");
-}
+// Money on this page goes through formatCurrency (lib/utils) — the one formatter
+// for the whole product. There used to be a local helper here that printed a
+// US-formatted "$6,500", so a saved proposal row read "$6,500 + $1,000/mo" with
+// no currency on it at all, while the audit beside it read "CAD $1,290". The
+// prices are Canadian and the marker goes BEFORE the figure; keeping a second
+// formatter in this file is what let the two drift apart in the first place.
+// (formatCurrency rounds to whole dollars, same as the helper it replaced.)
 
 // Proposal status → accent color. Mirrors the lifecycle: draft → sent → viewed →
 // accepted / rejected.
@@ -342,393 +403,6 @@ function MiniButton({
   );
 }
 
-// ── Inline intake editor ──────────────────────────────────────────────────────
-// The intake inputs are the ONLY things that change what the D1–D4 deliverables
-// say (confirmed-vs-benchmark framing, leak suppression, services copy emphasis),
-// so they live right next to the Deliverables generate button — not on a separate
-// page. Same save path as everywhere else: PATCH /api/businesses/[id].
-
-type Tri = "yes" | "no" | "unknown";
-const b2tri = (v: boolean | null | undefined): Tri =>
-  v === true ? "yes" : v === false ? "no" : "unknown";
-const tri2bool = (t: Tri): boolean | null =>
-  t === "yes" ? true : t === "no" ? false : null;
-
-const INTAKE_SYSTEMS: { key: "hasCrm" | "hasFollowUpSequence" | "hasReminderSystem" | "hasPastCustomerDatabase"; label: string }[] = [
-  { key: "hasCrm", label: "CRM / lead pipeline" },
-  { key: "hasFollowUpSequence", label: "Automated follow-up" },
-  { key: "hasReminderSystem", label: "Appointment reminders" },
-  { key: "hasPastCustomerDatabase", label: "Past-customer list" },
-];
-
-// Fields the editor can persist. Mirrors the intake slice of updateBusinessSchema.
-type IntakeFields = Pick<
-  LibraryItem["business"],
-  | "avgClientValueCad"
-  | "monthlyLeadVolume"
-  | "hasCrm"
-  | "hasFollowUpSequence"
-  | "hasReminderSystem"
-  | "hasPastCustomerDatabase"
-  | "servicesFocus"
-  | "bookingMethod"
-  | "bookingToolName"
-  | "gbpManagement"
-  | "buildPriorities"
->;
-
-function IntakeEditor({
-  b,
-  onSaved,
-}: {
-  b: LibraryItem["business"];
-  onSaved: (next: IntakeFields) => void;
-}) {
-  const [systems, setSystems] = useState<Record<string, Tri>>({
-    hasCrm: b2tri(b.hasCrm),
-    hasFollowUpSequence: b2tri(b.hasFollowUpSequence),
-    hasReminderSystem: b2tri(b.hasReminderSystem),
-    hasPastCustomerDatabase: b2tri(b.hasPastCustomerDatabase),
-  });
-  const [focus, setFocus] = useState(b.servicesFocus ?? "");
-  const [avg, setAvg] = useState(b.avgClientValueCad?.toString() ?? "");
-  const [vol, setVol] = useState(b.monthlyLeadVolume?.toString() ?? "");
-  const [booking, setBooking] = useState(b.bookingMethod ?? "");
-  const [bookingTool, setBookingTool] = useState(b.bookingToolName ?? "");
-  const [gbp, setGbp] = useState(b.gbpManagement ?? "");
-  const [priorities, setPriorities] = useState<string[]>(
-    b.buildPriorities ? b.buildPriorities.split(",").map((s) => s.trim()).filter(Boolean) : []
-  );
-  const [saving, setSaving] = useState(false);
-
-  const stored = {
-    systems: {
-      hasCrm: b2tri(b.hasCrm),
-      hasFollowUpSequence: b2tri(b.hasFollowUpSequence),
-      hasReminderSystem: b2tri(b.hasReminderSystem),
-      hasPastCustomerDatabase: b2tri(b.hasPastCustomerDatabase),
-    } as Record<string, Tri>,
-    focus: b.servicesFocus ?? "",
-    avg: b.avgClientValueCad?.toString() ?? "",
-    vol: b.monthlyLeadVolume?.toString() ?? "",
-    booking: b.bookingMethod ?? "",
-    bookingTool: b.bookingToolName ?? "",
-    gbp: b.gbpManagement ?? "",
-    priorities: b.buildPriorities ?? "",
-  };
-  const prioritiesStr = priorities.join(",");
-  const dirty =
-    INTAKE_SYSTEMS.some((q) => systems[q.key] !== stored.systems[q.key]) ||
-    focus.trim() !== stored.focus.trim() ||
-    avg !== stored.avg ||
-    vol !== stored.vol ||
-    booking !== stored.booking ||
-    bookingTool.trim() !== stored.bookingTool.trim() ||
-    gbp !== stored.gbp ||
-    prioritiesStr !== stored.priorities;
-
-  const save = async () => {
-    if (saving || !dirty) return;
-    setSaving(true);
-    const num = (s: string): number | null => {
-      const n = parseInt(s, 10);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    };
-    const payload = {
-      hasCrm: tri2bool(systems.hasCrm),
-      hasFollowUpSequence: tri2bool(systems.hasFollowUpSequence),
-      hasReminderSystem: tri2bool(systems.hasReminderSystem),
-      hasPastCustomerDatabase: tri2bool(systems.hasPastCustomerDatabase),
-      servicesFocus: focus.trim() ? focus.trim() : null,
-      avgClientValueCad: num(avg),
-      monthlyLeadVolume: num(vol),
-      bookingMethod: booking ? (booking as IntakeFields["bookingMethod"]) : null,
-      // Tool name only means something when they book via a tool.
-      bookingToolName:
-        booking === "BOOKING_TOOL" && bookingTool.trim() ? bookingTool.trim() : null,
-      gbpManagement: gbp ? (gbp as IntakeFields["gbpManagement"]) : null,
-      buildPriorities: prioritiesStr ? prioritiesStr : null,
-    };
-    try {
-      const res = await fetch(`/api/businesses/${b.id}`, {
-        method: "PATCH",
-        headers: JSON_HEADERS,
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error || "Failed to save intake");
-        return;
-      }
-      onSaved(payload);
-      toast.success("Intake saved — regenerate to apply");
-    } catch {
-      toast.error("Failed to save intake");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const numInput = (
-    value: string,
-    setter: (v: string) => void,
-    label: string,
-    prefix?: string
-  ) => (
-    <div>
-      <label style={{ fontSize: 11, color: "var(--text-3)", display: "block", marginBottom: 4 }}>
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        {prefix && (
-          <span
-            style={{
-              position: "absolute",
-              left: 9,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "var(--text-subtle)",
-              fontSize: 12,
-              pointerEvents: "none",
-            }}
-          >
-            {prefix}
-          </span>
-        )}
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={value}
-          onChange={(e) => setter(e.target.value)}
-          placeholder="—"
-          style={{
-            width: "100%",
-            borderRadius: 7,
-            border: "1px solid var(--line)",
-            background: "var(--bg-deep)",
-            color: "var(--text)",
-            fontFamily: "inherit",
-            fontSize: 12,
-            padding: prefix ? "6px 9px 6px 18px" : "6px 9px",
-            outline: "none",
-          }}
-        />
-      </div>
-    </div>
-  );
-
-  return (
-    <div
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: 10,
-        background: "rgba(255,255,255,0.015)",
-        padding: "12px 12px 13px",
-        marginBottom: 10,
-        display: "flex",
-        flexDirection: "column",
-        gap: 11,
-      }}
-    >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
-        {numInput(avg, setAvg, "Avg. customer value", "$")}
-        {numInput(vol, setVol, "Monthly inquiries")}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
-          Systems already in place
-        </span>
-        {INTAKE_SYSTEMS.map((q) => (
-          <div key={q.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>{q.label}</span>
-            <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)" }}>
-              {(["yes", "no", "unknown"] as const).map((opt) => {
-                const active = systems[q.key] === opt;
-                const text = opt === "yes" ? "Yes" : opt === "no" ? "No" : "?";
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => setSystems((prev) => ({ ...prev, [q.key]: opt }))}
-                    style={{
-                      padding: "3px 10px",
-                      fontSize: 11,
-                      fontFamily: "inherit",
-                      cursor: "pointer",
-                      border: "none",
-                      borderLeft: opt === "yes" ? "none" : "1px solid var(--line)",
-                      background: active ? "var(--accent-grad)" : "transparent",
-                      color: active ? "#fff" : "var(--text-3)",
-                    }}
-                  >
-                    {text}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
-          How do they book right now?
-        </span>
-        <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)", alignSelf: "flex-start" }}>
-          {BOOKING_METHOD_OPTIONS.map((opt, i) => {
-            const active = booking === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setBooking(active ? "" : opt.value)}
-                style={{
-                  padding: "4px 11px",
-                  fontSize: 11,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  border: "none",
-                  borderLeft: i === 0 ? "none" : "1px solid var(--line)",
-                  background: active ? "var(--accent-grad)" : "transparent",
-                  color: active ? "#fff" : "var(--text-3)",
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        {booking === "BOOKING_TOOL" && (
-          <input
-            type="text"
-            value={bookingTool}
-            maxLength={120}
-            onChange={(e) => setBookingTool(e.target.value)}
-            placeholder="Which one? e.g. Calendly, Acuity, GHL"
-            style={{
-              width: "100%",
-              borderRadius: 7,
-              border: "1px solid var(--line)",
-              background: "var(--bg-deep)",
-              color: "var(--text)",
-              fontFamily: "inherit",
-              fontSize: 12,
-              padding: "6px 9px",
-              outline: "none",
-            }}
-          />
-        )}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>Manages own Google listing?</span>
-        <div style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--line)" }}>
-          {GBP_MANAGEMENT_OPTIONS.map((opt, i) => {
-            const active = gbp === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setGbp(active ? "" : opt.value)}
-                style={{
-                  padding: "3px 9px",
-                  fontSize: 11,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  border: "none",
-                  borderLeft: i === 0 ? "none" : "1px solid var(--line)",
-                  background: active ? "var(--accent-grad)" : "transparent",
-                  color: active ? "#fff" : "var(--text-3)",
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <label style={{ fontSize: 11, color: "var(--text-3)", display: "block", marginBottom: 4 }}>
-          Services they want more of
-        </label>
-        <textarea
-          value={focus}
-          maxLength={300}
-          rows={2}
-          onChange={(e) => setFocus(e.target.value)}
-          placeholder="e.g. emergency drain calls, water heater installs"
-          style={{
-            width: "100%",
-            borderRadius: 7,
-            border: "1px solid var(--line)",
-            background: "var(--bg-deep)",
-            color: "var(--text)",
-            fontFamily: "inherit",
-            fontSize: 12,
-            padding: "6px 9px",
-            outline: "none",
-            resize: "vertical",
-          }}
-        />
-        <p style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 4, lineHeight: 1.5 }}>
-          Copy wording only — never changes which leaks fire, the scores, or the math.
-        </p>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
-          Prioritize in the build
-        </span>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {BUILD_PRIORITY_OPTIONS.map((opt) => {
-            const active = priorities.includes(opt.value);
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() =>
-                  setPriorities((prev) =>
-                    prev.includes(opt.value)
-                      ? prev.filter((v) => v !== opt.value)
-                      : [...prev, opt.value]
-                  )
-                }
-                style={{
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  borderRadius: 999,
-                  border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`,
-                  background: active ? "var(--accent-grad)" : "transparent",
-                  color: active ? "#fff" : "var(--text-3)",
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        <p style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 2, lineHeight: 1.5 }}>
-          Ordering &amp; emphasis only — wires the checked doors first, never changes leaks or math.
-        </p>
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <MiniButton
-          onClick={save}
-          icon={Check}
-          label="Regenerate deliverables"
-          busy={saving}
-        />
-      </div>
-    </div>
-  );
-}
-
 // Compact count/status pill shown on a collapsed panel row.
 function StatChip({
   icon: Icon,
@@ -783,11 +457,35 @@ function BusinessPanel({
   const [packProgress, setPackProgress] = useState<{ pct: number; label: string } | null>(null);
   const [proposalRunning, setProposalRunning] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
+  const [showBuild, setShowBuild] = useState(false);
+  // Refetch token for the two panels that are COMPUTED SERVER-SIDE from the intake
+  // answers and the stored research — "what's still guessed" and "what this build
+  // includes". Bumped on every intake save and on anything that captures a research
+  // snapshot. Neither can be adjusted optimistically: one answer can take a leak off
+  // the report entirely, and a newly-measured leak can lock a workflow's switch, and
+  // only a server-side re-run knows which. One token for both because they read the
+  // same two inputs and go stale at exactly the same moments.
+  const [intelKey, setIntelKey] = useState(0);
+  // A blocked governance gate. Both gates reachable from this panel answer with
+  // a multi-check report that a toast can only show one truncated line of, so it
+  // is rendered in full. Save may be overridden with a written reason;
+  // generation may not — a pack that fails at generation gets regenerated.
+  const [gate, setGate] = useState<{
+    boundary: PackGateBoundary;
+    failure: PackGateFailure;
+  } | null>(null);
+  const [savingPack, setSavingPack] = useState(false);
+  // The generated pack the save gate refused, kept so an override retry re-posts
+  // the SAME bytes the operator was just shown a report for — regenerating would
+  // produce a different pack and different check ids, and the handshake would
+  // (correctly) reject the acknowledgement as stale.
+  const pendingPackRef = useRef<unknown>(null);
   // Collapsed by default so 50 clients read as 50 scannable rows, not 50 tall
   // cards. Any in-flight work (generation or the intake editor) forces it open.
   const [expanded, setExpanded] = useState(false);
   const auditTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const open = expanded || packRunning || auditRunning || proposalRunning || showIntake;
+  const open =
+    expanded || packRunning || auditRunning || proposalRunning || showIntake || showBuild;
 
   useEffect(
     () => () => {
@@ -829,16 +527,25 @@ function BusinessPanel({
       }
       onChange({
         ...item,
+        // REPLACE, don't prepend. Regeneration soft-deletes the previous audit row
+        // server-side and the new row inherits its publicId (F3), so prepending
+        // showed two entries carrying the SAME share link until the next fetch.
+        // One live audit per business is the intended post-F3 shape.
         audits: [
           {
             id: data.system.id,
             publicId: data.system.publicId,
             createdAt: data.system.createdAt ?? new Date().toISOString(),
           },
-          ...item.audits,
         ],
         lastActivity: new Date().toISOString(),
       });
+      // A cold audit captures the research snapshot when there isn't one, so both
+      // computed panels may have just gone from "nothing scanned yet" to a real
+      // answer: the gaps list gets findings, and the build panel gets its locks —
+      // a newly-measured leak is what disables a workflow's switch. Re-read rather
+      // than leaving either stale beside a finished audit.
+      setIntelKey((n) => n + 1);
       toast.success("Cold audit ready");
     } catch {
       toast.error("Failed to generate cold audit");
@@ -846,6 +553,68 @@ function BusinessPanel({
       stop();
       setAuditRunning(false);
       setAuditProgress(null);
+    }
+  };
+
+  // Persist a generated pack. Split out of runPack because the save gate can
+  // block it, and the override retry has to re-post that exact pack without
+  // regenerating.
+  const savePack = async (packToSave: unknown, override?: PackOverridePayload) => {
+    setSavingPack(true);
+    try {
+      const saveRes = await fetch("/api/assets/save", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          businessId: b.id,
+          assetPack: packToSave,
+          ...(override ? { override } : {}),
+        }),
+      });
+      const saveData = await saveRes.json().catch(() => ({}));
+      if (!saveRes.ok) {
+        // 422 is the governance gate: nothing was written, the pack already in
+        // the Library is untouched, and the body carries every failing check
+        // with the stable id an override has to echo back.
+        const failure = saveRes.status === 422 ? parsePackGateFailure(saveData) : null;
+        if (failure) {
+          pendingPackRef.current = packToSave;
+          setGate({ boundary: "save", failure });
+          return;
+        }
+        setGate(null);
+        toast.error(saveData.error || "Generated, but failed to save");
+        return;
+      }
+      setGate(null);
+      pendingPackRef.current = null;
+      onChange({
+        ...item,
+        hasPack: true,
+        packDate: saveData.savedAt ?? new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+      });
+      // Same reason as the audit path: generating the pack is what captures the
+      // research snapshot both computed panels read.
+      setIntelKey((n) => n + 1);
+      // The route echoes its governance block back on a forced save, so a pack
+      // that entered the Library over a known violation never reports as a
+      // plain success.
+      if (saveData.override) {
+        const n = Array.isArray(saveData.override.checks) ? saveData.override.checks.length : 0;
+        toast.warning("Saved with an override on the record", {
+          description: `This pack entered the Library over ${n} failing check${
+            n === 1 ? "" : "s"
+          }. Your reason and those checks are stored on the row — internal only.`,
+          duration: 12000,
+        });
+      } else {
+        toast.success("Deliverables generated & saved");
+      }
+    } catch {
+      toast.error("Generated, but failed to save");
+    } finally {
+      setSavingPack(false);
     }
   };
 
@@ -870,6 +639,7 @@ function BusinessPanel({
       let buffer = "";
       let fresh: unknown = null;
       let streamError: string | null = null;
+      let streamFailure: PackGateFailure | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -900,33 +670,26 @@ function BusinessPanel({
             });
           } else if (msg.type === "error") {
             streamError = msg.error ?? "Failed to generate deliverables";
+            // A `reason:"invalid"` frame carries every law that broke. No
+            // override exists at this boundary — a pack that fails at
+            // generation is regenerated, not forced — but the operator still
+            // needs to read WHY, which one toast line cannot deliver.
+            streamFailure = parsePackGateFailure(msg);
           } else if (msg.type === "done") {
             fresh = msg.assetPack ?? null;
           }
         }
+      }
+      if (streamFailure) {
+        setGate({ boundary: "generate", failure: streamFailure });
+        return;
       }
       if (streamError || !fresh) {
         toast.error(streamError || "Failed to generate deliverables");
         return;
       }
       setPackProgress({ pct: 96, label: "Saving to library" });
-      const saveRes = await fetch("/api/assets/save", {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ businessId: b.id, assetPack: fresh }),
-      });
-      const saveData = await saveRes.json().catch(() => ({}));
-      if (!saveRes.ok) {
-        toast.error(saveData.error || "Generated, but failed to save");
-        return;
-      }
-      onChange({
-        ...item,
-        hasPack: true,
-        packDate: saveData.savedAt ?? new Date().toISOString(),
-        lastActivity: new Date().toISOString(),
-      });
-      toast.success("Deliverables generated & saved");
+      await savePack(fresh);
     } catch {
       toast.error("Failed to generate deliverables");
     } finally {
@@ -1228,10 +991,10 @@ function BusinessPanel({
                           className="lg-mono tnum"
                           style={{ fontSize: 11.5, color: "var(--money)", fontWeight: 600 }}
                         >
-                          {money(p.setupFee)}
+                          {formatCurrency(p.setupFee)}
                           <span style={{ color: "var(--text-3)", fontWeight: 500 }}>
                             {" "}
-                            + {money(p.monthlyPrice)}/mo
+                            + {formatCurrency(p.monthlyPrice)}/mo
                           </span>
                         </span>
                         <span
@@ -1286,6 +1049,16 @@ function BusinessPanel({
             count={item.hasPack ? 4 : 0}
             action={
               <div style={{ display: "inline-flex", gap: 6 }}>
+                {/* The build sits beside intake, not behind it: the intake answers
+                    are what move it, so the two belong within one glance of each
+                    other. Its own disclosure rather than a section of the intake
+                    editor, because he opens this to CHECK the build far more often
+                    than he opens it to change an answer. */}
+                <MiniButton
+                  onClick={() => setShowBuild((v) => !v)}
+                  icon={Workflow}
+                  title="The build — which of the 14 workflows this client gets"
+                />
                 <MiniButton
                   onClick={() => setShowIntake((v) => !v)}
                   icon={SlidersHorizontal}
@@ -1300,13 +1073,80 @@ function BusinessPanel({
               </div>
             }
           />
+          {/* What's still guessed, hosted HERE rather than inside the intake form,
+              so it's visible the moment the panel opens — the count is a reason to
+              open intake at all, and hiding it behind the editor means he only
+              learns what he failed to collect once he's already gone looking. The
+              form is told not to render its own copy (showGaps={false}); this one
+              re-reads on every intake save via intelKey. */}
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              background: "rgba(255,255,255,0.015)",
+              padding: "11px 12px",
+              marginBottom: 10,
+            }}
+          >
+            <IntakeGaps businessId={b.id} reloadKey={intelKey} density="compact" />
+          </div>
+          {/* What this client's build includes — the fourteen workflows, whether
+              each is in, and why. Above the intake editor and sharing its refetch
+              token, so answering a question and watching a workflow drop out of the
+              build is one continuous motion rather than two screens. */}
+          {showBuild && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.015)",
+                padding: "12px 12px 13px",
+                marginBottom: 10,
+              }}
+            >
+              <WorkflowPanel businessId={b.id} reloadKey={intelKey} density="compact" />
+            </div>
+          )}
+          {/* Intake sits right next to the Generate button because these answers
+              are the only inputs that change what D1–D4 say. Same questions, same
+              component, same save path as the business-detail card. */}
           {showIntake && (
-            <IntakeEditor
-              b={item.business}
-              onSaved={(next) =>
-                onChange({ ...item, business: { ...item.business, ...next } })
-              }
-            />
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.015)",
+                padding: "12px 12px 13px",
+                marginBottom: 10,
+              }}
+            >
+              <IntakeForm
+                business={item.business}
+                density="compact"
+                successMessage="Intake saved — regenerate to apply"
+                showGaps={false}
+                onSaved={(next: IntakeValues) => {
+                  onChange({ ...item, business: { ...item.business, ...next } });
+                  // Both computed panels live one level up, so the save has to reach
+                  // them from here — he answers a question and watches the guessed
+                  // list shrink and the build change in the same breath. An answer
+                  // that moves a workflow (no social accounts, no past-customer
+                  // list) has to be visible in the build immediately, or he has no
+                  // way to tell whether it landed.
+                  setIntelKey((n) => n + 1);
+                }}
+                renderFooter={({ save, saving, dirty }) => (
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <MiniButton
+                      onClick={save}
+                      icon={Check}
+                      label={dirty ? "Save intake" : "Saved"}
+                      busy={saving}
+                    />
+                  </div>
+                )}
+              />
+            </div>
           )}
           {packRunning ? (
             <InlineProgress
@@ -1487,24 +1327,40 @@ function BusinessPanel({
                       {fmtDate(a.createdAt)}
                     </span>
                   </Link>
-                  <div style={{ borderTop: "1px solid var(--line)", padding: "6px 12px" }}>
+                  <div
+                    className="flex items-center"
+                    style={{
+                      borderTop: "1px solid var(--line)",
+                      padding: "6px 12px",
+                      gap: 14,
+                    }}
+                  >
                     <a
                       href={`/a/${a.publicId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "var(--text-3)",
-                        textDecoration: "none",
-                      }}
+                      style={teaserActionStyle}
                     >
                       <Eye size={11} strokeWidth={2} />
                       View public teaser
                     </a>
+                    {/* Same URL the anchor opens, but absolute — this is the link
+                        that gets pasted into the pre-call email, so it has to
+                        carry the host, not the relative path. */}
+                    <button
+                      onClick={() => copyTeaserLink(a.publicId)}
+                      style={{
+                        ...teaserActionStyle,
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      <LinkIcon size={11} strokeWidth={2} />
+                      Copy link
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1512,6 +1368,21 @@ function BusinessPanel({
           )}
         </section>
       </div>
+      )}
+
+      {gate && (
+        <PackGateDialog
+          boundary={gate.boundary}
+          failure={gate.failure}
+          busy={savingPack}
+          onClose={() => setGate(null)}
+          // Save can be forced with a written reason; generation cannot.
+          onConfirm={
+            gate.boundary === "save"
+              ? (payload) => void savePack(pendingPackRef.current, payload)
+              : undefined
+          }
+        />
       )}
     </div>
   );
@@ -1596,6 +1467,14 @@ export default function LibraryPage() {
                     bookingToolName: b.bookingToolName ?? null,
                     gbpManagement: b.gbpManagement ?? null,
                     buildPriorities: b.buildPriorities ?? null,
+                    // This path reads the single-business endpoint, which returns
+                    // the whole row — so unlike the library feed it does carry the
+                    // five "how enquiries are handled" answers.
+                    hasCallTracking: b.hasCallTracking ?? null,
+                    hasOnlinePayment: b.hasOnlinePayment ?? null,
+                    afterHoursHandling: b.afterHoursHandling ?? null,
+                    missedCallHandling: b.missedCallHandling ?? null,
+                    responseSpeed: b.responseSpeed ?? null,
                   },
                   audits: [],
                   proposals: [],

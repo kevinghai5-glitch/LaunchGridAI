@@ -9,7 +9,7 @@ import { LgButton } from "@/components/ui/lg-button";
 import { LgCard } from "@/components/ui/lg-card";
 import { PublicProposal, BrowserFrame, MobileFrame } from "@/components/proposals/PublicProposal";
 import type { SavedBusiness, ProposalContent } from "@/types";
-import { APP_URL } from "@/lib/constants";
+import { APP_URL, APP_HOST } from "@/lib/constants";
 import { buildProposalDefaults, proposalContentFromRow } from "@/lib/proposal-defaults";
 
 const editorInputStyle: React.CSSProperties = {
@@ -736,8 +736,12 @@ export default function NewProposalPage() {
             <div className="relative">
               <div className="flex items-start justify-center" style={{ gap: 24 }}>
                 <div style={{ flex: "0 1 820px", minWidth: 0 }}>
+                  {/* Shows the SAME address the "Copy link" button copies —
+                      configured host + the real publicId. Before the first save
+                      there is no publicId yet, so the slot is shown as pending
+                      rather than inventing an id the link won't resolve to. */}
                   <BrowserFrame
-                    url={`launchgrid.ai/p/${business.name.toLowerCase().split(" ")[0]}-${business.id.slice(0, 6)}`}
+                    url={`${APP_HOST}/p/${publicId ?? "…"}`}
                   >
                     <PublicProposal business={business} content={content} />
                   </BrowserFrame>

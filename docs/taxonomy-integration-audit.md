@@ -41,7 +41,8 @@ required by Phase 0 of `claude-code-deliverable-refactor.md`.
 ### 1d. Rendering (HTML deliverables)
 - `src/lib/exporters/deliverables.ts` — the 4 deliverables incl. `renderScorecard()` (lines ~243–262).
 - `src/lib/exporters/cold-audit-html.ts` — cold-audit HTML + `enforceColdAuditLaws()`.
-- `src/lib/exporters/html.ts`, `_shell.ts` (shell/CSS/glossary), `niche-theme.ts`, `index.ts`, `validate-pack.ts` (already asserts `metrics.length === 7`).
+- `src/lib/exporters/_shell.ts` (shell/CSS/glossary), `index.ts` (ZIP orchestrator + rendered-HTML governance), `validate-pack.ts` (already asserts `metrics.length === 7`).
+  - Note: the old `html.ts` / `pdf.tsx` / `docx.ts` / `txt.ts` / `niche-theme.ts` exporter cluster was deleted — it had zero importers. Deliverable rendering is HTML-only via `deliverables.ts`.
 
 ---
 

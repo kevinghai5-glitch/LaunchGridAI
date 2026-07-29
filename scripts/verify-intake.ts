@@ -43,9 +43,15 @@ function check(name: string, fn: () => void): void {
 }
 
 // ── Dentist fixture (appointment vertical, established) — fires the intake leaks.
-function dentist(intake?: ScrapeData["intake"]): ScrapeData {
+// `industry` is overridable because one leak (payment_booking_friction) is an
+// inference about DEPOSIT-taking trades and cannot fire for a dentist at all —
+// checking its intake suppression needs a med spa.
+function dentist(
+  intake?: ScrapeData["intake"],
+  industry: ScrapeData["business"]["industry"] = "dental"
+): ScrapeData {
   return {
-    business: { name: "Bright Smile Dental", industry: "dental", city: "Austin", phone: "555-0100", websiteUrl: "https://brightsmile.example" },
+    business: { name: "Bright Smile Dental", industry, city: "Austin", phone: "555-0100", websiteUrl: "https://brightsmile.example" },
     website: {
       pagesFound: ["home", "services", "contact"],
       pageText: { home: "Welcome to Bright Smile Dental.", contact: "Call us today." },
@@ -74,8 +80,8 @@ function dentist(intake?: ScrapeData["intake"]): ScrapeData {
 }
 
 // ── Run the deterministic pipeline for a given intake config. ──────────────────
-function run(intake?: ScrapeData["intake"]) {
-  const data = dentist(intake);
+function run(intake?: ScrapeData["intake"], industry?: ScrapeData["business"]["industry"]) {
+  const data = dentist(intake, industry);
   const fired = getFiredLeaks(data);
   const report = reportLeaks(fired);
   const inputs = buildLeakInputs(report, data);
@@ -185,6 +191,156 @@ const snap4 = factSnapshot(r4.items);
 
 check("Run 4 · facts are byte-identical to run 1", () => {
   assert.equal(snap4, snap1, "servicesFocus changed the stamped facts");
+});
+
+// ── RUNS 5–9 — the five intake fields added alongside the booleans ─────────────
+// Same three-way contract as hasCrm / hasFollowUpSequence above, proved through
+// the SAME real pipeline: the "handled" answer removes the leak from the rendered
+// deliverable, a "not handled" answer renders it "Confirmed at intake" with no
+// kickoff line, and "not sure" leaves the baseline output untouched.
+
+const fired = (r: ReturnType<typeof run>, id: string) => r.fired.find((f: FiredLeak) => f.leak.id === id);
+
+// ── RUN 5 — afterHoursHandling ─────────────────────────────────────────────────
+const r5covered = run({ afterHoursHandling: "AUTO_RESPONSE" });
+const r5nothing = run({ afterHoursHandling: "NOTHING" });
+const r5morning = run({ afterHoursHandling: "NEXT_MORNING" });
+const r5unsure = run({ afterHoursHandling: "UNKNOWN" });
+
+check("Run 5 · AUTO_RESPONSE removes the after-hours leak from the deliverable", () => {
+  assert(!fired(r5covered, "no_after_hours_coverage"), "leak still fired");
+  assert(!leakNames(r5covered.items).some((n) => /after-hours/i.test(n ?? "")), "leak reached the output");
+});
+
+check("Run 5 · NOTHING and NEXT_MORNING are both confirmed at intake", () => {
+  for (const r of [r5nothing, r5morning]) {
+    const f = fired(r, "no_after_hours_coverage");
+    assert(f, "after-hours leak did not fire on a confirming answer");
+    assert.equal(f!.intakeConfirmed, true);
+    assert(/Confirmed at intake/i.test(f!.evidence[0]), f!.evidence[0]);
+  }
+});
+
+check("Run 5 · the two answers differ in WORDS only — the dollar figure is identical", () => {
+  const a = item(r5nothing.items, "after-hours");
+  const b = item(r5morning.items, "after-hours");
+  assert(a && b, "after-hours leak missing from the stamped output");
+  assert.notEqual(
+    fired(r5nothing, "no_after_hours_coverage")!.evidence[0],
+    fired(r5morning, "no_after_hours_coverage")!.evidence[0],
+    "two different situations read identically"
+  );
+  assert.deepEqual(a!.dollarImpact ?? null, b!.dollarImpact ?? null, "prose severity leaked into the math");
+  assert.equal(a!.mathFrame ?? null, b!.mathFrame ?? null, "prose severity leaked into the math frame");
+});
+
+check("Run 5 · UNKNOWN leaves the baseline facts byte-identical", () => {
+  assert.equal(factSnapshot(r5unsure.items), snap1, "'Not sure' changed the stamped facts");
+});
+
+check("Run 5 · validator Part C passes for every after-hours answer", () => {
+  for (const r of [r5covered, r5nothing, r5morning, r5unsure])
+    assert.equal(partCFails(r.validation).length, 0, JSON.stringify(partCFails(r.validation)));
+});
+
+// ── RUN 6 — missedCallHandling ─────────────────────────────────────────────────
+const r6covered = run({ missedCallHandling: "INSTANT_TEXT_BACK" });
+const r6voicemail = run({ missedCallHandling: "VOICEMAIL_ONLY" });
+const r6unsure = run({ missedCallHandling: "UNKNOWN" });
+
+check("Run 6 · INSTANT_TEXT_BACK removes the missed-call leak entirely", () => {
+  assert(!fired(r6covered, "missed_calls_no_recovery"), "leak still fired");
+  assert(!leakNames(r6covered.items).some((n) => /missed call/i.test(n ?? "")), "leak reached the output");
+});
+
+check("Run 6 · VOICEMAIL_ONLY renders confirmed, with NO kickoff line", () => {
+  const li = item(r6voicemail.items, "missed calls");
+  assert(li, "missed-call leak missing");
+  assert.equal(li!.intakeConfirmed, true);
+  assert.equal(li!.kickoffLine ?? null, null, "a confirmed leak kept the kickoff line");
+  assert(r6voicemail.html.includes("Confirmed at intake"), "rendered HTML lost the confirmed label");
+});
+
+check("Run 6 · UNKNOWN leaves the baseline facts byte-identical", () => {
+  assert.equal(factSnapshot(r6unsure.items), snap1, "'Not sure' changed the stamped facts");
+});
+
+check("Run 6 · validator Part C passes for every missed-call answer", () => {
+  for (const r of [r6covered, r6voicemail, r6unsure])
+    assert.equal(partCFails(r.validation).length, 0, JSON.stringify(partCFails(r.validation)));
+});
+
+// ── RUN 7 — responseSpeed ──────────────────────────────────────────────────────
+const r7fast = run({ responseSpeed: "UNDER_5_MIN" });
+const r7slow = run({ responseSpeed: "DAY_OR_TWO" });
+const r7untracked = run({ responseSpeed: "NOT_TRACKED" });
+
+check("Run 7 · UNDER_5_MIN removes the speed-to-lead leak entirely", () => {
+  assert(!fired(r7fast, "slow_speed_to_lead"), "leak still fired");
+  assert(!leakNames(r7fast.items).some((n) => /slow response/i.test(n ?? "")), "leak reached the output");
+});
+
+check("Run 7 · DAY_OR_TWO renders confirmed, with NO kickoff line", () => {
+  const li = item(r7slow.items, "slow response");
+  assert(li, "speed-to-lead leak missing");
+  assert.equal(li!.intakeConfirmed, true);
+  assert.equal(li!.kickoffLine ?? null, null, "a confirmed leak kept the kickoff line");
+});
+
+check("Run 7 · NOT_TRACKED leaves the baseline facts byte-identical", () => {
+  assert.equal(factSnapshot(r7untracked.items), snap1, "'We don't track it' changed the stamped facts");
+});
+
+check("Run 7 · validator Part C passes for every response-speed answer", () => {
+  for (const r of [r7fast, r7slow, r7untracked])
+    assert.equal(partCFails(r.validation).length, 0, JSON.stringify(partCFails(r.validation)));
+});
+
+// ── RUN 8 — hasCallTracking (the boolean that had no write path until now) ─────
+const r8tracked = run({ hasCallTracking: true });
+const r8untracked = run({ hasCallTracking: false });
+
+check("Run 8 · hasCallTracking=true suppresses no_call_tracking everywhere", () => {
+  assert(!fired(r8tracked, "no_call_tracking"), "leak still fired");
+  assert(!leakNames(r8tracked.items).some((n) => /call performance/i.test(n ?? "")), "leak reached the output");
+});
+
+check("Run 8 · hasCallTracking=false renders confirmed, with NO kickoff line", () => {
+  const li = item(r8untracked.items, "call performance");
+  assert(li, "call-tracking leak missing");
+  assert.equal(li!.intakeConfirmed, true);
+  assert.equal(li!.kickoffLine ?? null, null, "a confirmed leak kept the kickoff line");
+});
+
+check("Run 8 · validator Part C passes for both call-tracking answers", () => {
+  for (const r of [r8tracked, r8untracked])
+    assert.equal(partCFails(r.validation).length, 0, JSON.stringify(partCFails(r.validation)));
+});
+
+// ── RUN 9 — hasOnlinePayment (needs a deposit-taking vertical to fire at all) ──
+const r9baseline = run(undefined, "med_spa");
+const r9paid = run({ hasOnlinePayment: true }, "med_spa");
+const r9manual = run({ hasOnlinePayment: false }, "med_spa");
+
+check("Run 9 · the payment leak fires for a deposit vertical to begin with", () => {
+  assert(fired(r9baseline, "payment_booking_friction"), "nothing to suppress — fixture is wrong");
+});
+
+check("Run 9 · hasOnlinePayment=true suppresses payment_booking_friction everywhere", () => {
+  assert(!fired(r9paid, "payment_booking_friction"), "leak still fired");
+  assert(!leakNames(r9paid.items).some((n) => /friction/i.test(n ?? "")), "leak reached the output");
+});
+
+check("Run 9 · hasOnlinePayment=false renders confirmed, with NO kickoff line", () => {
+  const li = item(r9manual.items, "friction");
+  assert(li, "payment-friction leak missing");
+  assert.equal(li!.intakeConfirmed, true);
+  assert.equal(li!.kickoffLine ?? null, null, "a confirmed leak kept the kickoff line");
+});
+
+check("Run 9 · validator Part C passes for every payment answer", () => {
+  for (const r of [r9baseline, r9paid, r9manual])
+    assert.equal(partCFails(r.validation).length, 0, JSON.stringify(partCFails(r.validation)));
 });
 
 const businessProfile = {

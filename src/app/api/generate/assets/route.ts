@@ -25,12 +25,25 @@ import {
   allowedNumbersFor,
   voiceLint,
 } from "@/lib/leak-narrative";
+import { assertPackValid, type ValidationCheck } from "@/lib/exporters/validate-pack";
 import type { AssetPack } from "@/types";
 
 export const dynamic = "force-dynamic";
 // Enrichment + five-deliverable generation is heavy; give it as much room as the
 // platform allows.
 export const maxDuration = 300;
+
+/** One operator-facing line for a pack the validator refused (F1).
+ *
+ *  `verdict.report` lists EVERY check, passes included — that is right for a CLI
+ *  and unusable in a toast, so it rides along in the payload while this names the
+ *  laws that actually broke. Deduped: a single law can fail more than once. */
+function invalidPackMessage(fails: ValidationCheck[]): string {
+  const laws = Array.from(new Set(fails.map((f) => f.law)));
+  return `This pack fails ${fails.length} of its own deliverable law${
+    fails.length === 1 ? "" : "s"
+  } and was not saved: ${laws.join(", ")}. Fix the inputs and regenerate before it goes near a client.`;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -137,10 +150,8 @@ export async function POST(req: NextRequest) {
     // deterministically, with a bounded allowed-number set (Phases 1–5).
     // Deliverable numbers (manually entered on the Business record) drive REAL-mode
     // math in D1–D4. Blank → intake stays undefined → the deliverables render in
-    // BENCHMARK mode. We map the operator's inquiry count onto both lead- and
-    // call-volume slots (inbound inquiries stand in for the call-volume the
-    // missed-call math needs). A single provided field is enough to flip a
-    // document to real mode for the templates that can use it.
+    // BENCHMARK mode. A single provided field is enough to flip a document to real
+    // mode for the templates that can use it.
     // Intake booleans (null = unknown/not asked) join the numbers here: any one
     // provided flips this business out of the pure pre-intake path. Booleans drive
     // confirmed-vs-benchmark leak framing; `true` suppresses the matching leak.
@@ -151,18 +162,125 @@ export async function POST(req: NextRequest) {
       business.hasFollowUpSequence != null ||
       business.hasReminderSystem != null ||
       business.hasPastCustomerDatabase != null ||
+      business.hasCallTracking != null ||
+      business.hasOnlinePayment != null ||
+      business.afterHoursHandling != null ||
+      business.missedCallHandling != null ||
+      business.responseSpeed != null ||
+      business.socialEnquiries != null ||
+      business.pastCustomerContact != null ||
+      // The two applicability answers. takesDeposits changes no leak at all — it
+      // decides whether Text-to-Pay is in the build — but an answered question is
+      // still intake, and a pack generated for a client who has answered anything
+      // must not be watermarked "INTERNAL TEST".
+      business.takesDeposits != null ||
+      business.reviewReplyOwner != null ||
       business.bookingMethod != null ||
       business.gbpManagement != null ||
       business.buildPriorities != null;
+    // ── F4 · ONE CAPTURED NUMBER, ONE SLOT ────────────────────────────────────
+    // Business.monthlyLeadVolume is the ONLY volume we ever capture, and it means
+    // INBOUND ENQUIRIES PER MONTH — that is the column comment, the form label
+    // ("Monthly inquiries") and the hint ("inbound leads / mo"). It used to be
+    // written into BOTH intake volume slots, which silently invented two more
+    // real-world quantities nobody was ever asked for. The two slots are consumed
+    // by two different math templates in leak-narrative.ts, and they are NOT
+    // interchangeable:
+    //
+    //   · monthlyEnquiries → missed_call_value. Its frame renders the number
+    //     verbatim as "N enquiries/mo × a X% missed-call rate × …". Enquiries is
+    //     precisely what that sentence claims the number is, so the client's real
+    //     figure belongs here — and it beats the ~20-enquiry ASSUMPTION the
+    //     BENCHMARK fallback would print in its place.
+    //
+    //   · monthlyBookedAppointments → no_show_value. Its frame renders the number
+    //     as "N booked/mo × a X% no-show rate × …". BOOKED APPOINTMENTS ARE NOT
+    //     ENQUIRIES. Aliasing printed the enquiry count back to the client as
+    //     their booking count, inside a dollar figure they are asked to believe.
+    //     We capture no booking count, and the enquiry→booking ratio is not a
+    //     number we know for this business. Per the ruling ("separate them, or
+    //     derive calls and bookings from enquiries with a stated, visible ratio")
+    //     we take the first branch: the slot stays EMPTY, and no_show_value falls
+    //     back to its BENCHMARK path — the cited vertical no-show range with NO
+    //     dollar figure — exactly as it does for a pre-intake pack. Law 5 is
+    //     unaffected: that leak carries statIds, so it stays quantified by its
+    //     cited stats rather than by an invented figure.
+    //
+    // The DB column keeps its old name (renaming a live column is destructive);
+    // the two intake slots have been renamed to what they actually hold, so the
+    // mapping below now reads as plainly as it behaves.
     const clientIntake = hasAnyIntake
       ? {
           avgJobValueCad: business.avgClientValueCad ?? undefined,
-          monthlyLeadVolume: business.monthlyLeadVolume ?? undefined,
-          monthlyCallVolume: business.monthlyLeadVolume ?? undefined,
+          // Business.monthlyLeadVolume MEANS inbound enquiries — see above.
+          monthlyEnquiries: business.monthlyLeadVolume ?? undefined,
+          // monthlyBookedAppointments is DELIBERATELY OMITTED — we never ask for a
+          // booking count. Do not "fix" this by aliasing the enquiry count in;
+          // that aliasing is the bug this comment exists to prevent.
           hasCrm: business.hasCrm ?? undefined,
           hasFollowUpSequence: business.hasFollowUpSequence ?? undefined,
           hasReminderSystem: business.hasReminderSystem ?? undefined,
           hasPastCustomerDatabase: business.hasPastCustomerDatabase ?? undefined,
+          hasCallTracking: business.hasCallTracking ?? undefined,
+          hasOnlinePayment: business.hasOnlinePayment ?? undefined,
+          // The three "how do enquiries get handled today" answers. Stored as
+          // strings (no Prisma enums in this codebase by convention), so they are
+          // cast to the contract's union here — the Zod enum on the write path is
+          // what guarantees only these slugs ever reach the column.
+          afterHoursHandling:
+            (business.afterHoursHandling as
+              | "AUTO_RESPONSE"
+              | "NEXT_MORNING"
+              | "NOTHING"
+              | "UNKNOWN"
+              | null) ?? undefined,
+          missedCallHandling:
+            (business.missedCallHandling as
+              | "INSTANT_TEXT_BACK"
+              | "CALL_BACK_WHEN_FREE"
+              | "VOICEMAIL_ONLY"
+              | "UNKNOWN"
+              | null) ?? undefined,
+          responseSpeed:
+            (business.responseSpeed as
+              | "UNDER_5_MIN"
+              | "FEW_HOURS"
+              | "DAY_OR_TWO"
+              | "NOT_TRACKED"
+              | null) ?? undefined,
+          // The two answers that closed the last structural evidence gaps. Same
+          // string-column convention as the three above.
+          //   socialEnquiries  → social_dm_unmanaged. YES confirms it; NO and
+          //     NO_ACCOUNTS both suppress it. (NO_ACCOUNTS is separately the fact
+          //     that switches the Social DM Capture workflow off in the build.)
+          //   pastCustomerContact → no_database_reactivation. SYSTEMATIC
+          //     suppresses; OCCASIONAL / OVER_A_YEAR / NEVER confirm the list is
+          //     going cold, which the "do you have a list?" answer beside it could
+          //     never establish on its own.
+          socialEnquiries:
+            (business.socialEnquiries as "YES" | "NO" | "NO_ACCOUNTS" | null) ?? undefined,
+          pastCustomerContact:
+            (business.pastCustomerContact as
+              | "SYSTEMATIC"
+              | "OCCASIONAL"
+              | "OVER_A_YEAR"
+              | "NEVER"
+              | null) ?? undefined,
+          // The two applicability answers, same string-column convention again.
+          //   takesDeposits → NO LEAK READS IT. It is the fact that decides whether
+          //     the Text-to-Pay workflow is in the build (NEVER takes it out), and
+          //     it is carried here so the build described by these deliverables is
+          //     the same build the toggles panel resolves. Do NOT wire it to
+          //     hasOnlinePayment: that one only suppresses payment_booking_friction,
+          //     and the two run in opposite directions (see leak-taxonomy.ts).
+          //   reviewReplyOwner → no_review_replies. NOBODY fires it as a disclosed
+          //     finding; OWNER and STAFF_OR_AGENCY suppress it; unanswered does not
+          //     fire it at all, because nothing we fetch can see owner replies.
+          takesDeposits:
+            (business.takesDeposits as "ALWAYS" | "SOMETIMES" | "NEVER" | null) ?? undefined,
+          reviewReplyOwner:
+            (business.reviewReplyOwner as "NOBODY" | "OWNER" | "STAFF_OR_AGENCY" | null) ??
+            undefined,
           bookingMethod:
             (business.bookingMethod as "PHONE_EMAIL_ONLY" | "BOOKING_TOOL" | "OTHER" | null) ??
             undefined,
@@ -279,12 +397,63 @@ export async function POST(req: NextRequest) {
         [parsed.data.section]: regenerated,
       } as AssetPack;
 
-      const system = await prisma.generatedSystem.update({
-        where: { id: latest.id },
-        data: { content: merged as unknown as object },
-      });
+      // ── F1 · BLOCKING GATE ──────────────────────────────────────────────────
+      // The MERGED pack is what gets judged, not the regenerated section: a fresh
+      // section can break a law the rest of the pack satisfied (a new dollar
+      // figure that contradicts the exec summary, a lead-gen phrase, a hype word),
+      // and the merged object is the thing that would have been persisted. A fatal
+      // check means it is neither written nor returned as a success — the
+      // previously saved pack stays live and untouched.
+      //
+      // allowedNumbers is the fired-leak whitelist computed above, so the
+      // dollar-determinism guard runs at full strength (belt (b) — every stamped
+      // integer must be a member of the set — not just belt (a)).
+      const verdict = assertPackValid(merged, leaks.allowedNumbers);
+      if (!verdict.ok) {
+        return NextResponse.json(
+          {
+            error: invalidPackMessage(verdict.fails),
+            checks: verdict.fails,
+            // Warnings never block. They travel on BOTH branches so the operator
+            // reads one complete picture.
+            warnings: verdict.warns,
+            report: verdict.report,
+          },
+          { status: 422 }
+        );
+      }
 
-      return NextResponse.json({ system, assetPack: merged });
+      // ── F2 · NON-DESTRUCTIVE REGENERATION ───────────────────────────────────
+      // This used to prisma.update() the latest row in place, overwriting the
+      // previous pack's content with no history row and no way back — the one
+      // write in the codebase that destroyed a prior deliverable. It now follows
+      // the same shape as the full-save path (/api/assets/save): SOFT-delete the
+      // live row (deletedAt — the row and its content stay in the database
+      // forever, they are simply filtered out of every read) and CREATE the new
+      // one, inside a single transaction so no reader ever sees zero or two live
+      // packs. Ordering matters: the soft-delete runs first, so the new row cannot
+      // be swept up by its own updateMany.
+      const [, system] = await prisma.$transaction([
+        prisma.generatedSystem.updateMany({
+          where: {
+            businessId: business.id,
+            userId: session.user.id,
+            type: "ASSETS",
+            deletedAt: null,
+          },
+          data: { deletedAt: new Date() },
+        }),
+        prisma.generatedSystem.create({
+          data: {
+            businessId: business.id,
+            userId: session.user.id,
+            type: "ASSETS",
+            content: merged as unknown as object,
+          },
+        }),
+      ]);
+
+      return NextResponse.json({ system, assetPack: merged, warnings: verdict.warns });
     }
 
     // ── Full pack: all nine deliverables, streamed. We emit newline-delimited
@@ -308,7 +477,40 @@ export async function POST(req: NextRequest) {
           const assetPack = await generateAssetPack(ctx, (done, total, label) => {
             send({ type: "progress", completed: done + 1, total: total + 1, label });
           });
-          send({ type: "done", assetPack });
+
+          // ── F1 · BLOCKING GATE, on the streaming contract's own terms ────────
+          // The only success frame this protocol has is {type:"done", assetPack},
+          // and both consumers treat "a stream that ended without a done frame" as
+          // a failure. So a fatal check emits an error frame and the done frame is
+          // never sent — the pack cannot be returned as a success.
+          //
+          // The frame is typed "error" rather than a new "invalid" type on
+          // purpose: studio/page.tsx and library/page.tsx already render
+          // `msg.error`, so the operator sees the REAL reason today instead of the
+          // generic "Failed to generate deliverables" a frame type they don't know
+          // would have produced. `reason: "invalid"` is the discriminator a client
+          // can branch on later to render `checks` as a list; extra keys are
+          // ignored by today's parsers, so the contract is widened, not broken.
+          const verdict = assertPackValid(assetPack, leaks.allowedNumbers);
+          if (!verdict.ok) {
+            console.error(
+              `[generate/assets] pack BLOCKED for business ${business.id} (${business.name}):\n${verdict.report}`
+            );
+            send({
+              type: "error",
+              reason: "invalid",
+              status: 422,
+              error: invalidPackMessage(verdict.fails),
+              checks: verdict.fails,
+              warnings: verdict.warns,
+              report: verdict.report,
+            });
+            return; // the finally below still closes the controller
+          }
+
+          // Warnings never block — they ride along with the pack so the operator
+          // can read them beside a successful generation.
+          send({ type: "done", assetPack, warnings: verdict.warns });
         } catch (err) {
           console.error("Generate assets stream error:", err);
           const s =

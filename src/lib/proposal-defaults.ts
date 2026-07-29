@@ -23,15 +23,24 @@ import type {
   ProposalScope,
 } from "@/types";
 import { PRODUCT_NAME, AGENCY_NAME } from "./brand";
+import { SETUP_FEE_CAD, MONTHLY_RETAINER_CAD } from "./constants";
+import { formatCurrency } from "./utils";
 
-export const DEFAULT_SETUP_FEE = 6500; // one-time, CAD
-export const DEFAULT_MONTHLY = 1000; // retainer, CAD/mo
+// The proposal's prices ARE the offer's prices. Re-exported from the single
+// source in constants.ts instead of re-typed, so a price change lands in the
+// proposal and on the operator's screen in one edit and cannot half-happen.
+export const DEFAULT_SETUP_FEE = SETUP_FEE_CAD; // one-time, CAD
+export const DEFAULT_MONTHLY = MONTHLY_RETAINER_CAD; // retainer, CAD/mo
 
+// Money convention, product-wide: the CAD marker goes BEFORE the figure
+// ("CAD $2,400"), which is what formatCurrency() and leak-narrative's cad()
+// both produce. A proposal that printed a bare "$2,400" beside a report that
+// printed "CAD $2,400" reads like two different documents — and a bare dollar
+// sign is ambiguous to a Canadian owner who assumes USD.
 function fmtRange(low: number, high: number): string {
-  const f = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
   if (low <= 0 && high <= 0) return "";
-  if (low === high) return `${f(low)} / mo`;
-  return `${f(low)}–${f(high)} / mo`;
+  if (low === high) return `${formatCurrency(low)} / mo`;
+  return `${formatCurrency(low)}–${formatCurrency(high)} / mo`;
 }
 
 interface AuditSource {
@@ -113,12 +122,18 @@ function deriveLeaks(src: AuditSource): LeakResult {
   if (auditResult) return auditResult;
 
   // No audit on file — conservative, clearly-labelled placeholder leaks.
+  //
+  // NOTE ON WORDING: none of these may assume the business buys ads. Plenty of
+  // these owners get their enquiries from their listing, word of mouth, or
+  // repeat customers, and a proposal that says "your paid leads" to an owner who
+  // has never bought a click reads as a template — the exact thing that loses
+  // the room. "Enquiries you already get" is true either way.
   const leaks: ProposalLeak[] = [
     {
       title: "Slow response to new leads",
       monthlyCost: "",
       detail:
-        "Leads that wait more than a few minutes for a reply book elsewhere. Every hour of delay quietly lowers how many of your paid leads turn into jobs.",
+        "Leads that wait more than a few minutes for a reply book elsewhere. Every hour of delay quietly lowers how many of the enquiries you already get turn into jobs.",
     },
     {
       title: "No structured follow-up",
@@ -136,7 +151,7 @@ function deriveLeaks(src: AuditSource): LeakResult {
       title: "No-shows and missed bookings",
       monthlyCost: "",
       detail:
-        "Booked appointments with no confirmation or reminder cadence turn into no-shows — paid-for demand that never reaches your calendar.",
+        "Booked appointments with no confirmation or reminder cadence turn into no-shows — demand you already earned that never reaches your calendar.",
     },
   ];
   return {
@@ -173,10 +188,10 @@ function deriveComponents(leaks: ProposalLeak[]): ProposalComponent[] {
       isRetainer: false,
     },
     {
-      name: "Booking + reminder system",
+      name: "Booking page + reminder system",
       addresses: "No-shows and missed bookings",
       detail:
-        "We install one-tap booking with confirmation and reminder cadences that cut no-shows and get more booked appointments to actually show up.",
+        "We build and brand your booking page inside GoHighLevel — one-tap booking, with confirmation and reminder cadences that cut no-shows and get more booked appointments to actually show up. It's the one page we build; your own website is untouched.",
       isRetainer: false,
     },
   ];
@@ -210,19 +225,24 @@ function deriveRoi(setupFee: number, monthly: number, totalLow: number, totalHig
     );
   } else {
     points.push(
-      "The investment is designed to pay for itself from a small lift in the share of leads you already pay for that become booked customers."
+      "The investment is designed to pay for itself from a small lift in the share of the enquiries you already get that become booked customers."
     );
   }
   points.push(
-    `Total first-year investment is $${firstYear.toLocaleString("en-US")} CAD (one-time setup plus 12 months of retainer).`
+    // Marker BEFORE the figure, via formatCurrency — this line used to print
+    // "$18,500 CAD", which is the one place in the proposal that broke the
+    // product-wide money convention.
+    `Total first-year investment is ${formatCurrency(firstYear)} — the one-time setup plus 12 months of retainer.`
   );
   points.push(
-    "This is conversion, not spend: we lift results from your existing lead flow, so the return compounds without raising your ad budget."
+    // Was "…without raising your ad budget", which quietly assumed the owner buys
+    // ads. We don't touch ad spend and many of these owners have none.
+    "This is conversion, not spend: we lift results from the enquiries already coming in, so nothing here depends on you spending more to get found."
   );
   return {
     summary: hasNumbers
       ? `The system is built to recover ${recovered} in conversions you're currently losing — against an investment that's a fraction of that leak.`
-      : "The system is built to convert more of the leads you already pay for into booked, paying customers — so it pays for itself from a modest lift in your close rate.",
+      : "The system is built to convert more of the enquiries you already get into booked, paying customers — so it pays for itself from a modest lift in your close rate.",
     recovered,
     points,
   };
@@ -294,34 +314,47 @@ export function buildProposalDefaults(
     agencyName: AGENCY_NAME.toLowerCase() === "our team" ? "" : AGENCY_NAME,
     setupFee,
     monthlyPrice,
-    packageOverview: `The visible problems in the audit are symptoms — where the leak shows up. What we build and run is the system behind them: instant lead response, qualification through ${PRODUCT_NAME}, structured follow-up, and a booking flow that reduces no-shows. This is not a website redesign; any page we touch changes only because a system fix has to show up somewhere your customers can see it. You keep your current lead sources — we make far more of them turn into paying jobs.`,
+    // "any page we touch" used to appear here — it implied we edit their website,
+    // which contradicts the absolute exclusion three fields down. We build one
+    // page (the booking page, inside GoHighLevel) and touch nothing else.
+    packageOverview: `The visible problems in the audit are symptoms — where the leak shows up. What we build and run is the system behind them: instant lead response, qualification through ${PRODUCT_NAME}, structured follow-up, and a booking flow that reduces no-shows. We build all of it for you inside GoHighLevel and we run it — you implement nothing. This is not a website redesign: we don't touch your site, and anything the audit says about it is advisory, for whoever looks after it. The one page we build is your booking page. You keep your current lead sources — we make far more of them turn into paying jobs.`,
     problem,
     deliverables: components,
     roi,
     scope: {
+      // Every line says WHICH of the two parts it belongs to. A flat list reads
+      // as one bill, and the most expensive misunderstanding available on a call
+      // is a client who thinks the qualification engine came with the one-time
+      // build and then sees a monthly invoice for it.
       included: [
-        "Done-for-you build and deployment of the full conversion system",
-        `${PRODUCT_NAME} qualification engine, run and optimised continuously`,
-        "Instant speed-to-lead response across forms, calls, and messages",
-        "Email + SMS follow-up sequences, written and deployed for you",
-        "Booking, confirmation, and reminder system to cut no-shows",
-        "Ongoing management, optimisation, and a monthly performance report",
+        "One-time build — the four deliverables: your leak diagnosis, the infrastructure blueprint, the conversion copy, and the implementation timeline",
+        "One-time build — done-for-you setup of the full conversion system inside GoHighLevel: workflows, CRM pipeline, and lead-capture form",
+        "One-time build — instant speed-to-lead response across your forms, calls, and messages",
+        "One-time build — email + SMS follow-up sequences, written and deployed for you",
+        "One-time build — your booking page, built and branded for you inside GoHighLevel, with confirmation and reminder cadences to cut no-shows",
+        `Monthly retainer — the ${PRODUCT_NAME} qualification engine, running continuously on every new lead`,
+        "Monthly retainer — we run, monitor, and tune the live system, and send you a monthly report",
       ],
+      // ABSOLUTE exclusions. Each of these used to be phrased as a carve-out
+      // ("beyond the conversion path", "paid separately") which implies some
+      // website work and some ad involvement are in scope. They are not, at any
+      // price — a carve-out is a scope argument waiting to happen on the call.
       excluded: [
-        "Ad spend or media budget (paid separately, directly to the platforms)",
+        "Advertising of any kind — we don't run, manage, buy, or advise on ads or media",
         "Lead generation, new traffic, or SEO — this system converts the leads you already get",
-        "Website redesigns beyond the conversion path",
+        "Website design, build, or redesign — we don't touch your site. Anything we say about it is advisory only; the page we build and brand for you lives inside GoHighLevel",
       ],
     },
     timeline: [
       {
         label: "Week 1–2 — Build & deploy",
-        detail:
-          "We map your current lead flow, then build and launch the full system: speed-to-lead response, LeadGate qualification, follow-up sequences, and booking. Done-for-you — you review, we ship.",
+        // Was a hardcoded "LeadGate" — the product name is configurable, so a
+        // literal here would have printed the wrong name the day it changes.
+        detail: `We map your current lead flow, then build and launch the full system for you inside GoHighLevel: speed-to-lead response, ${PRODUCT_NAME} qualification, follow-up sequences, and your booking page. Done-for-you — you review, we ship.`,
       },
       {
         label: "Ongoing — Run & optimise",
-        detail: `From go-live, ${PRODUCT_NAME} runs continuously while we manage, test, and tune the system. You receive a monthly report showing booked conversions recovered.`,
+        detail: `From go-live, ${PRODUCT_NAME} runs continuously while we manage, test, and tune the system. You receive a monthly report showing booked conversions recovered. This is what the monthly retainer covers.`,
       },
     ],
     proof: {
@@ -333,19 +366,19 @@ export function buildProposalDefaults(
     faq: [
       {
         q: "Is this lead generation?",
-        a: "No. You already get leads. This system converts more of the leads you already pay for into booked, paying customers — we don't sell traffic, ads, or SEO.",
+        a: "No. You already get enquiries. This system converts more of them into booked, paying customers — we don't sell traffic, ads, or SEO, and we don't touch what you spend to get found.",
       },
       {
         q: "Is this a website redesign?",
-        a: "No. The things you can see on the page are just where the leak shows up. What you're buying is the system behind them — instant lead response, qualification, follow-up, and booking. If we change anything on a page, it's because a system fix has to appear somewhere your customers can see it, not to make the site look different.",
+        a: "No — and we don't touch your website at all. The things you can see on the page are just where the leak shows up. What you're buying is the system behind them: instant lead response, qualification, follow-up, and booking, all built and run by us. Anything the audit says about your own site is advisory — notes you can hand to whoever looks after it. The one page we build is your booking page.",
       },
       {
         q: "What's the difference between the setup fee and the monthly?",
-        a: `The one-time setup covers the full done-for-you build of every component. The monthly retainer keeps ${PRODUCT_NAME} running and covers ongoing management, optimisation, and your monthly report.`,
+        a: `The one-time setup covers the four deliverables and the full done-for-you build — every workflow, your CRM pipeline, and your booking page. The monthly retainer is separate and covers what runs after go-live: ${PRODUCT_NAME} qualifying every new lead, us running and tuning the system, and your monthly report. ${PRODUCT_NAME} sits in the retainer, not the build.`,
       },
       {
         q: "What do I need to do?",
-        a: "Very little. This is done-for-you. After a short kickoff call, we build and run the system; you approve and watch booked jobs go up.",
+        a: "Very little. This is done-for-you — we build the system and we run it, so nothing lands on you or your staff to implement. After a short kickoff call you approve the copy, take the calls it books, and watch booked jobs go up.",
       },
     ],
     emailMessage: `Hi — I put together a short proposal for ${business.name}. It's focused on one thing: converting more of the leads you already get into booked customers. It lays out exactly what's leaking, what we'd build, and the investment. Take a look and let me know if you'd like to book a quick kickoff.`,

@@ -11,10 +11,23 @@ const PEAK = new Set([8, 10, 16]);
 const GOOD = new Set([9, 11, 13, 14, 15]);
 const expectedTier = (h: number) => (PEAK.has(h) ? 2 : GOOD.has(h) ? 1 : 0);
 
+// This file used to COUNT its failures, print them, and exit 0 regardless — a
+// validator that structurally cannot fail is not a validator, it is a report.
+// Every assertion now feeds this counter and the process exits non-zero on it,
+// so `npm run verify:all` (and any CI) actually stops when the gating breaks.
+let failures = 0;
+function fail(message: string): void {
+  failures += 1;
+  console.error(`  ✗ FAIL  ${message}`);
+}
+
 // 0) Every metro maps to a time zone.
 const unmapped = NA_METROS.filter((m) => !METRO_TIMEZONES[m]);
 console.log(`Metros mapped: ${NA_METROS.length - unmapped.length}/${NA_METROS.length}` +
   (unmapped.length ? ` — UNMAPPED: ${unmapped.join(", ")}` : " ✓"));
+// An unmapped metro silently falls out of every call-time ordering, so it is a
+// hard failure, not a footnote.
+if (unmapped.length) fail(`${unmapped.length} metro(s) have no time zone: ${unmapped.join(", ")}`);
 
 // 1) INVARIANT SWEEP — the real "works for ALL times" proof. Every 30 minutes
 //    across a full SUMMER week and a full WINTER week (covers all 24 local hours
@@ -40,6 +53,10 @@ function invariantSweep() {
   }
   console.log(`\nINVARIANT SWEEP — ${checks.toLocaleString()} checks (summer+winter, every 30 min, all ${NA_METROS.length} metros): ${fails} failures ${fails === 0 ? "✓ CORRECT AT ALL TIMES" : "✗"}`);
   mismatches.forEach((s) => console.log("   " + s));
+  if (fails) fail(`invariant sweep: ${fails}/${checks} tier mismatches (first ${mismatches.length} shown above)`);
+  // A sweep that checked nothing is also a broken sweep — it would "pass" an
+  // empty metro list forever.
+  if (checks === 0) fail("invariant sweep ran ZERO checks — the metro list or the date range is empty");
 }
 
 // 2) 24-hour visual table per season (one sample metro per US zone).
@@ -67,7 +84,12 @@ function boundaries() {
   for (const h of [7, 8, 11, 12, 13, 16, 17]) {
     // 2026-07-15, h:00 EDT = (h+4):00 UTC
     const now = new Date(Date.UTC(2026, 6, 15, h + 4, 0, 0));
-    console.log(`   local ${String(h).padStart(2)}:00 → tier ${metroCallTier("New York, NY", now)}`);
+    const got = metroCallTier("New York, NY", now);
+    const exp = expectedTier(h);
+    console.log(`   local ${String(h).padStart(2)}:00 → tier ${got}`);
+    // The header above states the expectation in words; assert it in code so the
+    // words cannot drift away from the behaviour unnoticed.
+    if (got !== exp) fail(`boundary hour ${h}:00 ET — expected tier ${exp}, got ${got}`);
   }
 }
 
@@ -76,6 +98,15 @@ function fallback() {
   const now = new Date("2026-07-23T08:00:00Z"); // 4am ET / 1am PT
   const { metros, anyCallable } = orderMetrosByCallTime(NA_METROS, now, 0);
   console.log(`\nFALLBACK @ 4am ET: anyCallable=${anyCallable}, first=${metros[0]} (opens soonest)`);
+  // At 4am ET / 1am PT nothing in North America is inside the 8-5 window.
+  if (anyCallable) fail("fallback: something was reported callable at 4am ET / 1am PT");
+  // The fallback must still hand back a full, ordered list — an empty queue is
+  // how the caller ends up with nobody to dial.
+  if (metros.length !== NA_METROS.length)
+    fail(`fallback: returned ${metros.length} metros, expected all ${NA_METROS.length}`);
+  // Eastern opens first, so the soonest-to-open metro must be an Eastern one.
+  if (localHourInMetro(metros[0], now) !== 4)
+    fail(`fallback: first metro "${metros[0]}" is not the soonest to open (local hour ${localHourInMetro(metros[0], now)}, expected 4)`);
 }
 
 invariantSweep();
@@ -83,3 +114,6 @@ hourlyTable("SUMMER (Jul 23, DST on)", "2026-07-23T04:00:00Z");
 hourlyTable("WINTER (Jan 15, DST off — watch AZ vs MT/PT shift)", "2026-01-15T05:00:00Z");
 boundaries();
 fallback();
+
+console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+process.exit(failures === 0 ? 0 : 1);

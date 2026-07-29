@@ -49,6 +49,29 @@ export async function GET() {
       hasFollowUpSequence: true,
       hasReminderSystem: true,
       hasPastCustomerDatabase: true,
+      // The five Phase 0.6 fields. They MUST be selected here: the Library and the
+      // business-detail page now render the same IntakeForm, and a field the feed
+      // doesn't fetch shows as permanently blank on this screen only — which
+      // reintroduces the exact defect the shared component removed, where which
+      // screen the operator used changed what the deliverables said.
+      hasCallTracking: true,
+      hasOnlinePayment: true,
+      afterHoursHandling: true,
+      missedCallHandling: true,
+      responseSpeed: true,
+      // The two answers that closed the last structural evidence gaps — the social
+      // channel and how cold the past-customer list has gone. Same rule as above:
+      // selected AND returned below, or the Library shows them permanently blank
+      // and the operator's answers depend on which screen he happened to open.
+      socialEnquiries: true,
+      pastCustomerContact: true,
+      // The two applicability answers — the ones that decide what gets BUILT
+      // rather than what a document says. Same rule as every field above, and it
+      // bites harder here: an answer already on file that renders blank invites
+      // the operator to answer it a second time, and one of the two questions
+      // (deposits) reads almost identically to the one beside it.
+      takesDeposits: true,
+      reviewReplyOwner: true,
       servicesFocus: true,
       bookingMethod: true,
       bookingToolName: true,
@@ -109,6 +132,25 @@ export async function GET() {
         hasFollowUpSequence: b.hasFollowUpSequence,
         hasReminderSystem: b.hasReminderSystem,
         hasPastCustomerDatabase: b.hasPastCustomerDatabase,
+        // SELECTING A COLUMN IS ONLY HALF THE JOB — it also has to be returned.
+        // These seven were fetched above but dropped here, so the Library rendered
+        // them blank forever while the business-detail page (which reads the whole
+        // row) showed the real answers: the same "which screen I used changed the
+        // deliverables" defect the shared intake form was built to remove, just
+        // moved one layer down into the feed.
+        hasCallTracking: b.hasCallTracking,
+        hasOnlinePayment: b.hasOnlinePayment,
+        afterHoursHandling: b.afterHoursHandling,
+        missedCallHandling: b.missedCallHandling,
+        responseSpeed: b.responseSpeed,
+        socialEnquiries: b.socialEnquiries,
+        pastCustomerContact: b.pastCustomerContact,
+        // Selected above AND returned here — the second half of the job, which is
+        // the half that has now been forgotten twice. A column fetched but not
+        // returned renders blank on this screen only, which is the "which screen I
+        // used changed the deliverables" defect all over again.
+        takesDeposits: b.takesDeposits,
+        reviewReplyOwner: b.reviewReplyOwner,
         servicesFocus: b.servicesFocus,
         bookingMethod: b.bookingMethod,
         bookingToolName: b.bookingToolName,
