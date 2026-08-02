@@ -15,7 +15,8 @@ const toneMap: Record<LgBadgeTone, React.CSSProperties> = {
   },
   accent: {
     background: "var(--accent-grad)",
-    color: "#fff",
+    // white on the gradient's deep end (#b05730) is 4.94:1 — passes AA
+    color: "var(--accent-fill-text)",
     border: "1px solid transparent",
   },
   success: {

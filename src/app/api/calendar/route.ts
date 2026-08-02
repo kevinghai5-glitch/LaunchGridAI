@@ -13,30 +13,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isInQueue } from "@/lib/call-queue";
-import type { ColdAuditReport } from "@/types";
+// The audit peek this route used to compute off the latest COLD_AUDIT row was
+// replaced by the observed-facts row when the cold audit was deleted (owner
+// ruling, 2026-08-01). Computed HERE, server-side, off the snapshot columns the
+// row already carries — only the small ObservedFacts object ships; the multi-MB
+// snapshots never reach the client.
+import { observedFactsFor } from "@/lib/observed-facts";
 
 export const dynamic = "force-dynamic";
 
 // Default block lengths (minutes). Mirrors the Diagnose/Pivot/Proposal 0–30 Zoom.
 const ZOOM_MIN = 30;
 const CALLBACK_MIN = 15;
-
-// Compact talking-point peek from the latest COLD_AUDIT content JSON.
-function auditPeek(content: unknown): {
-  topLeak: string | null;
-  headlineCost: string | null;
-  mobileScore: number | null;
-} {
-  const r = content as Partial<ColdAuditReport> | null | undefined;
-  if (!r || typeof r !== "object") {
-    return { topLeak: null, headlineCost: null, mobileScore: null };
-  }
-  return {
-    topLeak: r.findings?.[0]?.title ?? null,
-    headlineCost: r.headlineCost ?? null,
-    mobileScore: r.performance?.mobileScore ?? null,
-  };
-}
 
 function ymd(d: Date): string {
   const y = d.getFullYear();
@@ -70,14 +58,6 @@ export async function GET(req: Request) {
       nextActionAt: { gte: from, lte: to },
       deletedAt: null,
     },
-    include: {
-      generatedSystems: {
-        where: { type: "COLD_AUDIT", deletedAt: null },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { content: true },
-      },
-    },
     orderBy: { nextActionAt: "asc" },
   });
 
@@ -99,12 +79,14 @@ export async function GET(req: Request) {
         start: start.toISOString(),
         end: end.toISOString(),
         mapsUrl: b.mapsUrl,
+        // The four pre-dial values (cached, pure-CPU) — a week of Zooms is a
+        // small set, so every event carries its row.
+        observedFacts: observedFactsFor(b),
         enrichment: {
           rating: b.rating,
           reviewCount: b.reviewCount,
           painPoint: b.painPoint,
           outreachAngle: b.outreachAngle,
-          ...auditPeek(b.generatedSystems[0]?.content),
         },
       };
     });

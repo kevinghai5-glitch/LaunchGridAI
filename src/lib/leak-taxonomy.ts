@@ -21,6 +21,13 @@
  *    generator may NEVER produce a number that is not in STATS.
  * 5. scope: "out_of_scope" leaks are NEVER presented as things ReclaimedHQ
  *    fixes. They go only into the "Also worth knowing" section.
+ * 6. Every leak declares its CHECKABILITY — can the person reading the claim
+ *    check it? HARD may be graded "observed" and may go on a pre-sale document.
+ *    INTERPRETIVE may do neither: it can only ever be advisory, in a paid pack,
+ *    clearly labelled as advice. This is the rule that stops a judgment about a
+ *    web page from being printed under "Measured on your public pages". It is
+ *    enforced in code (gradeOf, getFiredLeaks, selectColdAudit, detectLeaks),
+ *    not by convention — see Checkability below and docs/detector-checkability.md.
  *
  * MAINTENANCE
  * - To add a leak: add an entry to LEAKS. That is the entire process.
@@ -84,15 +91,59 @@ export interface ScrapeData {
      *  check). Content-based OBSERVED claims (CTA/copy) require this to be true. */
     scanConfident: boolean;
     hasContactForm: Tri;
-    /** Form asks qualifying questions (job type / budget / timeline / service area)
-     *  vs. a bare name/email/message form. Only meaningful when a form is PRESENT. */
+    /** LEGACY MIRROR of `formQualifyingFields` — true iff that tri-state is PRESENT.
+     *  Kept because saved callers and fixtures read the boolean, and because a
+     *  boolean cannot express the third state that matters here: "we could not read
+     *  the form's fields at all". Read `formQualifyingFields` in new code.
+     *
+     *  IT USED TO BE A PROSE REGEX OVER EVERY SCRAPED PAGE, not scoped to the form
+     *  — "we work within your budget" in body copy made it true, and a real
+     *  `<select name="budget">` left it false. That is why a finding built on it
+     *  ("your form collects no qualifying fields") described a form nobody had read.
+     *  It is now computed from the form's OWN field descriptors; see analyzeForms()
+     *  in leak-detection.ts. */
     formHasQualifyingFields: boolean;
+    /** DOES THE FORM ITSELF ASK A QUALIFYING QUESTION — read off the form, not the
+     *  page. PRESENT/ABSENT come from parsing each `<form>` block and matching the
+     *  `name` / `id` / `placeholder` / `aria-label` / `<label>` text of its own
+     *  fields; UNKNOWN means no lead-capture form with readable field descriptors
+     *  was found, so nothing may be asserted about what the form asks.
+     *
+     *  Optional so every caller that predates the parse still typechecks. Undefined
+     *  is treated as UNKNOWN by anything that makes a claim, and falls back to the
+     *  legacy boolean only for the fixtures that set it directly. */
+    formQualifyingFields?: Tri;
+    /** The form's own field names, as written in the markup (name / label /
+     *  placeholder, de-duplicated, capped). Present only when a lead-capture form
+     *  was actually parsed. This is what makes the qualification finding checkable
+     *  in ten seconds: it quotes the form back rather than characterising it. */
+    formFieldsSeen?: string[];
     hasOnlineBookingLink: Tri; // Calendly, GHL calendar, any scheduler
     hasChatWidget: Tri;        // any live-chat/webchat script detected
     hasClickToCallOnMobile: Tri;
-    /** Clear primary CTA above the fold on home page (book / call / quote) */
+    /** ADVISORY HEURISTIC — NOT A MEASUREMENT, AND NO DETECTOR READS IT.
+     *
+     *  It is `CTA_RE.test(homepageMarkdown.slice(0, 1500))`: thirteen closed phrases
+     *  against the first 1500 characters of MARKDOWN. Markdown has no fold, so
+     *  position is never measured; 1500 characters of nav, logo alt text and cookie
+     *  banner exhaust the window before the hero on most real sites; and a CTA
+     *  reading "Free Case Evaluation", "Request a Consultation", "Contact Us Today"
+     *  or a bare phone number scores as absent because it is not one of the
+     *  thirteen. This field produced the false "no primary action above the fold,
+     *  and your phone number is buried" finding that shipped to a law firm whose
+     *  page had both.
+     *
+     *  It is kept because the contract is read by fixtures and because the operator
+     *  can still find it useful when he writes site advisory by hand. It is in
+     *  UNCITABLE_SCRAPE_FIELDS: no finding, at any grade, in any deliverable, may
+     *  cite, quote, paraphrase or allude to it. See docs/detector-checkability.md §4. */
     hasPrimaryCtaAboveFold: boolean;
-    /** Distinct CTA present on each service page */
+    /** ADVISORY HEURISTIC — NOT A MEASUREMENT, AND NO DETECTOR READS IT.
+     *  `servicePageTexts.every(t => CTA_RE.test(t))` over pages whose URL matched
+     *  /services|treatments|pricing|menu/. Same thirteen phrases; one page out of
+     *  five drags it false; law-firm practice areas never classify as services at
+     *  all, so the check silently passes. "Distinct CTA" is a judgment the code
+     *  never makes. Also in UNCITABLE_SCRAPE_FIELDS. */
     servicePagesHaveCtas: boolean;
     mentionsTextingOption: boolean; // "text us" anywhere on site
     linksToFacebook: boolean;
@@ -102,6 +153,13 @@ export interface ScrapeData {
   pageSpeed?: {
     mobileScore: number;   // 0–100
     lcpSeconds: number;
+    /** Cumulative Layout Shift, mobile strategy — a real Lighthouse measurement.
+     *  Fetched all along (PsiResult.metrics.cls) and dropped on the floor here
+     *  until now, which is why a layout shift of 0 could only be printed as a bare
+     *  neutral metric. Optional: absent when PSI did not run or did not report it,
+     *  and absent on every fixture written before this. A GOOD value is news worth
+     *  stating as good — see cleanChecks() in leak-detection.ts. */
+    cls?: number;
   };
 
   googleReviews?: {
@@ -363,6 +421,76 @@ export type EvidenceTier =
 export type EvidenceClass = "OBSERVED" | "INVISIBLE";
 
 /**
+ * CHECKABILITY — CAN A CLAIM THIS LEAK MAKES BE CHECKED BY THE PERSON READING IT?
+ *
+ * WHY THIS EXISTS, IN ONE PARAGRAPH. A real cold audit shipped this as finding 01
+ * to a law firm: "No clear call to action on your homepage — Measured on your
+ * public pages… There's no primary action above the fold, and your phone number is
+ * buried." The firm visibly had both. Two defects produced it. The detector should
+ * not have fired (`hasPrimaryCtaAboveFold` is thirteen phrases against 1500
+ * characters of markdown — see the field's own comment). And the SENTENCE WAS
+ * NEVER MEASURED AT ALL: nothing in ScrapeData contains "buried" or "above the
+ * fold", the model wrote those specifics, and the grade then stamped them
+ * "Measured on your public pages" — because the grade certified THAT A DETECTOR
+ * FIRED, not that the sentence was true. `hasClickToCallOnMobile` was PRESENT for
+ * that business, so the document asserted the exact opposite of the one thing we
+ * had actually fingerprinted.
+ *
+ * So checkability is the missing axis, and it is DATA rather than a comment
+ * precisely so it cannot drift: gradeOf() reads it, getFiredLeaks() enforces it,
+ * selectColdAudit() filters on it, and the pack validator can assert on it.
+ *
+ *   HARD          Every claim this leak may make is anchored in a field with
+ *                 ground truth behind it — a measured number (Lighthouse, Google
+ *                 review counts, DataForSEO hours), a positive fingerprint over
+ *                 markup (`<form`, `href="tel:`, a provider host from a closed
+ *                 list), a verbatim review fragment, or the client's own answer.
+ *                 A prospect can check it. May be graded `observed` where the leak
+ *                 has an OBSERVED branch; may appear pre-sale.
+ *
+ *   INTERPRETIVE  At least one claim requires visual or editorial JUDGMENT, or the
+ *                 value behind it is a heuristic dressed as a boolean — a "clear"
+ *                 call to action, a "buried" phone number, a "weak" hero, where
+ *                 anything sits on a rendered page. We render no page and measure
+ *                 no position. Consequences, all enforced in code:
+ *                   · may NEVER be graded `observed` (gradeOf refuses it);
+ *                   · may NEVER appear in a pre-sale artifact — the cold audit and
+ *                     the public teaser carry only facts that cannot be wrong, and
+ *                     detectLeaks drops interpretive fires in pre_sale mode;
+ *                   · in the PAID pack it may appear ONLY as clearly-labelled
+ *                     advisory (surfaces.siteAdvisory), never as a measured finding.
+ *
+ * THE MAPPING FROM docs/detector-checkability.md. That manifest grades 18 leaks on
+ * four verdicts; two of them are the same thing to this code. `HARD` and `HARD —
+ * no OBSERVED branch` both land on HARD here: whether a leak HAS an OBSERVED
+ * branch is already a structural fact about its detector, and duplicating it in a
+ * field would create a second place for it to disagree with the code. The single
+ * `NEEDS A DECISION` row (no_lead_qualification) was decided by fixing the
+ * measurement rather than by relabelling the claim — its form check now reads the
+ * form's own fields — so it is HARD. One row is INTERPRETIVE: weak_landing_cta.
+ */
+export type Checkability = "HARD" | "INTERPRETIVE";
+
+/**
+ * Scrape fields that promise a measurement the code does not take. NO FINDING MAY
+ * CITE ONE, at any grade, in any deliverable — not the value, not the field name,
+ * and not a paraphrase of what the name implies.
+ *
+ * Data, not prose, so the validator and the verification scripts can key on the
+ * same list this file documents. Each entry is a path on ScrapeData; the reason it
+ * is here is written on the field itself.
+ */
+export const UNCITABLE_SCRAPE_FIELDS = [
+  "website.hasPrimaryCtaAboveFold",
+  "website.servicePagesHaveCtas",
+  "website.scanConfident",
+  "website.mentionsTextingOption",
+  "googleReviews.ownerResponseRate",
+  "googleReviews.recentCount90d",
+  "gbp.messagingEnabled",
+] as const;
+
+/**
  * EVIDENCE GRADE — the honesty gate that drives VOICE.
  *
  * `tier` says HOW a detection fired. `grade` says WHAT GRADE OF KNOWLEDGE the
@@ -407,10 +535,53 @@ export type EvidenceClass = "OBSERVED" | "INVISIBLE";
 export function gradeOf(input: {
   tier?: EvidenceTier | null;
   intakeConfirmed?: boolean | null;
+  /** Set directly, or read off a nested `leak` — see checkabilityOf(). */
+  checkability?: Checkability | null;
+  leak?: { checkability?: Checkability | null } | null;
 }): EvidenceGrade {
+  // THE CEILING COMES FIRST, BEFORE THE TIER IS EVEN LOOKED AT. An interpretive
+  // leak cannot be graded "observed" whatever its detector says it found, because
+  // "observed" is what prints "Measured on your public pages, {date}" beside the
+  // sentence — and a judgment about a page is not a measurement of it. Told still
+  // beats guessed underneath the ceiling: if the client themselves said it, that is
+  // a real disclosure and stays attributed to them.
+  if (checkabilityOf(input) === "INTERPRETIVE") {
+    return input.intakeConfirmed === true ? "disclosed" : "inferred";
+  }
   if (input.tier === "OBSERVED") return "observed"; // we measured it ourselves
   if (input.intakeConfirmed === true) return "disclosed"; // they told us
   return "inferred"; // EVIDENCED or BENCHMARK, unconfirmed — a pattern, not a fact
+}
+
+/**
+ * The checkability behind a grade input, from whichever shape the caller has: a
+ * FiredLeak (which carries `leak`), a LeakInput or AssertionContext (which carries
+ * the flat field), or an explicit value.
+ *
+ * AN UNDECLARED CHECKABILITY READS AS HARD, and that is a deliberate, bounded
+ * decision rather than an oversight. `checkability` is REQUIRED on Leak, so every
+ * entry in LEAKS declares it and every fire built by getFiredLeaks resolves it off
+ * the leak — the production paths cannot reach the default. What can is a
+ * hand-built input in a test or a saved-pack shape written before this field
+ * existed, and for those the alternative (defaulting to INTERPRETIVE) would silently
+ * hedge every measured sentence in every old pack. So the default is the permissive
+ * one, and the guarantee is carried by the required field rather than by this line.
+ */
+export function checkabilityOf(input: {
+  checkability?: Checkability | null;
+  leak?: { checkability?: Checkability | null } | null;
+}): Checkability {
+  return input.checkability ?? input.leak?.checkability ?? "HARD";
+}
+
+/** True when this leak may never be graded `observed`, may not appear pre-sale, and
+ *  in the paid pack belongs on the advisory surface rather than in the findings.
+ *  Takes anything that carries the field, so a Leak or a FiredLeak both work. */
+export function isInterpretive(input: {
+  checkability?: Checkability | null;
+  leak?: { checkability?: Checkability | null } | null;
+}): boolean {
+  return checkabilityOf(input) === "INTERPRETIVE";
 }
 
 /** Ranking multiplier per tier — observed leaks outrank guessed ones. */
@@ -762,7 +933,7 @@ export type ScorecardArea =
  *
  * ABSENT IS A REAL ANSWER, and it means one of two honest things:
  *   · the leak fires OBSERVED — we measure it ourselves, so there is nothing to
- *     ask (site speed, review counts, a missing booking link, a weak CTA);
+ *     ask (site speed, review counts, a missing booking link);
  *   · no question we ask could resolve it — no ClientIntake field carries the
  *     answer (webchat, how they qualify an enquiry at the front door). Those gaps
  *     are structural, not collectible, and inventing a question here that wouldn't
@@ -803,7 +974,26 @@ export interface Leak {
    *  operation? Drives the narrative honesty rule for INVISIBLE leaks
    *  (pattern + visible-absence + conditional only). See EvidenceClass. */
   evidenceClass: EvidenceClass;
-  /** What the owner experiences, in plain language. Used as the leak headline. */
+  /** CAN THE READER CHECK WHAT THIS LEAK CLAIMS? Required, never inferred at a call
+   *  site. HARD may be graded observed and may go pre-sale; INTERPRETIVE may do
+   *  neither and is advisory-only in the paid pack. See Checkability — and
+   *  docs/detector-checkability.md for the per-leak verdicts this mirrors. */
+  checkability: Checkability;
+  /** What the owner experiences, in plain language.
+   *
+   *  IT IS HANDED TO THE MODEL AS MATERIAL ABOUT THIS BUSINESS, which is the thing
+   *  to know before editing one: leakInputsToPromptBlock prints `symptom:` into the
+   *  prompt and the prompt's own rule is "you may rephrase for flow; you may NOT
+   *  add facts not present here". So everything in a symptom string is LICENSED
+   *  copy. "buried phone number" lived in this field for weak_landing_cta, and that
+   *  is where the false Crangle sentence came from — generic taxonomy prose the
+   *  model correctly treated as permitted, then stamped as measured.
+   *
+   *  THE RULE FOR WRITING ONE: a symptom may describe the shape of the problem in
+   *  the owner's language, but it may not assert a checkable specific the detector
+   *  cannot establish — no positions on a page, no counts, no rates, no claim about
+   *  what happens inside the business. If the detector cannot prove it, it does not
+   *  belong in this string. */
   symptom: string;
 
   /**
@@ -892,6 +1082,10 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "response_speed",
     evidenceClass: "INVISIBLE", // response latency is internal; reviews only proxy it
+    // HARD: every claim rests on a counted number of real review fragments, a
+    // fingerprinted form, or the client's own answer. No OBSERVED branch exists, so
+    // it was already structurally incapable of printing "measured".
+    checkability: "HARD",
     symptom:
       "Someone fills out the website form and waits hours — or days — for a reply. By then they've called someone else.",
     detection: [
@@ -951,6 +1145,10 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "call_capture",
     evidenceClass: "INVISIBLE", // whether calls are missed/recovered is internal; reviews only proxy it
+    // HARD: counted review fragments + a phone number we have + the absence of a
+    // visible texting path. The missed-call RATE it cites is the industry's, tagged
+    // as such. No OBSERVED branch.
+    checkability: "HARD",
     symptom:
       "Calls hit voicemail when the team is on a job, with a patient, or in court — and nothing happens next. The caller dials the next business on the list.",
     detection: [
@@ -1015,6 +1213,12 @@ export const LEAKS: Leak[] = [
     // happens to an after-hours caller (do they get a response?) is INVISIBLE and
     // must stay hedged in the narrative — never assert their after-hours handling.
     evidenceClass: "OBSERVED",
+    // HARD, and its OBSERVED branch is a genuine measurement: limitedHours is
+    // parsed from Google's own work_time timetable (both weekend days closed AND
+    // every open weekday closing by 18:00, false on anything unreadable). The
+    // absence half is bounded to the provider lists we fingerprint, which is why
+    // the evidence sentence says "on the pages we scanned".
+    checkability: "HARD",
     symptom:
       "Demand doesn't stop at 5pm — a big share of calls and inquiries arrive evenings and weekends, and right now they land on a closed door.",
     detection: [
@@ -1082,8 +1286,19 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "online_booking",
     evidenceClass: "OBSERVED", // absence of a booking link/scheduler is directly visible
+    // HARD: a booking link is either fingerprinted or it is not, and the absence is
+    // scoped to the scheduler hosts/providers we look for plus Google's own
+    // book_online_url field.
+    checkability: "HARD",
+    // SCRUBBED. This used to open "The only way to become a customer is to call
+    // during business hours." The detector fires on the absence of a BOOKING LINK,
+    // not on the absence of every other route in — and it fires happily on sites
+    // with a working contact form, which no_lead_qualification proves we detect
+    // often. Handed to the model as licensed material (see `symptom` above), that
+    // sentence was one rephrase away from a false claim under a measured label. It
+    // now describes the absence we actually establish.
     symptom:
-      "The only way to become a customer is to call during business hours. Anyone who prefers to book online — or is browsing at 9pm — can't.",
+      "There's no way to book online — not on the site, not on the Google listing. Anyone who would rather pick a time than start a conversation has to wait for someone to be free to have one.",
     detection: [
       {
         tier: "OBSERVED",
@@ -1130,6 +1345,11 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "call_capture",
     evidenceClass: "OBSERVED", // presence/absence of a chat widget is directly visible
+    // HARD, with the hedge built into the wording rather than into the grade:
+    // CHAT_PROVIDERS is a closed list of twelve hosts, so an ABSENT means "none of
+    // the twelve fingerprinted". That is why the evidence sentence says "detected"
+    // and names the pages we scanned. Keep both words.
+    checkability: "HARD",
     symptom:
       "Visitors with a quick question have two options: call, or leave. There's no low-friction way to start a conversation from the site.",
     detection: [
@@ -1166,18 +1386,41 @@ export const LEAKS: Leak[] = [
     // BENCHMARK branch (all-phone intake) is closer to invisible, but the primary
     // detection is the observable form, so the leak's class is OBSERVED.
     evidenceClass: "OBSERVED",
+    // THE MANIFEST'S ONE "NEEDS A DECISION" ROW, DECIDED BY FIXING THE MEASUREMENT
+    // RATHER THAN BY SOFTENING THE SENTENCE. The OBSERVED branch used to print "your
+    // contact form collects no qualifying fields" off a prose regex run over the
+    // joined HTML of every scraped page — a check that never looked at the form. So
+    // "we work within your budget" in body copy suppressed a real gap, and a real
+    // `<select name="budget">` could still fire the finding.
+    //
+    // The check now parses each `<form>` block and reads its OWN fields (name / id /
+    // placeholder / aria-label / label text), and the finding quotes those field
+    // names back. That makes it checkable in ten seconds by the person reading it,
+    // which is the definition of HARD. When the fields cannot be read at all the
+    // branch does not fire — the leak falls to a hedge instead of asserting from
+    // silence. See analyzeForms() in leak-detection.ts.
+    checkability: "HARD",
+    // SCRUBBED of the internal claim. The old second sentence — "the owner spends
+    // selling time sorting instead of closing" — asserts what happens inside the
+    // business on a leak whose class is OBSERVED, i.e. one whose findings are
+    // allowed to read as fact. What we can see is the form and what it asks.
     symptom:
-      "Every inquiry — tire-kicker or CAD $20k job — lands in the same pile. The owner spends selling time sorting instead of closing.",
+      "Every inquiry — tire-kicker or CAD $20k job — arrives through the same form, asking the same three things, landing in the same pile with nothing to sort it by.",
     detection: [
       {
         tier: "OBSERVED",
         when:
-          "website.hasContactForm is true AND website.formHasQualifyingFields is false",
+          "website.hasContactForm is PRESENT AND website.formQualifyingFields is ABSENT — i.e. we parsed the form's own fields and none of them asks job type, budget, timeline or service area. A form whose fields we could NOT read (formQualifyingFields UNKNOWN) does not reach this branch.",
       },
       {
         tier: "BENCHMARK",
         when:
-          "website.hasContactForm is false AND no chat widget (all intake is raw phone — qualification is whoever answers)",
+          "website.hasContactForm is PRESENT but website.formQualifyingFields is UNKNOWN — a form is there and we could not read what it asks. Hedged, verified at kickoff. Never state what the form collects.",
+      },
+      {
+        tier: "BENCHMARK",
+        when:
+          "website.hasContactForm is not PRESENT AND no chat widget (all intake is raw phone — qualification is whoever answers)",
       },
     ],
     // NO intakeAsk. Nothing in ClientIntake asks what an enquiry is asked before
@@ -1204,28 +1447,88 @@ export const LEAKS: Leak[] = [
   },
 
   {
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * THE LEAK THAT SHIPPED A FALSE CLAIM, AND WHAT WAS DONE ABOUT IT.
+     * ═════════════════════════════════════════════════════════════════════════
+     * A real cold audit told a law firm, as finding 01, stamped "Measured on your
+     * public pages": "There's no primary action above the fold, and your phone
+     * number is buried." The firm had a clear call to action and a `tel:` link in
+     * its header. Three separate parts of this entry conspired to produce that
+     * sentence, and all three are fixed here:
+     *
+     *   1. THE DETECTOR fired on two heuristics with no ground truth behind them —
+     *      thirteen closed phrases against 1500 characters of markdown, and the
+     *      same phrase list over URL-classified "service" pages. Both are gone
+     *      from the detector (see leak-detection.ts). What survives is the one
+     *      checkable assertion: whether a `tel:` link exists in the HTML at all.
+     *      For that firm it DID, which is why the detector's own reasons array
+     *      never contained the click-to-call reason — the document asserted the
+     *      opposite of the only thing we had actually fingerprinted.
+     *   2. THE SYMPTOM below carried "buried phone number" and "no clear primary
+     *      action" as licensed prose. The model did not hallucinate those words;
+     *      it was handed them. Scrubbed.
+     *   3. THE GRADE said "observed" because a detector fired. It now cannot:
+     *      checkability INTERPRETIVE makes `observed` unreachable for this leak
+     *      whatever any detector returns, and pre-sale drops it entirely.
+     *
+     * WHY IT IS STILL INTERPRETIVE EVEN THOUGH THE SURVIVING SIGNAL IS HARD. The
+     * signal is checkable; the LEAK is a judgment about how well a page converts,
+     * and that is what its name, its symptom and its advisory content are about.
+     * Anything written under this heading drifts back towards "weak", "buried",
+     * "generic" — the vocabulary of an opinion — so the honest ceiling is the
+     * leak's, not the signal's. It fires at EVIDENCED at best: a real signal,
+     * followed by an inference, which is exactly the shape of what we know.
+     *
+     * WHY IT IS NOT DELETED. verifyWorkflowCatalogue() declares this id and
+     * asserts it still exists and is still in scope; TaxonomyLeakId includes it;
+     * and it is what justifies the GoHighLevel booking page we build plus the
+     * written site advisory we hand the client's own web person. Narrow the
+     * detector and the targets, keep the row.
+     */
     id: "weak_landing_cta",
     name: "Weak landing page conversion path",
     scope: "ghl",
     scorecardArea: "lead_qualification",
-    evidenceClass: "OBSERVED", // CTA/click-to-call presence on the page is directly visible
+    // INVISIBLE, not OBSERVED. The old class licensed flat assertions about the
+    // page ("a [class: OBSERVED] leak — missing booking link, weak CTA — may be
+    // stated as fact", in the generator's own Law 13). Whether a page "tells
+    // visitors what to do" is not something this software sees, so the class now
+    // says so and the flat-assertion lint hedges anything written about it.
+    evidenceClass: "INVISIBLE",
+    checkability: "INTERPRETIVE",
+    // SCRUBBED, AND THIS IS THE STRING THE FALSE SENTENCE CAME FROM. It read:
+    // "Traffic arrives, reads, and leaves. The page doesn't tell visitors what to
+    // do next — no clear primary action, buried phone number, generic 'contact
+    // us'." Every one of those clauses is a judgment about a rendered page that
+    // nothing in ScrapeData establishes, and the prompt licenses the model to
+    // rephrase them into findings. What is left is the checkable claim and the
+    // consequence, with no position, no adjective and no verdict on their copy.
     symptom:
-      "Traffic arrives, reads, and leaves. The page doesn't tell visitors what to do next — no clear primary action, buried phone number, generic 'contact us'.",
+      "On a phone, the number isn't a tap — there's no tel: link in the page HTML, so calling means copying digits out by hand or giving up.",
     detection: [
       {
-        tier: "OBSERVED",
+        tier: "EVIDENCED",
         when:
-          "website.hasPrimaryCtaAboveFold is false OR website.servicePagesHaveCtas is false OR website.hasClickToCallOnMobile is false",
+          "website.hasClickToCallOnMobile is ABSENT — no `tel:` link fingerprinted anywhere in the HTML of the pages we scanned, with proof of a good scan behind it. EVIDENCED, never OBSERVED: the signal is real, the conclusion about how the page performs is an inference. The two heuristics this rule used to also fire on (hasPrimaryCtaAboveFold, servicePagesHaveCtas) are gone — see the header comment.",
       },
     ],
-    // NO intakeAsk — and none is needed. This leak has exactly one detection rule
-    // and it is OBSERVED: we read their page. It can never sit at "inferred", so
-    // it can never appear in the operator's list of things he failed to collect.
+    // NO intakeAsk. Nothing on the intake form asks about their website, and this
+    // leak's fire is a fingerprint we take ourselves — so there is no question to
+    // put on the operator's list of things he failed to collect. It will show up in
+    // inferredGaps() with a null ask, which is the honest reading: the gap is not
+    // that we forgot to ask, it is that a scan cannot judge a page.
     revenueMechanism:
       // NOTE: this string is emitted to the model as the "why it costs money" line
       // and the prompt permits rephrasing it, so any leadgen term here can echo into
       // a pack and hard-fail Law 2. It must stay clean of ad/traffic-buying vocabulary.
-      "The site already gets the visit — the page just doesn't convert it. A clear primary action above the fold, click-to-call on mobile, and a distinct CTA per service page turn existing visits into inquiries without buying a single additional one. This is the cheapest conversion gain on the list because the demand is already there.",
+      //
+      // IT ALSO MUST NOT DESCRIBE THEIR PAGE. It used to open by naming the three
+      // things a good page has — "a clear primary action above the fold, click-to-call
+      // on mobile, and a distinct CTA per service page" — which a rephrase turns
+      // straight back into a claim that theirs has none of them. It now describes
+      // what WE build and hand over, which is the only part we can stand behind.
+      "The visit already happened; the question is whether it can finish. What we build is our own booking page — one action, a tappable number, a reassurance line — and what we hand over for their own site is written advice for whoever looks after it. Nothing here is a redesign, and nothing here needs another visitor bought.",
     statIds: [],
     impactWeight: 6,
     ghlFix: {
@@ -1243,8 +1546,20 @@ export const LEAKS: Leak[] = [
         "Site CTA recommendations (advisory)",
       ],
     },
+    // "cold_audit" IS GONE, and it is the single most important line in this entry.
+    // The free audit goes to a stranger who has told us nothing, stamped with a
+    // measurement date, and it is read on a call where every claim in it gets tested
+    // against a business the owner knows better than we do. One judgment presented
+    // as a measurement there costs every true claim beside it. An interpretive leak
+    // has no place on it — enforced three ways: this list, the interpretive filter
+    // in selectColdAudit(), and the pre-sale drop in detectLeaks().
+    //
+    // WHAT REMAINS IS THE PAID SIDE, WHERE IT IS ADVISORY. asset_pack carries the
+    // booking-page copy and the written site recommendations (surfaces.siteAdvisory
+    // — "hand this to whoever looks after your website; it is advice, not work we
+    // do"); roadmap carries the booking-page build; growth_leak_report carries the
+    // finding, hedged, because its grade can never be `observed`.
     deliverableTargets: [
-      "cold_audit",
       "growth_leak_report",
       "asset_pack",
       "roadmap",
@@ -1261,6 +1576,10 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
     evidenceClass: "INVISIBLE", // what they do after a lead goes quiet is internal
+    // HARD: counted review fragments, or the client's answer, or nothing — and when
+    // it is nothing the evidence string names itself an industry pattern in as many
+    // words. No OBSERVED branch. Do not compress that clause away.
+    checkability: "HARD",
     symptom:
       "A lead says 'let me think about it' — and that's the last touch they ever get. No second call, no email, no text.",
     detection: [
@@ -1311,6 +1630,9 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "show_rate_protection",
     evidenceClass: "INVISIBLE", // reminder systems + real no-show rate are internal
+    // HARD: counted review fragments, the vertical, and the conservative end of a
+    // cited no-show range. Never a no-show rate for THIS business. No OBSERVED branch.
+    checkability: "HARD",
     symptom:
       "Appointments get booked, then a chunk of them simply don't show — an empty chair or a wasted drive, with no reminder system working to prevent it.",
     detection: [
@@ -1362,6 +1684,9 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "pipeline_tracking",
     evidenceClass: "INVISIBLE", // whether they track leads is entirely internal
+    // HARD: it claims nothing but the intake answer, and unconfirmed its evidence
+    // string says out loud that it is an industry pattern rather than an observation.
+    checkability: "HARD",
     symptom:
       "Leads live in a notebook, an inbox, or nowhere. Nobody can say how many inquiries came in last month or what happened to them.",
     detection: [
@@ -1396,6 +1721,10 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
     evidenceClass: "INVISIBLE", // existence/use of a past-customer list is internal
+    // HARD: the review COUNT it leans on is a real Google number, used only as
+    // evidence of operating history, and the dormancy inference is hedged in the
+    // evidence string itself. No list size, no dormancy period, ever.
+    checkability: "HARD",
     symptom:
       "Years of past customers and old quotes sit in a spreadsheet or an inbox — and nobody has contacted them since the job ended.",
     detection: [
@@ -1458,6 +1787,8 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "follow_up_nurture",
     evidenceClass: "INVISIBLE", // long-cycle nurture behavior is internal
+    // HARD: one intake answer and nothing else, hedged as a pattern when unanswered.
+    checkability: "HARD",
     symptom:
       "Leads who said 'not right now' vanish from the system. When their trigger finally hits — the furnace dies, the case becomes urgent — the business isn't in their inbox.",
     detection: [
@@ -1506,19 +1837,30 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "reputation_social_proof",
     evidenceClass: "OBSERVED", // review counts/recency vs competitors are directly visible
+    // HARD, and the cleanest comparison in the file: their Google review count
+    // against the median of the competitor counts Google gave us. Both sides are
+    // real numbers. WHAT MUST BE SAID PRECISELY IS THE SAMPLE — see the detection
+    // rule below and 3.13 in docs/detector-checkability.md.
+    checkability: "HARD",
+    // SCRUBBED, TWICE OVER. It used to read: "Happy customers finish the job and
+    // leave — nobody asks them for a review. Meanwhile the competitor down the
+    // street adds ten a month." Both halves are fabrications on an observed-capable,
+    // cold-audit-eligible leak: we have never seen whether they ask for reviews, and
+    // "ten a month" is a velocity nobody computed — spelled as a word, so statGuard
+    // never saw a number to flag. What is left is the comparison we actually make.
     symptom:
-      "Happy customers finish the job and leave — nobody asks them for a review. Meanwhile the competitor down the street adds ten a month.",
+      "Side by side on a phone, the review count next to yours is bigger — and volume is what a stranger reads as safety before they ever read a word of it.",
     detection: [
       {
         tier: "OBSERVED",
         when:
-          "googleReviews.recentCount90d is low relative to competitor median (e.g., < 50% of the median competitor's implied velocity) OR googleReviews.count < 50% of median competitor reviewCount. Both sides of the comparison are observed data — state the actual numbers.",
+          "competitors exist AND googleReviews.count < 50% of the median of the competitor reviewCounts we pulled. STATE THE SAMPLE, NOT A BENCHMARK: ScrapeData.competitors is intel.competitors.topRated — the three HIGHEST-RATED nearby businesses, sorted by rating then review count — so the median is the median of those three, not a market cross-section and not 'the local benchmark'. googleReviews.recentCount90d is NOT read by this detector (it is a floor, not a count: DataForSEO reviews only, capped at 20) and must not be cited as a velocity.",
       },
     ],
     // NO intakeAsk — one OBSERVED rule, both sides of it measured (their review
-    // count against the competitor median). Nothing to ask.
+    // count against the median of the sample we pulled). Nothing to ask.
     revenueMechanism:
-      "Buyers comparing two local businesses at the decision moment lean on review count, recency, rating — and whether the owner is visibly present on the page. When a competitor shows triple the recent reviews, a share of ready-to-buy demand defaults to them. Asking after every completed job, and replying to what comes back, closes the gap without the owner lifting a finger.",
+      "Buyers comparing two local businesses at the decision moment lean on review count, recency, rating — and whether the owner is visibly present on the page. When the business beside them shows several times the reviews, a share of ready-to-buy demand defaults to them. Asking after every completed job, and replying to what comes back, closes the gap without the owner lifting a finger.",
     statIds: [],
     impactWeight: 6,
     verticalBoost: {
@@ -1588,6 +1930,10 @@ export const LEAKS: Leak[] = [
     // operation. Naming it OBSERVED would licence a flat "we saw that nobody
     // replies" — which we never did see.
     evidenceClass: "INVISIBLE",
+    // HARD: it records an answer and claims nothing else. It has no scan branch, no
+    // benchmark fallback and no OBSERVED tier — an unanswered question leaves it
+    // unfired rather than hedged, which is the whole point of the reinstatement.
+    checkability: "HARD",
     symptom:
       "Reviews come in and nothing comes back. The next person deciding whether to call reads a page where nobody from the business has said a word.",
     detection: [
@@ -1648,6 +1994,9 @@ export const LEAKS: Leak[] = [
     // The CHANNEL (FB/IG link) is observed, but DM response behavior is INVISIBLE —
     // never assert how fast they answer DMs; hedge it as the detection note says.
     evidenceClass: "INVISIBLE",
+    // HARD: the channel is a real host-matched link parse and the response behaviour
+    // is hedged or attributed to the client. No reply rate, no DM response time.
+    checkability: "HARD",
     symptom:
       "Facebook and Instagram messages sit in an app nobody checks between jobs. DM inquiries get the slowest response of any channel — or none.",
     detection: [
@@ -1705,6 +2054,8 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "pipeline_tracking",
     evidenceClass: "INVISIBLE", // call-tracking presence is not externally visible
+    // HARD: one intake answer, and its unconfirmed string names itself a pattern.
+    checkability: "HARD",
     symptom:
       "Nobody knows how many calls came in last month, how many were missed, or what time of day they're lost. The leak can't be seen, so it can't be managed.",
     // NOT ONE OF THE 14 SOLD WORKFLOWS. This is a measurement FINDING — the
@@ -1743,6 +2094,9 @@ export const LEAKS: Leak[] = [
     scope: "ghl",
     scorecardArea: "online_booking",
     evidenceClass: "INVISIBLE", // deposit/payment process is mostly invisible externally
+    // HARD: it scans nothing whatsoever, fires on vertical membership, and its
+    // evidence string says both of those things out loud. Do not soften that.
+    checkability: "HARD",
     symptom:
       "A lead agrees to the job — then the deposit means an e-transfer request, a mailed invoice, or 'we'll sort it at the appointment'. Some yeses evaporate in that gap.",
     // DEMOTED TO A PURE INDUSTRY INFERENCE. The old rule claimed "no online
@@ -1792,12 +2146,16 @@ export const LEAKS: Leak[] = [
     scope: "out_of_scope",
     scorecardArea: null,
     evidenceClass: "OBSERVED", // measured PageSpeed is directly observed
+    // HARD, and the cleanest observed leak in the file: Lighthouse numbers from a
+    // named run on a named date. Nothing here is inferred from markup.
+    checkability: "HARD",
     symptom:
       "The site loads slowly on mobile, which costs some share of visitors before the page even renders.",
     detection: [
       {
         tier: "OBSERVED",
-        when: "pageSpeed.mobileScore < 50 OR pageSpeed.lcpSeconds > 4",
+        when:
+          "pageSpeed.mobileScore < 50 OR pageSpeed.lcpSeconds > 4. Layout shift (pageSpeed.cls) does NOT open this leak — it rides along in the evidence when it is measured and poor. A GOOD cls is reported as a clean check instead, by name: see cleanChecks() in leak-detection.ts.",
       },
     ],
     // NO intakeAsk — PageSpeed is a measurement we take ourselves. Nothing to ask.
@@ -1917,7 +2275,17 @@ export const RULES = {
   ranking: [
     "score = impactWeight × TIER_MULTIPLIER[tier] × (verticalBoost applies ? 1.2 : 1.0)",
     "Growth Leak Report: all fired in-scope leaks, ranked by score descending.",
-    "Cold audit: top 3 by score, BUT at least 2 of the 3 must be OBSERVED or EVIDENCED — pre-call ammo must be provable, not guessed. If fewer than 2 qualify, take the highest-scoring observable leaks even if lower-scored.",
+    // REWRITTEN. The old rule was "top 3 by score, at least 2 of the 3 OBSERVED or
+    // EVIDENCED" — which means up to one numbered finding on a free document could
+    // be an industry pattern, and the padding slot was filled by whichever pattern
+    // scored highest. A real audit shipped with two of its three numbered findings
+    // being patterns while the one hard measurement (77/100, 4.1s) sat underneath in
+    // an unnumbered block. That is backwards, and the padding is what created room
+    // for the false measured claim in the first place.
+    "Cold audit: HARD findings only, and only ones that were actually established — OBSERVED or EVIDENCED, on a leak whose checkability is HARD. Never an INTERPRETIVE leak (it cannot appear pre-sale at all), and never a BENCHMARK/industry-pattern fire.",
+    "Cold audit ordering: by EVIDENCE STRENGTH first — OBSERVED before EVIDENCED — then by score within each. The strongest measurement is finding 01.",
+    "Cold audit padding: FORBIDDEN. Up to 3 findings, fewer is fine, ONE is fine, ZERO is fine. A short honest document beats a padded one: one fabricated claim destroys every true claim printed beside it. Industry patterns belong in the pivot section as questions, never as numbered findings.",
+    "Cold audit with zero or one hard finding is a normal, valuable outcome — a well-run business. The document still generates and states the checks that came back CLEAN, by name (cleanChecks). See DELIVERABLE_ROUTING.cold_audit.",
     "Out-of-scope flags are never ranked against in-scope leaks and never counted in leak totals.",
   ],
 
@@ -1935,6 +2303,9 @@ export const RULES = {
   ],
 
   language: [
+    "CHECKABILITY OUTRANKS TIER. A leak whose checkability is INTERPRETIVE may never be written as something we measured, whatever its tier says — no 'we saw', no measurement date, no position on a page. In the paid pack it appears as clearly-labelled advisory (surfaces.siteAdvisory: 'hand this to whoever looks after your website — it is advice, not work we do'); pre-sale it does not appear at all.",
+    "NO FINDING MAY CITE A FIELD IN UNCITABLE_SCRAPE_FIELDS — not the value, not the field name, not a paraphrase of what the name implies. That list is the set of names that promise a measurement the code does not take.",
+    "CLEAN CHECKS ARE STATED, NOT IMPLIED. A measurement that came back fine is good news and gets said as good news ('layout shift is 0 — that's fine, not where you're leaking'), never printed as a bare neutral metric beside the problems. A named clean check is also what makes the findings beside it credible.",
     "OBSERVED: state as fact, cite the observed data point ('Your site has no online booking path; two of three nearby competitors offer one.').",
     "EVIDENCED: state the signal first, then the inference ('Three reviews from the last six months mention calls that weren't returned — a strong sign inbound calls are being missed.'). Quote at most a short fragment of any review.",
     "BENCHMARK: mandatory shape — acknowledge invisibility, state the industry pattern with its stat or softFraming, add the kickoff-verification line ('We verify this together at kickoff — if you already have this covered, it comes off the list.').",
@@ -1951,9 +2322,9 @@ export const RULES = {
 
 export const DELIVERABLE_ROUTING = {
   cold_audit:
-    "Top 3 leaks per ranking rules (provability constraint). Each: symptom + evidence line + one stat + spend-anchored cost frame. Purpose: pre-call ammo. No fix details beyond one sentence — the fix is the call.",
+    "UP TO 3 HARD findings, ordered by evidence strength (measurements first), and NEVER padded — zero and one are valid outcomes, not error states. Each finding: the evidence line + one stat + the spend-anchored cost frame. Alongside them, ALWAYS: the outside/inside frame, the screenshot, the checks that came back CLEAN stated by name (cleanChecks — 'your site loads in 1.9s', 'there's a booking link on the homepage', 'layout shift is 0 — that's fine, not where you're leaking'), then the six pivot questions and the one CTA. WITH NO HARD FINDINGS the document is the clean-checks section plus 'Which is why the interesting questions are the ones a scan can't answer.' plus the unchanged pivot — a well-run business is a common and valuable prospect, and a document that opens by telling them their public presence is good is more disarming than one that opens with criticism. Purpose: pre-call credibility. No fix details beyond one sentence — the fix is the call.",
   growth_leak_report:
-    "All fired in-scope leaks ranked by score, grouped under their scorecardArea (this drives the 9-area scorecard grades). Landing Page Conversion Intelligence section consumes weak_landing_cta detail. 'Also worth knowing' section = fired out_of_scope flags, clearly framed as outside the engagement.",
+    "All fired in-scope leaks ranked by score, grouped under their scorecardArea (this drives the 9-area scorecard grades). INTERPRETIVE leaks (weak_landing_cta) land in the site-advisory surface as labelled advice, never as a measured finding — their grade can never be 'observed'. 'Also worth knowing' section = fired out_of_scope flags, clearly framed as outside the engagement.",
   blueprint:
     "Each fired leak maps to its position in the 11-stage funnel; ghlFix.assetName populates the infrastructure at that stage. Lead-scoring tiers reference no_lead_qualification's LeadGate config. Pipeline section always reflects no_crm_pipeline's stage set.",
   asset_pack:

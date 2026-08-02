@@ -9,8 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
-import { IntakeForm } from "@/components/businesses/IntakeForm";
-import { WorkflowPanel } from "@/components/businesses/WorkflowPanel";
+import { ClientDrawer, type ClientDrawerTab } from "@/components/businesses/ClientDrawer";
+import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
+// Type-only: /api/businesses/[id] computes the four values server-side and ships
+// the small object; importing VALUES from the lib here would drag the detection
+// layer into the client bundle (see ObservedFactsRow.tsx).
+import type { ObservedFacts } from "@/lib/observed-facts";
 import type { AssetPack } from "@/types";
 import { STATUS_META, type LeadStatus } from "@/lib/call-queue";
 import { formatCurrency } from "@/lib/utils";
@@ -32,6 +36,9 @@ import {
   Rocket,
   PhoneCall,
   Check,
+  ClipboardList,
+  Workflow,
+  HelpCircle,
 } from "lucide-react";
 
 // Operator-selectable statuses for the manual record control.
@@ -93,11 +100,25 @@ interface BusinessWithSystems {
   afterHoursHandling: string | null;
   missedCallHandling: string | null;
   responseSpeed: string | null;
+  // These four were missing from this list while the intake form was rendered
+  // straight from it, so four questions ALREADY ANSWERED opened blank on this
+  // screen and invited him to answer them again. /api/businesses/[id] returns the
+  // whole row (no `select`), so they were in the payload the entire time — they
+  // just weren't declared, and an undeclared field is a field the form can't see.
+  socialEnquiries: string | null;
+  pastCustomerContact: string | null;
+  takesDeposits: string | null;
+  reviewReplyOwner: string | null;
   bookingMethod: string | null;
   bookingToolName: string | null;
   gbpManagement: string | null;
   buildPriorities: string | null;
   servicesFocus: string | null;
+  // The four measured pre-dial values, computed server-side by the GET route
+  // from the stored snapshots (the snapshots themselves are withheld from the
+  // payload). Optional as a tolerance: a PATCH response doesn't carry it, and
+  // this page merges single fields rather than replacing the object.
+  observedFacts?: ObservedFacts | null;
   callLogs: Array<{
     id: string;
     disposition: string;
@@ -119,14 +140,19 @@ export default function BusinessDetailPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
-  // Refetch token for the build panel. Bumped after an intake save, because two
-  // of the fourteen workflows are decided by an intake answer ("no social
-  // accounts" drops the social inbox, "no past-customer list" drops the
-  // reactivation campaign) and a third can lock once a scan measures its leak.
-  // The effect can only be known by re-resolving server-side, so it is never
-  // adjusted optimistically here — but it MUST be visible immediately, or an
-  // answer that changed the build looks like an answer that did nothing.
-  const [buildKey, setBuildKey] = useState(0);
+  // Which tab the client drawer is open on; null = shut. The questions, the sixteen
+  // intake fields and the fourteen build switches used to be permanently-open cards
+  // in this narrow sidebar, which is most of why this page ran so long.
+  //
+  // NOTHING ON THIS PAGE HOLDS A REFETCH TOKEN FOR THE GUESSED COUNT ANY MORE.
+  // There used to be one (intelKey) because the count was rendered here; the count
+  // lives in the drawer now, the drawer re-reads it after every answer and after
+  // every full-form save, and it remounts fresh on every open. Nothing this page
+  // does — status, notes, favourite, AI suggestions — touches the research snapshot
+  // or the intake columns that count is computed from, so a token out here would be
+  // state that never means anything. (The Library keeps its one: a cold audit or a
+  // pack can finish behind an open drawer there.)
+  const [drawer, setDrawer] = useState<ClientDrawerTab | null>(null);
 
   useEffect(() => {
     loadBusiness();
@@ -343,6 +369,17 @@ export default function BusinessDetailPage() {
               </div>
             </div>
 
+            {/* Observed facts — the four measured pre-dial values, computed
+                server-side from the stored snapshots. Replaced the cold audit
+                (owner ruling, 2026-08-01): numbers instead of prose, and "—"
+                honestly means "we could not see". */}
+            <div className="glass-card p-5">
+              <h3 className="text-sm font-semibold text-[color:var(--text)] mb-3">
+                Observed facts
+              </h3>
+              <ObservedFactsRow facts={business.observedFacts} framed={false} />
+            </div>
+
             {/* Actions */}
             <div className="glass-card p-5 space-y-3">
               <h3 className="text-sm font-semibold text-[color:var(--text)] mb-2">Actions</h3>
@@ -353,7 +390,7 @@ export default function BusinessDetailPage() {
                 </Link>
               </Button>
               <p className="text-xs text-[color:var(--text-4)] -mt-1 mb-1">
-                Generate the growth pack, cold audit &amp; proposal from the Library control centre.
+                Generate the growth pack &amp; proposal from the Library control centre.
               </p>
               <Button variant="outline" size="sm" className="w-full" asChild>
                 <Link href={`/proposals/new?businessId=${id}`}>
@@ -437,54 +474,53 @@ export default function BusinessDetailPage() {
               </div>
             </div>
 
-            {/* Client intake — the same questions the Library asks, through the
-                same component. These answers are the only operator input that
-                changes what D1–D4 say, so if the two screens collected different
-                subsets the pack would depend on which screen got used. */}
-            <div className="glass-card p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-[color:var(--text)]">Client intake</h3>
-              <IntakeForm
-                business={business}
-                density="comfortable"
-                successMessage="Client intake saved"
-                onSaved={(next) => {
-                  setBusiness((prev) => (prev ? { ...prev, ...next } : prev));
-                  // The build panel below reads these answers server-side, so it
-                  // has to be told to re-read. Answering "we don't have social
-                  // accounts" and seeing the workflow drop out of the build in the
-                  // same motion is the whole reason the two sit together.
-                  setBuildKey((n) => n + 1);
-                }}
-                renderFooter={({ save, saving, dirty }) => (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-[color:var(--text-4)]">
-                      {business.avgClientValueCad || business.monthlyLeadVolume
-                        ? "Real-mode math active"
-                        : "Benchmark mode"}
-                    </span>
-                    {dirty && (
-                      <Button variant="blue" size="sm" onClick={save} disabled={saving}>
-                        {saving ? (
-                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                        ) : (
-                          <Check className="h-3 w-3 mr-1" />
-                        )}
-                        Save intake
-                      </Button>
-                    )}
-                  </div>
-                )}
-              />
-            </div>
+            {/* Client record — the three ways into it, and nothing else.
 
-            {/* The build — directly under the intake card, because the intake
-                answers are what move it. Two of the fourteen workflows are decided
-                by an answer on the card above, so putting the two anywhere but
-                next to each other means changing an answer and going looking for
-                what it did. It re-reads on every intake save (buildKey). */}
+                WHAT USED TO BE HERE: permanently-open cards — sixteen intake
+                fields, fourteen build switches, and the guessed-answers list —
+                stacked in a column a third of the page wide. All three are now one
+                click away in a drawer that floats over the page, and this card is a
+                constant height for every client. Same questions, same components,
+                same save path as the Library: if the two screens collected
+                different subsets, the pack would depend on which screen got used.
+
+                THE GUESSED LIST WENT WITH THEM, and nothing summarising it is left
+                behind — no count, no strip, no placeholder. It is the drawer's
+                first tab, which is also its default, so it is one click from here
+                and it opens with the full window height instead of a 34vh box with
+                its own scrollbar inside this sidebar.
+
+                BUTTON ORDER MIRRORS THE TAB ORDER: Questions, Intake, The build.
+                Questions carries the emphasis because it is the prioritised subset
+                — the handful of answers that change how the deliverables read. */}
             <div className="glass-card p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-[color:var(--text)]">The build</h3>
-              <WorkflowPanel businessId={business.id} reloadKey={buildKey} density="comfortable" />
+              <h3 className="text-sm font-semibold text-[color:var(--text)]">Client record</h3>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-[color:var(--text-4)]">
+                  {business.avgClientValueCad || business.monthlyLeadVolume
+                    ? "Real-mode math active"
+                    : "Benchmark mode"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="blue-outline"
+                    size="sm"
+                    onClick={() => setDrawer("questions")}
+                    title="What the scan couldn't settle, and what to ask on the call"
+                  >
+                    <HelpCircle className="h-3 w-3 mr-1" />
+                    Questions
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setDrawer("intake")}>
+                    <ClipboardList className="h-3 w-3 mr-1" />
+                    Intake
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setDrawer("build")}>
+                    <Workflow className="h-3 w-3 mr-1" />
+                    The build
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -686,6 +722,43 @@ export default function BusinessDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Rendered at the top level of the page, not inside the sidebar card that
+          opens it. It is `position: fixed`, so it adds no height anywhere — but a
+          fixed child of a card that ever grows a transform or a backdrop filter
+          would start being positioned against that card instead of the window,
+          and it would be clipped. Out here that can't happen. */}
+      <ClientDrawer
+        open={drawer !== null}
+        business={business}
+        businessName={business.name}
+        // `?? "questions"` is only read while open; the next open re-asserts
+        // whichever button he pressed.
+        initialTab={drawer ?? "questions"}
+        // No questionsReloadKey: nothing on this page can capture a research
+        // snapshot behind an open drawer (see the note on `drawer` above), and the
+        // Questions tab re-reads its own count after every answer.
+        onClose={() => setDrawer(null)}
+        successMessage="Client intake saved"
+        onIntakeSaved={(next) => {
+          // MERGING IS NOT OPTIONAL (see ClientDrawer.onIntakeSaved): the form
+          // decides what is unsaved by diffing its draft against this object, so a
+          // merge skipped here leaves it looking dirty forever and it would ask him
+          // to save again on the way out, over a write that landed.
+          //
+          // BOTH MERGES BELOW MUST STAY IN THE FUNCTIONAL FORM. "Save & close" fires
+          // this and onAnswersRecorded in the same tick, so two updates built from
+          // the render's `business` would keep only the second — which would drop
+          // the sixteen-field save he just made.
+          setBusiness((prev) => (prev ? { ...prev, ...next } : prev));
+        }}
+        // The chips he clicked on the Questions tab, handed over as it closes (see
+        // ClientDrawer.onAnswersRecorded for why not sooner). Already written to the
+        // database; this is what stops the same question opening blank next time.
+        onAnswersRecorded={(answers) => {
+          setBusiness((prev) => (prev ? { ...prev, ...answers } : prev));
+        }}
+      />
     </div>
   );
 }

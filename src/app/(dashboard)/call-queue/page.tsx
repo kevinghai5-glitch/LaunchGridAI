@@ -29,6 +29,11 @@ import {
   type LeadStatus,
   type Urgency,
 } from "@/lib/call-queue";
+import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
+// Type-only: the route computes the four values server-side and ships the small
+// object; importing VALUES from the lib here would drag the detection layer into
+// the client bundle (see ObservedFactsRow.tsx).
+import type { ObservedFacts } from "@/lib/observed-facts";
 
 // Row shape returned by GET /api/call-queue (dates are ISO strings).
 interface QueueLead {
@@ -44,6 +49,9 @@ interface QueueLead {
   followUpUntil: string | null;
   attemptCount: number;
   urgency: Urgency;
+  /** The four measured pre-dial values, computed server-side by the route.
+   *  Replaced the cold-audit peek (owner ruling, 2026-08-01). */
+  observedFacts: ObservedFacts;
   enrichment: {
     rating: number | null;
     reviewCount: number | null;
@@ -51,9 +59,6 @@ interface QueueLead {
     painPoint: string | null;
     outreachAngle: string | null;
     ownerName: string | null;
-    topLeak: string | null;
-    headlineCost: string | null;
-    mobileScore: number | null;
   };
   lastCall: { id: string; disposition: string; note: string | null; calledAt: string } | null;
 }
@@ -67,9 +72,9 @@ const NEEDS_TIME = new Set<Disposition>(
 function urgencyColor(u: Urgency): string {
   switch (u) {
     case "overdue":
-      return "var(--danger, #f87171)";
+      return "var(--danger)";
     case "due":
-      return "oklch(0.82 0.14 85)";
+      return "var(--warn)";
     case "booked":
       return "var(--money)";
     case "dead":
@@ -99,15 +104,17 @@ function relativeDue(iso: string | null): string {
 function toneColor(tone: string): { fg: string; bg: string } {
   switch (tone) {
     case "success":
-      return { fg: "var(--money)", bg: "rgba(74,222,128,0.10)" };
+      return { fg: "var(--money)", bg: "var(--money-soft)" };
     case "accent":
       return { fg: "var(--accent)", bg: "var(--accent-soft)" };
     case "danger":
-      return { fg: "var(--danger, #f87171)", bg: "rgba(248,113,113,0.10)" };
+      return { fg: "var(--danger)", bg: "var(--danger-soft)" };
+    // muted and default keep two different surface steps as well as two
+    // different inks, so the pair stays as distinguishable as it was.
     case "muted":
-      return { fg: "var(--text-4)", bg: "rgba(255,255,255,0.04)" };
+      return { fg: "var(--text-4)", bg: "var(--surface-2)" };
     default:
-      return { fg: "var(--text-3)", bg: "rgba(255,255,255,0.05)" };
+      return { fg: "var(--text-3)", bg: "var(--surface-hi)" };
   }
 }
 
@@ -473,7 +480,7 @@ export default function CallQueuePage() {
         )}
 
         {error && (
-          <div className="panel p-5 text-sm" style={{ color: "var(--danger, #f87171)" }}>
+          <div className="panel p-5 text-sm" style={{ color: "var(--danger)" }}>
             {error}
           </div>
         )}
@@ -522,7 +529,7 @@ export default function CallQueuePage() {
                   borderRadius: "var(--radius)",
                   border: `1px solid ${active ? "var(--line-strong)" : "var(--line)"}`,
                   borderLeft: `3px solid ${border}`,
-                  background: active ? "var(--surface-2, rgba(255,255,255,0.03))" : "var(--surface)",
+                  background: active ? "var(--surface-2)" : "var(--surface)",
                   padding: active ? "14px 16px" : "11px 16px",
                   cursor: active ? "default" : "pointer",
                   boxShadow: active ? "var(--shadow-sm)" : "none",
@@ -580,16 +587,16 @@ export default function CallQueuePage() {
                       {lead.city && <span>{lead.city}</span>}
                       {lead.enrichment.rating != null && (
                         <span className="flex items-center" style={{ gap: 3 }}>
-                          <Star size={11} strokeWidth={1.9} style={{ color: "oklch(0.82 0.14 85)" }} />
+                          <Star size={11} strokeWidth={1.9} style={{ color: "var(--warn)" }} />
                           {lead.enrichment.rating}
                           {lead.enrichment.reviewCount != null && (
                             <span style={{ color: "var(--text-4)" }}> ({lead.enrichment.reviewCount})</span>
                           )}
                         </span>
                       )}
-                      {lead.enrichment.mobileScore != null && (
+                      {lead.observedFacts.mobileSpeed.score != null && (
                         <span className="flex items-center" style={{ gap: 3 }}>
-                          <Gauge size={11} strokeWidth={1.9} /> {lead.enrichment.mobileScore}
+                          <Gauge size={11} strokeWidth={1.9} /> {lead.observedFacts.mobileSpeed.score}
                         </span>
                       )}
                       {lead.attemptCount > 0 && (
@@ -676,16 +683,23 @@ export default function CallQueuePage() {
                 {/* active controls */}
                 {active && (
                   <div style={{ marginTop: 12 }}>
-                    {/* talking-point peek */}
-                    {(lead.enrichment.topLeak ||
-                      lead.enrichment.painPoint ||
-                      lead.enrichment.headlineCost) && (
+                    {/* The four measured pre-dial values — the cold-audit peek's
+                        replacement (owner ruling, 2026-08-01). "—" means "we
+                        could not see", which is a different fact from "nothing
+                        is wrong", and it stays different on screen. */}
+                    <div style={{ marginBottom: 12 }}>
+                      <ObservedFactsRow facts={lead.observedFacts} />
+                    </div>
+                    {/* talking-point peek — AI outreach suggestions + last call */}
+                    {(lead.enrichment.painPoint ||
+                      lead.enrichment.outreachAngle ||
+                      lead.lastCall) && (
                       <div
                         style={{
                           marginBottom: 12,
                           padding: "10px 12px",
                           borderRadius: 8,
-                          background: "rgba(255,255,255,0.02)",
+                          background: "var(--surface-2)",
                           border: "1px solid var(--line)",
                         }}
                       >
@@ -703,14 +717,9 @@ export default function CallQueuePage() {
                             fontWeight: 600,
                           }}
                         >
-                          <AlertTriangle size={12} strokeWidth={2} style={{ color: "oklch(0.82 0.14 85)" }} />
+                          <AlertTriangle size={12} strokeWidth={2} style={{ color: "var(--warn)" }} />
                           <span style={{ flex: 1 }}>
-                            {lead.enrichment.topLeak || lead.enrichment.painPoint || "Talking points"}
-                            {lead.enrichment.headlineCost && (
-                              <span style={{ color: "var(--money)", marginLeft: 8 }}>
-                                {lead.enrichment.headlineCost}
-                              </span>
-                            )}
+                            {lead.enrichment.painPoint || "Talking points"}
                           </span>
                           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                         </button>
@@ -753,7 +762,7 @@ export default function CallQueuePage() {
                         resize: "none",
                         borderRadius: 8,
                         border: "1px solid var(--line-strong)",
-                        background: "var(--bg-deep, #0b0d12)",
+                        background: "var(--bg-deep)",
                         color: "var(--text)",
                         fontFamily: "inherit",
                         fontSize: 13,
@@ -784,8 +793,8 @@ export default function CallQueuePage() {
                               fontFamily: "inherit",
                               cursor: submitting ? "default" : "pointer",
                               color: isArmed ? "var(--accent)" : "var(--text-2)",
-                              background: isArmed ? "var(--accent-soft)" : "rgba(255,255,255,0.04)",
-                              border: `1px solid ${isArmed ? "oklch(0.55 0.18 248 / 0.4)" : "var(--line-strong)"}`,
+                              background: isArmed ? "var(--accent-soft)" : "var(--surface-2)",
+                              border: `1px solid ${isArmed ? "color-mix(in oklab, var(--accent) 40%, transparent)" : "var(--line-strong)"}`,
                               opacity: submitting ? 0.6 : 1,
                             }}
                           >
@@ -795,7 +804,7 @@ export default function CallQueuePage() {
                                 fontSize: 10,
                                 padding: "1px 4px",
                                 borderRadius: 4,
-                                background: "rgba(255,255,255,0.07)",
+                                background: "var(--surface-hi)",
                                 color: "var(--text-4)",
                               }}
                             >
@@ -848,7 +857,7 @@ export default function CallQueuePage() {
                           style={{
                             borderRadius: 7,
                             border: "1px solid var(--line-strong)",
-                            background: "var(--bg-deep, #0b0d12)",
+                            background: "var(--bg-deep)",
                             color: "var(--text)",
                             fontFamily: "inherit",
                             fontSize: 12.5,
@@ -868,7 +877,7 @@ export default function CallQueuePage() {
                             cursor: !callbackTime || submitting ? "default" : "pointer",
                             color: "var(--accent)",
                             background: "var(--accent-soft)",
-                            border: "1px solid oklch(0.55 0.18 248 / 0.4)",
+                            border: "1px solid color-mix(in oklab, var(--accent) 40%, transparent)",
                             opacity: !callbackTime || submitting ? 0.6 : 1,
                           }}
                         >
@@ -956,6 +965,7 @@ function QueueDetailModal({
         position: "fixed",
         inset: 0,
         zIndex: 100,
+        // DELIBERATE LITERAL: modal scrim — black in both themes by definition.
         background: "rgba(0,0,0,0.6)",
         backdropFilter: "blur(3px)",
         display: "grid",
@@ -989,6 +999,7 @@ function QueueDetailModal({
             width: 30,
             height: 30,
             borderRadius: 8,
+            // DELIBERATE LITERAL: close button over the modal's hero artwork.
             background: "rgba(0,0,0,0.4)",
             border: "1px solid var(--line)",
             color: "var(--text-2)",
@@ -1025,7 +1036,7 @@ function QueueDetailModal({
             >
               {e.rating != null && (
                 <span className="flex items-center" style={{ gap: 4 }}>
-                  <Star size={13} strokeWidth={1.9} style={{ color: "oklch(0.82 0.14 85)" }} /> {e.rating}
+                  <Star size={13} strokeWidth={1.9} style={{ color: "var(--warn)" }} /> {e.rating}
                 </span>
               )}
               {e.reviewCount != null && (
@@ -1044,9 +1055,9 @@ function QueueDetailModal({
                 marginTop: 18,
                 padding: "14px 16px",
                 borderRadius: 10,
-                background: "rgba(255,255,255,0.025)",
+                background: "var(--surface-2)",
                 border: "1px solid var(--line)",
-                borderLeft: "2px solid oklch(0.82 0.14 85)",
+                borderLeft: "2px solid var(--warn)",
               }}
             >
               <div
@@ -1056,7 +1067,7 @@ function QueueDetailModal({
                   fontWeight: 700,
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
-                  color: "oklch(0.82 0.14 85)",
+                  color: "var(--warn)",
                   marginBottom: 8,
                 }}
               >
@@ -1210,7 +1221,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
         fontSize: 10.5,
         padding: "1px 5px",
         borderRadius: 4,
-        background: "rgba(255,255,255,0.06)",
+        background: "var(--surface-hi)",
         border: "1px solid var(--line)",
         color: "var(--text-3)",
       }}

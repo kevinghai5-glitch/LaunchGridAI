@@ -55,8 +55,32 @@ export default async function DashboardLayout({
   const activeClients = rollup.activeClients;
   const pipelineCount = rollup.pipelineCount;
 
+  // ── THE THEME FENCE ────────────────────────────────────────────────────────
+  // `lg-app` is where the dark dashboard theme is actually APPLIED — canvas,
+  // body ink, font stack, Inter feature settings, letter-spacing, ::selection,
+  // focus ring, scrollbars, accent-color, color-scheme and the default border
+  // colour. Every one of those was global in globals.css until now, and global
+  // meant it also reached the two CLIENT-FACING routes that share the root
+  // layout: /a/[publicId] (the cold-audit teaser a prospect opens from the
+  // pre-call email) and /p/[publicId] (the public proposal). Both are
+  // cream/serif brand documents. Putting the theme here instead of on <html>
+  // is what makes it structurally impossible for either to inherit it.
+  //
+  // `lg-dashboard` carries min-width: 1320px, which the operator's tables need.
+  // It is a SEPARATE class from lg-app on purpose — that rule used to live on
+  // `body`, where it was telling a prospect's phone to render a 1320px viewport.
+  //
+  // `data-theme="dark"` is the selector tailwind.config.ts keys the `dark:`
+  // variant to. It sits here, not on <html>, so `dark:` cannot reach a
+  // prospect's page either.
+  //
+  // Do not move any of these three to the root layout.
   return (
-    <div className="flex" style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <div
+      className="lg-app lg-dashboard flex"
+      data-theme="dark"
+      style={{ minHeight: "100vh" }}
+    >
       <Sidebar
         totalMRR={totalMRR}
         pipelineMRR={pipelineMRR}

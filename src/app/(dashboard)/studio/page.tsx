@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Sparkles, Check, ChevronDown, Send, History } from "lucide-react";
+import { Sparkles, Check, ChevronDown, History } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
-import { ColdAuditView } from "@/components/businesses/ColdAuditView";
 import { IntakeGaps } from "@/components/businesses/IntakeGaps";
 import {
   PackGateDialog,
@@ -26,13 +25,10 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import type {
   AssetPack,
-  ColdAuditReport,
   PackGovernance,
   SavedBusiness,
   DeliverableId,
 } from "@/types";
-
-type StudioView = "pack" | "audit";
 
 type GenProgress = { completed: number; total: number; label: string };
 
@@ -76,18 +72,6 @@ function isSameDayAsNow(iso: string | null | undefined): boolean {
   );
 }
 
-// Staged labels for the cold-audit progress bar. The generate endpoint is a
-// single POST (not streamed), so we advance through these on a timer and snap to
-// 100% when the request resolves — mirroring the asset pack's progress UI.
-const COLD_AUDIT_STAGES = [
-  "Measuring live site speed",
-  "Reading their homepage & pages",
-  "Pulling recent Google reviews",
-  "Scanning nearby competitors",
-  "Finding the most expensive leaks",
-  "Writing your cold-open audit",
-];
-
 // Flat surface card matching the opportunities search bar (no gradient/shadow).
 const flatCard: React.CSSProperties = {
   background: "var(--surface)",
@@ -100,7 +84,6 @@ export default function StudioPage() {
   const params = useSearchParams();
   const businessId = params.get("businessId");
   const restoreParam = params.get("restore"); // "pack" → auto-open the saved pack (from Library)
-  const viewParam = params.get("view"); // "audit" → open the Cold Audit view (from Library)
   const deliverableParam = params.get("deliverable") as DeliverableId | null; // d1..d4 deep-link
 
   const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
@@ -111,7 +94,6 @@ export default function StudioPage() {
   const [genProgress, setGenProgress] = useState<GenProgress | null>(null);
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
-  const [view, setView] = useState<StudioView>(viewParam === "audit" ? "audit" : "pack");
   const [saving, setSaving] = useState(false);
   const [savedPack, setSavedPack] = useState(false);
   // A blocked governance gate, held open until the operator deals with it. Both
@@ -128,29 +110,14 @@ export default function StudioPage() {
   // lets the pack view show its "shipped over a failing check" marker straight
   // away instead of only after the pack is reloaded from the database.
   const [saveOverride, setSaveOverride] = useState<PackGovernance | null>(null);
-  const [coldAudit, setColdAudit] = useState<ColdAuditReport | null>(null);
-  // Public id of the saved audit on screen — powers "Copy preview link". Set for
-  // an audit generated in this session AND for one restored from
-  // /api/cold-audit/latest, which returns publicId. Null only when there is no
-  // saved audit, so the button hides rather than copying a URL we can't vouch for.
-  const [coldPublicId, setColdPublicId] = useState<string | null>(null);
   // Previously-saved generations, loaded but NOT auto-shown — Studio opens fresh.
   // Surfaced behind an explicit "View previous generation" button instead.
   const [archivedPack, setArchivedPack] = useState<AssetPack | null>(null);
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
-  const [archivedAudit, setArchivedAudit] = useState<ColdAuditReport | null>(null);
-  const [archivedAuditAt, setArchivedAuditAt] = useState<string | null>(null);
-  const [coldRunning, setColdRunning] = useState(false);
-  // When set, the cold audit on screen is a restored older one — show its
-  // regenerate banner (parallels restoredAt for the asset pack).
-  const [coldRestoredAt, setColdRestoredAt] = useState<string | null>(null);
-  const [coldProgress, setColdProgress] = useState<GenProgress | null>(null);
   // Refetch token for the "still guessed" panel. Bumped after a run that can have
   // changed the stored research snapshot the panel reads.
   const [gapsKey, setGapsKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
-  const coldAbortRef = useRef<AbortController | null>(null);
-  const coldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initial business list — pick from URL, then last-used (localStorage), then first.
   useEffect(() => {
@@ -188,13 +155,8 @@ export default function StudioPage() {
     // onto this one. A pack restored from the Library carries its own record in
     // `pack.governance`, which is where it belongs.
     setSaveOverride(null);
-    setColdAudit(null);
-    setColdPublicId(null);
-    setColdRestoredAt(null);
     setArchivedPack(null);
     setArchivedAt(null);
-    setArchivedAudit(null);
-    setArchivedAuditAt(null);
     setGenProgress(null);
     // Surface the last generation behind the "View previous generation" button
     // without auto-showing it. Prefer the local cache (every run is cached here,
@@ -237,48 +199,14 @@ export default function StudioPage() {
       .finally(() => {
         if (!cancelled) setRestoring(false);
       });
-    fetch(`/api/cold-audit/latest?businessId=${encodeURIComponent(selected.id)}`, {
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then(
-        (data: {
-          audit: ColdAuditReport | null;
-          generatedAt?: string;
-          publicId?: string;
-        }) => {
-        if (cancelled) return;
-        if (data.audit) {
-          setArchivedAudit(data.audit);
-          setArchivedAuditAt(data.generatedAt ?? null);
-          // Same-day audit auto-opens as current; older stays behind the button.
-          // Arriving from the Library with ?view=audit always opens it straight away.
-          const openFromLibrary = viewParam === "audit" && selected.id === businessId;
-          if (openFromLibrary || isSameDayAsNow(data.generatedAt)) {
-            setColdAudit(data.audit);
-            // The share id travels with the restored audit, so "Copy preview link"
-            // works on a page refresh — not only right after a generation.
-            setColdPublicId(data.publicId ?? null);
-            setColdRestoredAt(
-              openFromLibrary && !isSameDayAsNow(data.generatedAt)
-                ? data.generatedAt ?? null
-                : null
-            );
-          }
-        }
-        }
-      )
-      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [selected, businessId, restoreParam, viewParam]);
+  }, [selected, businessId, restoreParam]);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
-      coldAbortRef.current?.abort();
-      if (coldTimerRef.current) clearInterval(coldTimerRef.current);
     };
   }, []);
 
@@ -359,22 +287,6 @@ export default function StudioPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const viewArchivedAudit = () => {
-    if (!archivedAudit) return;
-    setColdAudit(archivedAudit);
-    setColdRestoredAt(isSameDayAsNow(archivedAuditAt) ? null : archivedAuditAt);
-  };
-
-  const clearAudit = () => {
-    if (coldTimerRef.current) clearInterval(coldTimerRef.current);
-    coldAbortRef.current?.abort();
-    setColdRunning(false);
-    setColdAudit(null);
-    setColdPublicId(null);
-    setColdRestoredAt(null);
-    setColdProgress(null);
   };
 
   const start = async (opts?: { refreshResearch?: boolean }) => {
@@ -503,71 +415,7 @@ export default function StudioPage() {
     }
   };
 
-  const startCold = async () => {
-    if (!selected || coldRunning) return;
-    const controller = new AbortController();
-    coldAbortRef.current = controller;
-    setColdRunning(true);
-    setColdAudit(null);
-    setColdPublicId(null);
-    setColdRestoredAt(null);
-
-    // Simulated progress — the endpoint is a single POST, so we walk through the
-    // staged labels on a timer (capped one short of done) and snap to 100% once
-    // the request resolves.
-    const total = COLD_AUDIT_STAGES.length;
-    setColdProgress({ completed: 0, total, label: COLD_AUDIT_STAGES[0] });
-    let step = 0;
-    if (coldTimerRef.current) clearInterval(coldTimerRef.current);
-    coldTimerRef.current = setInterval(() => {
-      step = Math.min(step + 1, total - 1);
-      setColdProgress({ completed: step, total, label: COLD_AUDIT_STAGES[step] });
-    }, 3500);
-    const stopTimer = () => {
-      if (coldTimerRef.current) {
-        clearInterval(coldTimerRef.current);
-        coldTimerRef.current = null;
-      }
-    };
-
-    try {
-      const res = await fetch("/api/generate/cold-audit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: selected.id }),
-        signal: controller.signal,
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate cold audit");
-        stopTimer();
-        setColdProgress(null);
-        return;
-      }
-      stopTimer();
-      setColdProgress({ completed: total, total, label: "Done" });
-      setColdAudit(data.coldAudit as ColdAuditReport);
-      setColdPublicId((data.system?.publicId as string | undefined) ?? null);
-      const now = new Date().toISOString();
-      setArchivedAudit(data.coldAudit as ColdAuditReport);
-      setArchivedAuditAt(now);
-      toast.success("Cold audit ready");
-    } catch (err) {
-      stopTimer();
-      setColdProgress(null);
-      if (err instanceof DOMException && err.name === "AbortError") {
-        toast("Generation cancelled");
-      } else {
-        toast.error("Failed to generate cold audit");
-      }
-    } finally {
-      coldAbortRef.current = null;
-      setColdRunning(false);
-    }
-  };
-
-  const isAudit = view === "audit";
-  const busy = isAudit ? coldRunning : running;
+  const busy = running;
 
   return (
     <>
@@ -603,7 +451,7 @@ export default function StudioPage() {
               inside a GoHighLevel sub-account we own and operate, then run it.
             </p>
           </div>
-          {done && selected && !isAudit && pack && (
+          {done && selected && pack && (
             <div className="flex" style={{ gap: 8 }}>
               <LgButton
                 variant={savedPack ? "ghost" : "primary"}
@@ -718,7 +566,7 @@ export default function StudioPage() {
                   style={{
                     padding: "14px 16px",
                     borderRadius: 10,
-                    background: "rgba(255,255,255,0.03)",
+                    background: "var(--surface-2)",
                     border: "1px solid var(--line)",
                   }}
                 >
@@ -738,11 +586,12 @@ export default function StudioPage() {
                   style={{
                     padding: "14px 16px",
                     borderRadius: 10,
-                    background: "oklch(0.55 0.10 158 / 0.08)",
-                    border: "1px solid oklch(0.55 0.10 158 / 0.18)",
+                    // money-toned card: this is the recurring revenue number
+                    background: "var(--money-soft)",
+                    border: "1px solid color-mix(in oklab, var(--money) 18%, transparent)",
                   }}
                 >
-                  <div style={{ fontSize: 11.5, color: "oklch(0.78 0.10 158)", marginBottom: 6 }}>Monthly retainer</div>
+                  <div style={{ fontSize: 11.5, color: "var(--money)", marginBottom: 6 }}>Monthly retainer</div>
                   <div
                     className="lg-display tnum"
                     style={{ fontSize: 26, fontWeight: 680, letterSpacing: "-0.03em", color: "var(--money)" }}
@@ -765,12 +614,8 @@ export default function StudioPage() {
 
             {/* What's still guessed — directly above the Generate button, because
                 this is the last moment before the hedges are written into the
-                deliverables. Asset-pack view ONLY: intake answers change what
-                D1–D4 say, and change nothing about the free cold audit, which is
-                a pre-sale document that structurally cannot use anything the
-                client told us. Showing it there would offer him a to-do list that
-                could not affect the document he was about to generate. */}
-            {selected && !isAudit && (
+                deliverables: intake answers change what D1–D4 say. */}
+            {selected && (
               <LgCard padded={false} style={flatCard}>
                 <div
                   style={{
@@ -813,7 +658,7 @@ export default function StudioPage() {
                     variant="primary"
                     size="lg"
                     icon={busy ? undefined : "sparkles"}
-                    onClick={isAudit ? startCold : () => start()}
+                    onClick={() => start()}
                     disabled={busy || !selected}
                     style={{
                       width: "100%",
@@ -824,13 +669,7 @@ export default function StudioPage() {
                   >
                     {busy ? <Spinner /> : null}
                     <span style={{ position: "relative" }}>
-                      {isAudit
-                        ? coldRunning
-                          ? "Generating…"
-                          : coldAudit
-                          ? "Regenerate cold audit"
-                          : "Generate cold audit"
-                        : running
+                      {running
                         ? "Generating…"
                         : done
                         ? "Regenerate asset pack"
@@ -840,7 +679,7 @@ export default function StudioPage() {
                 </div>
                 {busy && (
                   <button
-                    onClick={isAudit ? () => coldAbortRef.current?.abort() : cancel}
+                    onClick={cancel}
                     style={{
                       width: "100%",
                       marginTop: 10,
@@ -866,14 +705,12 @@ export default function StudioPage() {
                     color: "var(--text-subtle)",
                   }}
                 >
-                  {isAudit
-                    ? "A free, specific mini-report to send before you pitch"
-                    : "Grounded in their live website + Google Places data"}
+                  Grounded in their live website + Google Places data
                 </div>
                 {/* Regenerate reuses the stored research snapshot (no re-scrape),
                     so facts never drift between runs. This is the deliberate
                     escape hatch to pull fresh live data on purpose. */}
-                {!isAudit && !busy && (
+                {!busy && (
                   <button
                     onClick={() => start({ refreshResearch: true })}
                     disabled={!selected}
@@ -918,7 +755,17 @@ export default function StudioPage() {
               }}
             >
               <div className="flex items-center" style={{ gap: 12 }}>
-                <ViewToggle value={view} onChange={setView} />
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--text-3)",
+                  }}
+                >
+                  Asset Pack
+                </span>
                 {selected && (
                   <span style={{ fontSize: 12.5, color: "var(--text-muted)", fontWeight: 500 }}>
                     {selected.name}
@@ -926,7 +773,7 @@ export default function StudioPage() {
                 )}
               </div>
               <div className="flex items-center" style={{ gap: 8 }}>
-                {isAudit && coldRunning && (
+                {running && (
                   <>
                     <div
                       style={{
@@ -942,39 +789,14 @@ export default function StudioPage() {
                     </span>
                   </>
                 )}
-                {isAudit && !coldRunning && coldAudit && (
-                  <LgBadge tone="success">
-                    <Check size={11} strokeWidth={2.5} /> Ready to send
-                  </LgBadge>
-                )}
-                {!isAudit && running && (
-                  <>
-                    <div
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 99,
-                        background: "var(--accent)",
-                        animation: "lg-pulse 1s ease-in-out infinite",
-                      }}
-                    />
-                    <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>
-                      Generating
-                    </span>
-                  </>
-                )}
-                {!isAudit && done && (
+                {done && (
                   <LgBadge tone="success">
                     <Check size={11} strokeWidth={2.5} /> Generated
                   </LgBadge>
                 )}
-                {isAudit
-                  ? !coldRunning && !coldAudit && (
-                      <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
-                    )
-                  : !running && !done && (
-                      <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
-                    )}
+                {!running && !done && (
+                  <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>Ready</span>
+                )}
               </div>
             </div>
 
@@ -995,36 +817,8 @@ export default function StudioPage() {
                 </div>
               )}
 
-              {/* ── COLD AUDIT VIEW ── */}
-              {selected && isAudit && coldRunning && (
-                <ColdGeneratingState business={selected} progress={coldProgress} />
-              )}
-              {selected && isAudit && !coldRunning && !coldAudit && (
-                <ColdEmptyState
-                  business={selected}
-                  hasArchived={!!archivedAudit}
-                  onViewArchived={viewArchivedAudit}
-                />
-              )}
-              {selected && isAudit && !coldRunning && coldAudit && (
-                <>
-                  <RegenBanner
-                    label={coldRestoredAt ? "Previous cold audit" : "Cold audit ready"}
-                    at={coldRestoredAt}
-                    onRegenerate={startCold}
-                    onClear={clearAudit}
-                    busy={coldRunning}
-                  />
-                  <ColdAuditView
-                    report={coldAudit}
-                    businessId={selected.id}
-                    publicId={coldPublicId}
-                  />
-                </>
-              )}
-
               {/* ── ASSET PACK VIEW ── */}
-              {selected && !isAudit && !running && !done && !restoring && (
+              {selected && !running && !done && !restoring && (
                 <EmptyState
                   business={selected}
                   hasArchived={!!archivedPack}
@@ -1032,7 +826,7 @@ export default function StudioPage() {
                   onViewArchived={viewArchivedPack}
                 />
               )}
-              {selected && !isAudit && !running && !done && restoring && (
+              {selected && !running && !done && restoring && (
                 <div
                   className="text-center"
                   style={{ padding: "64px 20px", color: "var(--text-muted)", fontSize: 13.5 }}
@@ -1040,10 +834,10 @@ export default function StudioPage() {
                   Checking for a saved deliverable…
                 </div>
               )}
-              {!isAudit && running && (
+              {running && (
                 <GeneratingState business={selected} progress={genProgress} />
               )}
-              {!isAudit && done && pack && selected && (
+              {done && pack && selected && (
                 <>
                   {restoredAt && !running && (
                     <RegenBanner
@@ -1123,8 +917,14 @@ function Spinner({ small }: { small?: boolean }) {
       style={{
         width: size,
         height: size,
-        border: `2px solid ${small ? "var(--accent-soft)" : "color-mix(in oklch, white 30%, transparent)"}`,
-        borderTopColor: small ? "var(--accent)" : "white",
+        // the large spinner sits on an accent-gradient button, so it rides on
+        // the same ink token that fill uses rather than a bare `white`
+        border: `2px solid ${
+          small
+            ? "var(--accent-soft)"
+            : "color-mix(in oklab, var(--accent-fill-text) 30%, transparent)"
+        }`,
+        borderTopColor: small ? "var(--accent)" : "var(--accent-fill-text)",
         borderRadius: "50%",
         animation: "lg-spin 0.7s linear infinite",
         flex: "none",
@@ -1382,9 +1182,8 @@ function ArchiveLink({
   );
 }
 
-// Inline banner shown above a restored/ready deliverable, with regenerate +
-// clear actions. Shared by the asset pack and the cold audit so both surfaces
-// expose the same regenerate affordance.
+// Inline banner shown above a restored deliverable, with regenerate + clear
+// actions.
 function RegenBanner({
   label,
   at,
@@ -1416,7 +1215,7 @@ function RegenBanner({
         padding: "10px 14px",
         border: "1px solid var(--line)",
         borderRadius: 10,
-        background: "rgba(255,255,255,0.02)",
+        background: "var(--surface-2)",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -1453,8 +1252,7 @@ function RegenBanner({
   );
 }
 
-// Sleek progress bar with the percentage inside — shared by the asset pack
-// (real streamed progress) and the cold audit (simulated staged progress).
+// Sleek progress bar with the percentage inside (real streamed progress).
 function ProgressMeter({ progress }: { progress: GenProgress | null }) {
   const completed = progress?.completed ?? 0;
   const total = progress?.total ?? 10;
@@ -1467,9 +1265,11 @@ function ProgressMeter({ progress }: { progress: GenProgress | null }) {
           position: "relative",
           height: 26,
           borderRadius: 999,
-          background: "rgba(255,255,255,0.04)",
+          background: "var(--surface-2)",
           border: "1px solid var(--line)",
           overflow: "hidden",
+          // black inset = recessed lighting, not a brand colour — see the
+          // --shadow-* tokens in globals.css, which are also plain black rgba
           boxShadow: "inset 0 1px 2px rgba(0,0,0,0.3)",
         }}
       >
@@ -1480,7 +1280,9 @@ function ProgressMeter({ progress }: { progress: GenProgress | null }) {
             width: `${pct}%`,
             borderRadius: 999,
             background: "var(--accent-grad)",
-            boxShadow: "0 0 16px oklch(0.64 0.18 266 / 0.55)",
+            // was a blue-violet bloom from the old palette, glowing a colour the
+            // bar underneath it no longer is
+            boxShadow: "0 0 16px color-mix(in oklab, var(--accent) 55%, transparent)",
             transition: "width 0.45s cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         />
@@ -1492,8 +1294,10 @@ function ProgressMeter({ progress }: { progress: GenProgress | null }) {
             inset: 0,
             width: `${pct}%`,
             borderRadius: 999,
+            // specular sheen travelling over the accent fill — same ink token as
+            // the fill's text, so it stays a highlight in either theme
             background:
-              "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+              "linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent-fill-text) 22%, transparent), transparent)",
             backgroundSize: "200% 100%",
             animation: "lg-shimmer-x 1.6s linear infinite",
             transition: "width 0.45s cubic-bezier(0.32, 0.72, 0, 1)",
@@ -1508,7 +1312,9 @@ function ProgressMeter({ progress }: { progress: GenProgress | null }) {
             style={{
               fontSize: 12.5,
               fontWeight: 700,
-              color: pct > 52 ? "white" : "var(--text)",
+              // past 52% the label sits on the accent fill, so it takes the fill's ink
+              color: pct > 52 ? "var(--accent-fill-text)" : "var(--text)",
+              // black legibility shadow — lighting, not brand colour
               textShadow: pct > 52 ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
               letterSpacing: "-0.01em",
             }}
@@ -1547,133 +1353,6 @@ function GeneratingState({
         </span>
       </div>
       <ProgressMeter progress={progress} />
-    </div>
-  );
-}
-
-function ViewToggle({
-  value,
-  onChange,
-}: {
-  value: StudioView;
-  onChange: (v: StudioView) => void;
-}) {
-  const options: { id: StudioView; label: string }[] = [
-    { id: "pack", label: "Asset Pack" },
-    { id: "audit", label: "Cold Audit" },
-  ];
-  return (
-    <div
-      className="flex items-center"
-      style={{
-        gap: 2,
-        padding: 3,
-        borderRadius: 9,
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid var(--line)",
-      }}
-    >
-      {options.map((o) => {
-        const active = value === o.id;
-        return (
-          <button
-            key={o.id}
-            onClick={() => onChange(o.id)}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 12px",
-              borderRadius: 7,
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "inherit",
-              cursor: "pointer",
-              border: "none",
-              color: active ? "var(--accent)" : "var(--text-3)",
-              background: active ? "var(--accent-soft)" : "transparent",
-            }}
-          >
-            {o.id === "audit" ? (
-              <Send size={12} strokeWidth={2} />
-            ) : (
-              <Sparkles size={12} strokeWidth={2} />
-            )}
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ColdEmptyState({
-  business,
-  hasArchived,
-  onViewArchived,
-}: {
-  business: SavedBusiness;
-  hasArchived: boolean;
-  onViewArchived: () => void;
-}) {
-  return (
-    <div className="text-center" style={{ padding: "64px 20px", color: "var(--text-muted)" }}>
-      <div
-        className="grid place-items-center mx-auto"
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: 14,
-          background: "var(--accent-soft)",
-          color: "var(--accent)",
-          marginBottom: 20,
-        }}
-      >
-        <Send size={20} strokeWidth={1.75} />
-      </div>
-      <h3
-        style={{
-          margin: "0 0 8px",
-          fontSize: 18,
-          fontWeight: 700,
-          color: "var(--text)",
-          letterSpacing: "-0.015em",
-        }}
-      >
-        Cold-open audit
-      </h3>
-      <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, lineHeight: 1.55 }}>
-        A free, one-page mini-report for{" "}
-        <strong style={{ color: "var(--text)" }}>{business.name}</strong> — 3–5 specific things
-        quietly costing them customers, grounded in their real site speed, screenshot, and reviews,
-        with one soft, editable close. Send it before you pitch to earn the reply.
-      </p>
-      {hasArchived && (
-        <ArchiveLink onClick={onViewArchived} label="View previous cold audit" />
-      )}
-    </div>
-  );
-}
-
-function ColdGeneratingState({
-  business,
-  progress,
-}: {
-  business: SavedBusiness | null;
-  progress: GenProgress | null;
-}) {
-  return (
-    <div style={{ padding: "60px 24px", maxWidth: 560, margin: "0 auto" }}>
-      <div className="flex items-center" style={{ gap: 10, marginBottom: 14 }}>
-        <Spinner small />
-        <span style={{ fontSize: 13.5, color: "var(--text)", fontWeight: 600 }}>
-          Inspecting {business?.name ?? "the business"} for the sharpest findings
-        </span>
-      </div>
-      <ProgressMeter progress={progress} />
-      <p style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 12 }}>
-        Measuring real site speed and reading their pages. This usually takes 15–40 seconds.
-      </p>
     </div>
   );
 }

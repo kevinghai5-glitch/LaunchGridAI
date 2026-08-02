@@ -41,7 +41,7 @@
 
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -59,7 +59,6 @@ import {
   detectLeaks,
   getFiredLeaks,
   type PreSaleResearch,
-  type RawResearch,
 } from "@/lib/leak-detection";
 import {
   carriesProvenanceMarker,
@@ -67,11 +66,10 @@ import {
   softenFlatAssertions,
   GRADE_VOICE,
 } from "@/lib/leak-narrative";
-import { assertPackValid, assertColdAuditValid } from "@/lib/exporters/validate-pack";
+import { assertPackValid } from "@/lib/exporters/validate-pack";
 import { renderLeakAnalysis } from "@/lib/exporters/deliverables";
-import { assertNoDisclosedFindings } from "@/lib/cold-audit";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
-import type { AssetPack, ColdAuditReport, LeakAnalysisItem } from "@/types";
+import type { AssetPack, LeakAnalysisItem } from "@/types";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 // Identical shape to scripts/verify-phase05.ts and scripts/verify-phase06.ts: a
@@ -122,6 +120,32 @@ function sourceLine(rel: string, re: RegExp): { line: number; text: string } | n
 function countBy(values: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of values) out[v] = (out[v] ?? 0) + 1;
+  return out;
+}
+
+/** Source with comments removed, so a scan cannot be satisfied — or tripped —
+ *  by prose. Same stripper the other verify scripts use. */
+function codeOnly(rel: string): string {
+  return read(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+}
+
+/** Every .ts/.tsx file under src/, repo-relative — walked with fs so D6b covers
+ *  a new file the day it is created. */
+function allSrcTsFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(resolve(REPO, dir))) {
+      const rel = `${dir}/${entry}`;
+      if (statSync(resolve(REPO, rel)).isDirectory()) {
+        walk(rel);
+        continue;
+      }
+      if (/\.(ts|tsx)$/.test(entry)) out.push(rel);
+    }
+  };
+  walk("src");
   return out;
 }
 
@@ -805,6 +829,18 @@ check("C6 · the two new checks are FATAL, not advisory", () => {
  * does not build — and the rest are RUNTIME backstops behind them. They are not
  * the same strength of promise and this section never lets them blur: a runtime
  * throw catches a mistake once it is running, a compile error stops it existing.
+ *
+ * WHAT DIED HERE (2026-08-01, cold-audit deletion). D3, D4 and D7 proved the
+ * same discipline on the cold-audit GENERATION path (PreSaleGenerationContext,
+ * the pipeline's mode declaration, assertNoDisclosedFindings on a stored
+ * report). That entire surface was deleted by ruling, so those checks died with
+ * their subject. D6 — the runtime throw inside detectLeaks — also died, because
+ * detectLeaks went MODE-BLIND when its one pre-sale caller was deleted; D6b is
+ * its structural replacement. D1/D2/D5 stay, and they are not history: the
+ * pre_sale variant of RawResearch SURVIVES as the contract behind the
+ * observed-facts row (src/lib/observed-facts.ts declares `mode: "pre_sale"` for
+ * exactly this guarantee), so "a pre-sale surface cannot carry intake" is still
+ * a live law with a live consumer.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 section("D · PRE-SALE CANNOT CONTAIN A DISCLOSURE — nothing is disclosed before the sale");
@@ -851,35 +887,25 @@ check("D2 · [COMPILE-TIME] the REAL compiler refuses a pre-sale detection carry
   );
 });
 
-check("D3 · [COMPILE-TIME] the pre-sale generation context cannot carry an intake-derived field", () => {
-  // The second compile gate, on the other side of detection: even with a clean
-  // pre-sale detection, the prompt context handed to the model is a type whose
-  // five intake-derived fields are `never`.
-  const src = read("src/lib/cold-audit.ts");
-  const start = src.indexOf("export type PreSaleGenerationContext");
-  assert(start >= 0, "PreSaleGenerationContext no longer exists");
-  const body = src.slice(start, src.indexOf("};", start));
-  const nevers = Array.from(body.matchAll(/(\w+)\?:\s*never/g), (m) => m[1]);
-  show("type       ", "PreSaleGenerationContext = GenerationContext & { … }");
-  show("never-typed fields", nevers);
-  show("guarantee  ", "COMPILE-TIME — setting any of these on a cold audit fails to build");
-  assert(nevers.length >= 5, `expected the five intake-derived fields to be typed never, found: ${nevers.join(", ") || "none"}`);
-});
+// D3 · D4 — DELETED 2026-08-01. They pinned PreSaleGenerationContext
+// (src/lib/cold-audit.ts) and the cold-audit pipeline's `mode: "pre_sale"`
+// declaration (src/lib/cold-audit-pipeline.ts). Both files were deleted with the
+// pre-sale generative surface; the checks died with their subject. The surviving
+// consumer of the pre_sale discriminator is src/lib/observed-facts.ts, and D3b
+// below pins THAT declaration so the compile-time story keeps a live anchor.
 
-check("D4 · [COMPILE-TIME] the cold-audit pipeline passes the pre_sale discriminator", () => {
-  // Without this line the pipeline falls to the post-intake variant, which carries
-  // no guarantee at all. It is the line that selects the type checked in D1/D2.
-  // The CODE line, not the comment above it: anchored to a bare property
-  // assignment so a check that only ever matched the explanatory comment (and
-  // would survive the line being deleted) is impossible.
-  const line = sourceLine("src/lib/cold-audit-pipeline.ts", /^\s*mode:\s*"pre_sale",\s*$/);
-  const callsDetect = read("src/lib/cold-audit-pipeline.ts").includes("detectLeaks({");
-  show("file        ", "src/lib/cold-audit-pipeline.ts");
+check("D3b · [COMPILE-TIME] the observed-facts row declares mode: \"pre_sale\" — the surviving consumer", () => {
+  // The cold audit's replacement is a row of four measured numbers, and it reads
+  // the SAME pre-sale variant D1/D2 prove. This anchors the declaration so the
+  // guarantee cannot quietly become a type nobody instantiates.
+  const line = sourceLine("src/lib/observed-facts.ts", /^\s*mode:\s*"pre_sale",\s*$/);
+  const typed = read("src/lib/observed-facts.ts").includes("PreSaleResearch");
+  show("file        ", "src/lib/observed-facts.ts");
   show("matched line", line ? `L${line.line}  ${line.text}` : "(NOT FOUND)");
-  show("calls detectLeaks({ … })", callsDetect);
-  show("guarantee   ", "COMPILE-TIME — this is what selects PreSaleResearch at that call site");
-  assert(line, "the cold-audit pipeline no longer declares mode: \"pre_sale\" — it now compiles under the unguaranteed variant");
-  assert(callsDetect, "the cold-audit pipeline no longer calls detectLeaks — this check is measuring the wrong file");
+  show("typed as PreSaleResearch", typed);
+  show("guarantee   ", "COMPILE-TIME — this is what selects PreSaleResearch at the row's call site");
+  assert(line, "observed-facts.ts no longer declares mode: \"pre_sale\" — the row now compiles under the unguaranteed variant");
+  assert(typed, "observed-facts.ts no longer types its research as PreSaleResearch — the compile gate has no live consumer");
 });
 
 check("D5 · [RUNTIME] a real pre-sale detection produces NO disclosed leak", () => {
@@ -894,53 +920,52 @@ check("D5 · [RUNTIME] a real pre-sale detection produces NO disclosed leak", ()
   assert.equal(disclosed.length, 0, `a pre-sale scan produced disclosed leak(s): ${disclosed.map((f) => f.leak.id).join(", ")}`);
 });
 
-check("D6 · [RUNTIME] defeating the types makes the backstop THROW, with the fix named", () => {
-  // The cast below is the only way to get here — an `any`, a JSON body, a cast —
-  // which is exactly the scenario the assertion in detectLeaks exists for. If the
-  // types are ever loosened, this is what still catches it.
-  const smuggled = {
-    ...PRE_SALE_RESEARCH,
-    intake: { missedCallHandling: "VOICEMAIL_ONLY" },
-  } as unknown as RawResearch;
-  let message = "";
-  try {
-    detectLeaks(smuggled);
-  } catch (err) {
-    message = (err as Error).message;
-  }
-  show("input     ", 'mode: "pre_sale" + intake, forced through with a cast');
-  show("threw     ", Boolean(message));
-  show("error     ", message || "(nothing — it returned normally)");
-  show("guarantee ", "RUNTIME — the backstop for anything that got past the compiler");
-  assert(message, "a pre-sale detection carrying smuggled intake returned normally — the runtime backstop is gone");
-  assert(/disclosed/.test(message), `the error does not name the problem: ${message}`);
-  assert(/remove `intake`|post_intake/.test(message), `the error does not name the fix: ${message}`);
+// D6 (the runtime throw on smuggled pre-sale intake) — DELETED 2026-08-01. The
+// backstop lived inside detectLeaks and policed the cold-audit generator, the
+// one surface that ran pre-sale detections; detectLeaks is deliberately
+// MODE-BLIND now (its own doc comment records the ruling) and the generator is
+// gone. D6b below is the replacement, and it is structural rather than
+// behavioural: with no runtime drop left, the guarantee is that no pre-sale
+// detectLeaks CALLER exists at all.
+
+check("D6b · [SOURCE] detectLeaks is mode-blind by ruling, and NO src call site passes pre_sale", () => {
+  // Two halves. The mode-blind state is pinned so a future "helpful" restoration
+  // of a silent pre-sale branch fails loudly here and gets decided on purpose;
+  // and the absence of pre-sale callers is scanned across all of src/, because
+  // that absence is now the entire runtime story — the compile gate (D1/D2)
+  // stops intake reaching a pre-sale call, and this stops a pre-sale call
+  // existing to receive an interpretive fire.
+  const detection = read("src/lib/leak-detection.ts");
+  const modeBlind = /MODE-BLIND SINCE 2026-08-01/.test(detection);
+  show("detectLeaks documents itself mode-blind", modeBlind);
+  assert(
+    modeBlind,
+    "leak-detection.ts no longer records the mode-blind ruling — if runtime mode branches are being reintroduced, " +
+      "this check is where that reversal gets decided out loud"
+  );
+
+  const srcFiles = allSrcTsFiles();
+  const preSaleCallers = srcFiles.filter((rel) =>
+    /detectLeaks\(\s*\{[^}]*mode:\s*"pre_sale"/.test(codeOnly(rel))
+  );
+  show("src files scanned", srcFiles.length);
+  show("pre-sale detectLeaks call sites", preSaleCallers.length ? preSaleCallers : "(none)");
+  show("guarantee ", "SOURCE — the pre-sale variant's only consumer is the observed-facts row, which composes no findings");
+  assert.deepEqual(
+    preSaleCallers,
+    [],
+    `a pre-sale detectLeaks call site exists again (${preSaleCallers.join(", ")}) — with the runtime drop deleted, ` +
+      "nothing would keep an interpretive fire out of whatever that surface renders"
+  );
 });
 
-check("D7 · [RUNTIME] a stored cold audit carrying a disclosure is caught on the way out", () => {
-  // Belt three: a report already saved. The compile gates protect documents made
-  // from now on; this is what notices one written yesterday.
-  const report = coldAuditReportWith("disclosed");
-  const clean = coldAuditReportWith("observed");
-  let thrown = "";
-  try {
-    assertNoDisclosedFindings(report, "verify-phase1");
-  } catch (err) {
-    thrown = (err as Error).message;
-  }
-  const verdict = assertColdAuditValid(report);
-  const cleanVerdict = assertColdAuditValid(clean);
-  show("finding grade         ", "disclosed");
-  show("assertNoDisclosedFindings threw", Boolean(thrown));
-  show("error                 ", thrown.slice(0, 200) || "(nothing)");
-  show("assertColdAuditValid.ok", verdict.ok);
-  show("check name            ", verdict.fails[0]?.law ?? "(none fired)");
-  show("same report, graded observed ⇒ ok", cleanVerdict.ok);
-  show("guarantee             ", "RUNTIME — read-back of something already persisted");
-  assert(thrown, "a cold audit carrying a disclosed finding passed the on-the-way-out assertion");
-  assert.equal(verdict.ok, false, "the pre-sale validator accepted a disclosed finding");
-  assert.equal(cleanVerdict.ok, true, "the pre-sale validator rejects a clean audit too — it is not discriminating");
-});
+// D7 — DELETED 2026-08-01. It read a stored cold audit back through
+// assertNoDisclosedFindings / assertColdAuditValid, both of which were deleted
+// with the pre-sale surface. There is no stored pre-sale document any more to
+// read back (COLD_AUDIT rows are soft-deleted and never rendered), so the
+// read-back gate has no surface to guard. The paid pack's read-back gate —
+// validatePack on the saved artifact — is exercised in section C above and in
+// verify-fabrication's artifact checks.
 
 /* ════════════════════════════════════════════════════════════════════════════
  * E. THE GAP LIST IS REAL AND COMPLETE
@@ -1117,36 +1142,6 @@ check("E6 · answering EVERY collectible question leaves only the structural gap
  * claims read first — these are all hoisted `function` declarations, so calling
  * them from a check() callback further up is safe.
  * ══════════════════════════════════════════════════════════════════════════ */
-
-/** A minimal saved cold audit with one finding at the given grade. Hand-built on
- *  purpose: the point of D7 is what happens to a report that reached storage
- *  WITHOUT going through the generation path. */
-function coldAuditReportWith(grade: EvidenceGrade): ColdAuditReport {
-  return {
-    businessName: "Probe Heating Co",
-    city: "Kelowna",
-    industry: "hvac",
-    websiteUrl: "https://probe-heating.example",
-    screenshotUrl: null,
-    headline: "Where Probe Heating Co is losing calls",
-    intro: "The site reads well, and here is where enquiries are slipping.",
-    headlineCost: "Every enquiry that hits this gap is money already spent to earn it.",
-    findings: [
-      {
-        title: "Nothing catches a call you cannot take",
-        problem: "The published line is the only route in.",
-        whyItCosts: "A homeowner with no heat calls the next company on the list.",
-        severity: "high",
-        evidenceGrade: grade,
-      },
-    ],
-    deeperLeakQuestions: ["When a lead fills in your form at 8pm, how fast do they hear back?"],
-    closingCta: { tiedToFinding: "Nothing catches a call you cannot take", message: "Book the working session." },
-    agencyName: "ReclaimedHQ",
-    generatedAt: "2026-07-26T12:00:00.000Z",
-    dataConfidence: "high",
-  };
-}
 
 /** The rendered PROSE fields of a leak — the same five the pack validator lints.
  *  Kept in step with leakProse() in validate-pack.ts; if that list grows, C3's

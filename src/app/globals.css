@@ -2,14 +2,223 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────── LaunchGrid OS — Apple-grade dark aesthetic ─────────
-   Deep neutral charcoal, restrained system-blue accent, soft diffuse
-   depth. SF Pro typography. Calm, spacious, premium — built on
-   consistency and restraint. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LaunchGrid OS — theme tokens + THE FENCE
+   ═══════════════════════════════════════════════════════════════════════════
 
+   READ THIS BEFORE ADDING A GLOBAL RULE.
+
+   This stylesheet is imported by src/app/layout.tsx, which is the ROOT layout.
+   That means it also reaches two CLIENT-FACING routes:
+
+       /a/[publicId]   the cold-audit teaser a prospect opens from the pre-call
+                       email  (src/app/a/[publicId]/page.tsx)
+       /p/[publicId]   the public proposal  (src/app/p/[publicId]/page.tsx)
+
+   Both are cream/serif brand documents (#FBFAF7, Georgia, muted gold). A dark
+   dashboard rule landing on either one is a visible regression in the
+   highest-stakes artifact the business has.
+
+   THE RULE, THEREFORE:
+     · Custom PROPERTIES may live at :root. A custom property paints nothing
+       until something reads it, and neither client route reads one — the
+       teaser sets every colour inline from its own palette object, and the
+       public proposal's <PublicProposal> re-declares all eleven tokens it
+       reads inside its own `.lgp` block. Verified, both files.
+     · Anything that PAINTS — background, color, font-family, letter-spacing,
+       font-feature-settings, ::selection, :focus-visible, accent-color,
+       color-scheme, scrollbars, a bare `*` border-color, min-width — goes
+       under `.lg-app` and NOWHERE else. See "THE FENCE" at the bottom.
+
+   `.lg-app` is applied in src/app/(dashboard)/layout.tsx. It is NOT on <html>,
+   so no client-facing route can inherit it.
+
+   DO NOT declare --ink, --ink-muted, --heading, --good, --critical,
+   --accent-tint, --serif, --high, --med or --low here. Those are the
+   CLIENT-DOCUMENT vocabulary. They are self-declared by the files that read
+   them (exporters/_shell.ts, exporters/cold-audit-html.ts — both standalone
+   <!DOCTYPE html> documents this stylesheet never touches — and
+   components/proposals/PublicProposal.tsx inside `.lgp`). Defining them
+   globally would invent a bleed path where none exists today.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ───────────────────────────────────────────────────────────────────────────
+   A · OWNER PALETTE — LIGHT.  Defined as supplied. NOT the shipped state.
+   Reachable only by putting .lg-theme-light on an element. Nothing does.
+   Block B below re-declares every one of these on :root, so :root is DARK.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root,
+.lg-theme-light {
+  --background: #faf9f5;
+  --foreground: #3d3929;
+  --card: #faf9f5;
+  --card-foreground: #141413;
+  --popover: #ffffff;
+  --popover-foreground: #28261b;
+  --primary: #c96442;
+  --primary-foreground: #ffffff;
+  --secondary: #e9e6dc;
+  --secondary-foreground: #535146;
+  --muted: #ede9de;
+  --muted-foreground: #83827d;
+  --border: #dad9d4;
+  --input: #b4b2a7;
+  --ring: #c96442;
+  /* his light --destructive is #141413 (near-black). Transcribed as supplied;
+     see the note in B — it is almost certainly meant to be a red. Light is not
+     shipped, so it is inert. */
+  --destructive: #141413;
+  --destructive-foreground: #ffffff;
+  --chart-1: #b05730;
+  --chart-2: #9c87f5;
+  --chart-3: #ded8c4;
+  --chart-4: #dbd3f0;
+  --chart-5: #b4552d;
+  --sidebar: #f5f4ee;
+  --sidebar-foreground: #3d3d3a;
+  --sidebar-primary: #c96442;
+  --sidebar-primary-foreground: #fbfbfb;
+  --sidebar-accent: #e9e6dc;
+  --sidebar-accent-foreground: #343434;
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: #b5b5b5;
+
+  /* His shadcn "accent" is a SUBTLE SURFACE, not a brand colour. Renamed on
+     purpose — see the collision note in B. */
+  --accent-subtle: #e9e6dc;
+  --accent-subtle-foreground: #28261b;
+
+  /* Derived extensions (--lgx-*): steps his palette does not supply but the
+     dashboard's existing 4-step text ladder and 5-step surface ladder need. */
+  --lgx-surface-2: #efece1;
+  --lgx-surface-hi: #e4e0d4;
+  --lgx-glass: rgba(250, 249, 245, 0.82);
+  --lgx-line-bright: #9a9789;
+  --lgx-text-3: #5f5c4e;
+  --lgx-text-4: #83827d;
+  --lgx-accent-hover: #b25635;
+  --lgx-accent-ink: #ffffff;
+  --lgx-accent-soft: rgba(201, 100, 66, 0.12);
+  --lgx-accent-grad: linear-gradient(140deg, #d97757 0%, #c96442 46%, #a04425 100%);
+  --lgx-accent-grad-hover: linear-gradient(140deg, #e08a6c 0%, #d17150 46%, #b25635 100%);
+  --lgx-money: #2f7d57;
+  --lgx-money-soft: rgba(47, 125, 87, 0.10);
+  --lgx-warn: #8a6d1f;
+  --lgx-warn-soft: rgba(138, 109, 31, 0.11);
+  --lgx-danger-soft: rgba(168, 68, 59, 0.11);
+}
+
+
+/* ───────────────────────────────────────────────────────────────────────────
+   B · OWNER PALETTE — DARK.  ***THIS IS THE SHIPPED STATE.***
+
+   Applied unconditionally on :root. Not behind a toggle, not behind
+   prefers-color-scheme — a light OS setting cannot produce a light dashboard.
+   It is declared AFTER block A with equal specificity, so it wins on :root.
+
+   Also declared on .lg-app so the dashboard shell carries the palette itself
+   and stays correct even if it is ever mounted under a light ancestor.
+
+   ── TWO DELIBERATE DEVIATIONS FROM THE SUPPLIED NAMES ──
+
+   1. `--accent` is NOT set to his #1a1915.
+      In his palette `--accent` is shadcn's subtle hover SURFACE (a near-black).
+      In this codebase `--accent` is the BRAND accent and it is read at 196 call
+      sites as text, icon, border and dot colour. Setting it to #1a1915 would
+      turn all 196 near-black on a near-black surface. His value is preserved
+      verbatim under `--accent-subtle` / `--accent-subtle-foreground`, and
+      `--accent` maps to his `--primary` (#d97757) in block D, which is what the
+      196 call sites actually mean.
+
+   2. `--primary-foreground` / `--accent-text` use his #1a1915, not his #ffffff.
+      White on flat #d97757 measures 3.12:1 — below AA for normal text. His own
+      #1a1915 on #d97757 measures 5.63:1 and preserves this design's existing
+      dark-ink-on-accent treatment. Gradient fills keep white text: white on the
+      gradient's deep end (#b05730) is 4.94:1 and passes.
+      To go back to his literal: set --lgx-accent-ink to #ffffff.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root,
+.lg-theme-dark,
+.dark,
+[data-theme="dark"],
+.lg-app {
+  --background: #262624;
+  --foreground: #c3c0b6;
+  --card: #262624;
+  --card-foreground: #faf9f5;
+  --popover: #30302e;
+  --popover-foreground: #e5e5e2;
+  --primary: #d97757;
+  --primary-foreground: #ffffff;
+  --secondary: #faf9f5;
+  --secondary-foreground: #30302e;
+  --muted: #1b1b19;
+  --muted-foreground: #b7b5a9;
+  --border: #3e3e38;
+  --input: #52514a;
+  --ring: #d97757;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --chart-1: #b05730;
+  --chart-2: #9c87f5;
+  --chart-3: #1a1915;
+  --chart-4: #2f2b48;
+  --chart-5: #b4552d;
+  --sidebar: #1f1e1d;
+  --sidebar-foreground: #c3c0b6;
+  --sidebar-primary: #343434;
+  --sidebar-primary-foreground: #fbfbfb;
+  --sidebar-accent: #0f0f0e;
+  --sidebar-accent-foreground: #c3c0b6;
+  /* NOTE: his --sidebar-border is #ebebeb — near-WHITE, on a #1f1e1d sidebar.
+     Transcribed as supplied. Nothing reads var(--sidebar-border) today, so it
+     is inert; do not wire it into the sidebar without picking a dark value. */
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: #b5b5b5;
+
+  /* his shadcn "accent" surface — renamed, see deviation 1 above */
+  --accent-subtle: #1a1915;
+  --accent-subtle-foreground: #f5f4ee;
+
+  /* ── Derived extensions (--lgx-*). Everything the dashboard needs that his
+        palette does not supply. Each is either a value from his own set or a
+        step held to his hue family; contrast noted against --surface #262624. */
+  --lgx-surface-2: #30302e;   /* = his --popover                              */
+  --lgx-surface-hi: #3a3934;  /* derived: between his popover and his border   */
+  --lgx-glass: rgba(31, 30, 29, 0.82);        /* his --sidebar at 82%          */
+  --lgx-line-bright: #6b6961; /* derived: one step above his --input           */
+  --lgx-text-3: #a8a69b;      /* derived, hue 51 — 6.20:1 on card             */
+  --lgx-text-4: #939185;      /* derived, hue 51 — 4.79:1 on card             */
+  --lgx-accent-hover: #e89478;/* derived lighter terracotta — 6.45:1 on card  */
+  --lgx-accent-ink: #1a1915;  /* his --chart-3/--accent — 5.63:1 on #d97757   */
+  --lgx-accent-soft: rgba(217, 119, 87, 0.18);
+  --lgx-accent-grad: linear-gradient(140deg, #e89478 0%, #d97757 46%, #b05730 100%);
+  --lgx-accent-grad-hover: linear-gradient(140deg, #efa48b 0%, #e08363 46%, #bd6034 100%);
+  /* MONEY. His palette has no money token and no green at all. This keeps the
+     existing product meaning ("this number is revenue") by holding the old
+     green's hue family while dropping chroma so it sits beside terracotta
+     instead of fighting it. hue 149, 6.88:1 on card, 7.83:1 on canvas. */
+  --lgx-money: #6dbf95;
+  --lgx-money-soft: rgba(109, 191, 149, 0.11);
+  /* WARN. Also absent from his palette. Pushed to hue 44 — 30 degrees off the
+     terracotta accent (hue 15) so a warn pill cannot be mistaken for a brand
+     accent at pill size. 7.30:1 on card. */
+  --lgx-warn: #d4b04a;
+  --lgx-warn-soft: rgba(212, 176, 74, 0.12);
+  --lgx-danger-soft: rgba(239, 68, 68, 0.13);
+}
+
+
+/* ───────────────────────────────────────────────────────────────────────────
+   C · STRUCTURE — theme-independent. Geometry, motion, type, depth.
+   `--radius: 0.5rem` is the owner's supplied value. --radius-sm follows it down
+   so the scale stays monotonic; lg/xl/2xl are unchanged so existing cards keep
+   their silhouette while two other workflows are editing those components.
+   ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  --radius-sm: 8px;
-  --radius: 11px;
+  --radius-sm: 6px;
+  --radius: 0.5rem;
   --radius-lg: 18px;
   --radius-xl: 22px;
   --radius-2xl: 28px;
@@ -26,63 +235,6 @@
   --transition: 240ms cubic-bezier(0.32, 0.72, 0, 1);
   --t: 240ms cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* base / surfaces — ABSOLUTE black canvas, subtly-raised near-black cards */
-  --bg: #000000;
-  --bg-deep: #000000;
-  --bg-elevated: #0d0d0f;
-  --surface: #0f0f11;
-  --surface-2: #141416;
-  --surface-hi: #1a1a1d;
-  --glass: rgba(6, 6, 7, 0.82);
-
-  /* legacy aliases used across existing components */
-  --surface-hover: #141416;
-  --surface-active: #1a1a1d;
-  --sidebar: #000000;
-
-  /* lines — hairline, soft (subtly visible card edges, Apple/Whop) */
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.11);
-  --line-bright: rgba(255, 255, 255, 0.16);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.11);
-
-  /* text — neutral cool-gray, near-zero chroma, crisp Apple hierarchy */
-  --text: oklch(0.985 0.001 270);
-  --text-2: oklch(0.83 0.003 270);
-  --text-3: oklch(0.67 0.004 270);
-  --text-4: oklch(0.51 0.005 270);
-  --text-muted: oklch(0.83 0.003 270);
-  --text-subtle: oklch(0.67 0.004 270);
-
-  /* accent — vivid Whop/Apple royal-blue */
-  --accent: oklch(0.70 0.16 264);
-  --accent-2: oklch(0.62 0.18 266);
-  --accent-hover: oklch(0.76 0.16 264);
-  --accent-soft: oklch(0.62 0.18 264 / 0.18);
-  --accent-glow: oklch(0.62 0.18 264 / 0.18);
-  --accent-text: oklch(0.16 0.04 264);
-  /* filled-pill blue (the "Active" badge in the reference) */
-  --accent-fill: oklch(0.52 0.19 264 / 0.85);
-  --accent-fill-text: oklch(0.90 0.07 264);
-  /* premium blue gradient (light sky → deep navy) — the ONLY place blue gets
-     rich. Used for hero fills: primary buttons, active nav, toggles, pill-active.
-     Flat --accent stays for text, borders, dots, and soft tints. */
-  --accent-grad: linear-gradient(140deg, #5fb4e8 0%, #1c6bd6 46%, #0b3488 100%);
-  --accent-grad-hover: linear-gradient(140deg, #6cbcec 0%, #2a77e0 46%, #0e3f9c 100%);
-
-  /* money / status */
-  --money: oklch(0.76 0.13 158);
-  --money-soft: oklch(0.55 0.10 158 / 0.10);
-  --success: oklch(0.76 0.13 158);
-  --success-soft: oklch(0.55 0.10 158 / 0.11);
-  --warn: oklch(0.80 0.11 75);
-  --warn-soft: oklch(0.55 0.10 75 / 0.11);
-  --warning: oklch(0.80 0.11 75);
-  --warning-soft: oklch(0.55 0.10 75 / 0.11);
-  --danger: oklch(0.70 0.16 25);
-  --danger-soft: oklch(0.55 0.13 25 / 0.12);
-
   /* fonts — SF Pro first (Apple design language) */
   --font-sf: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro";
   --font-display: var(--font-sf), var(--font-sans), "Segoe UI", sans-serif;
@@ -92,31 +244,140 @@
   --shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.28), 0 8px 24px -12px rgba(0, 0, 0, 0.42);
   --shadow-lg: 0 8px 28px -8px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.22);
   --shadow-xl: 0 24px 60px -16px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.28);
-
-  /* shadcn aliases */
-  --background: var(--bg);
-  --foreground: var(--text);
-  --card: var(--surface);
-  --card-foreground: var(--text);
-  --popover: var(--surface);
-  --popover-foreground: var(--text);
-  --primary: var(--accent);
-  --primary-foreground: var(--accent-text);
-  --secondary: var(--surface-active);
-  --secondary-foreground: var(--text);
-  --muted: var(--surface-active);
-  --muted-foreground: var(--text-muted);
-  --accent-foreground: var(--accent-text);
-  --destructive: var(--danger);
-  --destructive-foreground: #ffffff;
-  --input: var(--border-strong);
-  --ring: var(--accent);
 }
 
+
+/* ───────────────────────────────────────────────────────────────────────────
+   D · THE MAP.  Every pre-existing token name, redefined in terms of A/B.
+
+   This block is the whole point. The dashboard styles itself INLINE from these
+   names at ~1,500 call sites across files this workflow does not own. Nothing
+   here is renamed and nothing is removed, so every one of those call sites
+   picks up the new palette with no edit.
+
+   It is declared on the union of A's and B's selectors, not on :root alone.
+   A custom property whose value is a var() resolves on the element where it is
+   DECLARED, so a map at :root would freeze A/B's values from :root and a
+   nested .lg-theme-light could never re-derive it.
+
+   SURFACE LADDER — the one structural judgement call. His --background and
+   --card are the same colour (#262624). This dashboard is built on cards being
+   distinguishable from the canvas, so his single #262624 is placed on the CARD
+   (--surface, 74 call sites) and the canvas takes his --muted (#1b1b19), which
+   is a real value from his own palette and correctly darker. The full ladder
+   uses only his values plus one derived step:
+     #1f1e1d canvas = elevated = NAV  <  #262624 card  <  #30302e raised
+     <  #3a3934 active(derived)  <  #3e3e38 line  <  #52514a line-strong
+   OWNER RULING (2026-08-01): every page canvas matches the NAV BAR — "that's
+   Claude's real colour". The canvas therefore references the SAME token the
+   sidebar paints with, so the two can never drift apart; the original darker
+   step (his --muted, #1b1b19) remains in use for insets that sit BELOW the
+   canvas. Card separation now rides on the #1f1e1d → #262624 step plus the
+   border, which is exactly how Claude's own UI separates its panels.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root,
+.lg-theme-light,
+.lg-theme-dark,
+.dark,
+[data-theme="dark"],
+.lg-app {
+  /* base / surfaces */
+  --bg: var(--sidebar);
+  --bg-deep: var(--sidebar);
+  --bg-elevated: var(--sidebar);
+  --surface: var(--card);
+  --surface-2: var(--lgx-surface-2);
+  --surface-hi: var(--lgx-surface-hi);
+  --glass: var(--lgx-glass);
+
+  /* legacy surface aliases used across existing components */
+  --surface-hover: var(--lgx-surface-2);
+  --surface-active: var(--lgx-surface-hi);
+
+  /* lines. His --border is visible on canvas (1.60:1), card (1.41:1) and
+     raised (1.23:1) — comparable to the translucent hairlines it replaces. It
+     goes flat against --surface-hi; use --line-strong (1.45:1) or
+     --line-bright (2.07:1) on the highest surface. */
+  --line: var(--border);
+  --line-strong: var(--input);
+  --line-bright: var(--lgx-line-bright);
+  --border-strong: var(--input);
+
+  /* text ladder. --text and --text-2 come straight from his palette and land
+     correctly in BOTH themes because they map by MEANING, not by lightness:
+     card-foreground is the strongest ink either way. 3 and 4 are derived,
+     matching the contrast of the steps they replace (4.79:1 vs 4.71:1). */
+  --text: var(--card-foreground);        /* #faf9f5 — 14.39:1 on card */
+  --text-2: var(--foreground);           /* #c3c0b6 —  8.33:1 on card */
+  --text-3: var(--lgx-text-3);           /* #a8a69b —  6.20:1 on card */
+  --text-4: var(--lgx-text-4);           /* #939185 —  4.79:1 on card */
+  --text-muted: var(--muted-foreground); /* #b7b5a9 —  7.36:1 on card */
+  --text-subtle: var(--lgx-text-3);
+
+  /* accent — the BRAND accent, his --primary. See deviation 1 in block B. */
+  --accent: var(--primary);
+  --accent-2: var(--chart-5);
+  --accent-hover: var(--lgx-accent-hover);
+  --accent-soft: var(--lgx-accent-soft);
+  --accent-glow: var(--lgx-accent-soft);
+  --accent-text: var(--lgx-accent-ink);
+  --accent-fill: var(--chart-1);
+  /* white, not his #f5f4ee: on the #b05730 fill that is 4.94:1 rather than
+     4.48:1, and it matches the #fff that .lg-grad / .lg-pill-active already use
+     on the same deep end of the accent gradient. */
+  --accent-fill-text: #ffffff;
+  --accent-grad: var(--lgx-accent-grad);
+  --accent-grad-hover: var(--lgx-accent-grad-hover);
+
+  /* money / status */
+  --money: var(--lgx-money);
+  --money-soft: var(--lgx-money-soft);
+  --success: var(--lgx-money);
+  --success-soft: var(--lgx-money-soft);
+  --warn: var(--lgx-warn);
+  --warn-soft: var(--lgx-warn-soft);
+  --warning: var(--lgx-warn);
+  --warning-soft: var(--lgx-warn-soft);
+  /* Danger ink. His --destructive (#ef4444, kept verbatim on its own token)
+     measures 4.42:1 on the #1f1e1d canvas and 4.03:1 on a card — under the
+     4.5:1 body-text bar on both. Same treatment as --text-3/--text-4: a
+     derived value in the same hue, lightened just enough to clear AA on every
+     reading surface (5.06:1 canvas · 4.61:1 card). Buttons filled WITH
+     --destructive keep his value — this token is for danger TEXT. */
+  --danger: #f25a5a;
+  --danger-soft: var(--lgx-danger-soft);
+
+  /* shadcn aliases. Kept pointed at the ladder so the CSS variable and the
+     Tailwind utility of the same name always agree (see tailwind.config.ts).
+     This intentionally overrides his literal --background (#262624): here
+     "background" means the canvas, and his #262624 lives on --card/--surface. */
+  --background: var(--bg);
+  /* --foreground is DELIBERATELY NOT overridden to var(--text). It keeps his
+     literal #c3c0b6, because --text-2 above derives from it. Pointing it at
+     --text made --text-2 resolve to #faf9f5 — identical to --text — silently
+     collapsing the 4-step text ladder to 3 steps everywhere --text-2 is used
+     (110 call sites). Tailwind's `foreground` points here too, so the variable
+     and the utility still agree. */
+
+  /* --accent-foreground is shadcn's pair for the SUBTLE accent SURFACE, not for
+     the brand accent — so it takes his #f5f4ee, and tailwind.config.ts points
+     `accent.foreground` at the same place. Keeping these two in agreement also
+     fixes a live bug: Button's `ghost` and `outline` variants apply
+     `hover:text-accent-foreground` over a 5%-white overlay, and while
+     --accent-foreground resolved to the old dark --accent-text those labels went
+     nearly invisible on hover.
+     --primary-foreground takes the AA-passing dark ink; see deviation 2 above. */
+  --accent-foreground: var(--accent-subtle-foreground);
+  --primary-foreground: var(--accent-text);
+}
+
+
 @layer base {
+  /* NOTHING IN THIS LAYER MAY SET A COLOUR, A FONT OR A WIDTH.
+     It reaches /a/[publicId] and /p/[publicId]. Painting belongs in THE FENCE. */
+
   * {
     box-sizing: border-box;
-    border-color: var(--border);
   }
 
   html {
@@ -126,42 +387,128 @@
   html, body {
     margin: 0;
     padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sf), var(--font-sans), "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
-    /* Inter feature settings → humanist, SF-Pro-like glyphs (single-story a/g,
-       open digits) so the webfont fallback matches the Apple system font. */
-    font-feature-settings: "cv01", "cv03", "cv04", "cv11", "ss01";
-    letter-spacing: -0.011em;
   }
 
   body {
     min-height: 100vh;
-    min-width: 1320px;
-    /* absolute black — no wash. Elevated cards carry all the depth. */
-    background: var(--bg);
-    background-attachment: fixed;
   }
 
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 99px; border: 3px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.10); background-clip: padding-box; border: 3px solid transparent; }
+  /* The overscroll gutter — the one pixel of body that a client page cannot
+     cover, because both public routes paint their own opaque min-height:100vh
+     wrapper and nothing more. Default is the brand PAPER, so a prospect
+     rubber-banding the teaser on a phone sees cream rather than the dashboard's
+     charcoal. The dark canvas is switched on only when the operator shell is
+     actually mounted.
 
-  :focus-visible { outline: 1.5px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-  ::selection { background: var(--accent-soft); color: var(--text); }
+     Fails safe: if :has() is unavailable the dashboard gets a cream gutter —
+     cosmetic, operator-only. A client page can never get the dark one. */
+  html, body {
+    background: #fbfaf7;
+  }
+  html:has(.lg-app),
+  html:has(.lg-app) body {
+    background: var(--bg);
+  }
 }
 
-@layer utilities {
-  .lg-mono,
-  .mono { font-family: var(--font-mono), ui-monospace, "SF Mono", monospace; font-feature-settings: "ss01"; }
-  .lg-display,
-  .disp { font-family: var(--font-display); letter-spacing: -0.022em; }
-  .tnum { font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE FENCE — everything that PAINTS.
+
+   `.lg-app` is applied in src/app/(dashboard)/layout.tsx and nowhere else that
+   a prospect can reach. Every rule below was previously global; each one is
+   listed with what it used to bleed onto:
+
+     background / color / font-family  ·  the canvas and body ink
+     font-feature-settings             ·  Inter stylistic alternates were being
+                                          applied to the teaser's and the
+                                          proposal's body copy
+     letter-spacing -0.011em           ·  was tightening the client documents'
+                                          serif headlines
+     ::selection                       ·  near-white text on a blue tint =
+                                          unreadable selection on cream
+     :focus-visible                    ·  royal-blue ring on the teaser's one
+                                          gold CTA; browser default now
+     ::-webkit-scrollbar               ·  a 5%-white thumb, invisible on cream
+     * { border-color }                ·  operator hairline as the default for
+                                          any Tailwind `border` utility
+     min-width: 1320px                 ·  forced a 1320px viewport on the
+                                          prospect's PHONE (see .lg-dashboard)
+     accent-color / color-scheme       ·  new, and scoped from the start so
+                                          native controls and scrollbars stay
+                                          light on the client documents
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lg-app {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sf), var(--font-sans), "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Inter feature settings → humanist, SF-Pro-like glyphs (single-story a/g,
+     open digits) so the webfont fallback matches the Apple system font. */
+  font-feature-settings: "cv01", "cv03", "cv04", "cv11", "ss01";
+  letter-spacing: -0.011em;
+  /* native checkboxes, radios, range inputs and the native scrollbar */
+  accent-color: var(--accent);
+  color-scheme: dark;
 }
+
+/* Tailwind preflight defaults bare borders to currentColor. Inside the app,
+   restore the operator hairline; outside it, currentColor is correct. */
+.lg-app *,
+.lg-app *::before,
+.lg-app *::after {
+  border-color: var(--line);
+}
+
+.lg-app ::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.lg-app :focus-visible {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* SCROLLBARS. The DOCUMENT scrollbar belongs to <html>, not to .lg-app — the
+   dashboard shell is min-width:1320px inside the viewport, so both axes scroll
+   on the document. Styling it therefore has to be reached from <html>, which is
+   shared with the client-facing routes. Gated on :has(.lg-app), the same way the
+   canvas is, so the operator keeps dark scrollbars and a prospect keeps the
+   native light ones. `color-scheme` is what themes the native scrollbar and the
+   native form controls; it must be on <html> to reach the document scrollbar. */
+html:has(.lg-app) { color-scheme: dark; }
+
+html:has(.lg-app)::-webkit-scrollbar,
+html:has(.lg-app) ::-webkit-scrollbar { width: 10px; height: 10px; }
+html:has(.lg-app)::-webkit-scrollbar-track,
+html:has(.lg-app) ::-webkit-scrollbar-track { background: transparent; }
+html:has(.lg-app)::-webkit-scrollbar-thumb,
+html:has(.lg-app) ::-webkit-scrollbar-thumb {
+  background: rgba(250, 249, 245, 0.06);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+html:has(.lg-app)::-webkit-scrollbar-thumb:hover,
+html:has(.lg-app) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(250, 249, 245, 0.12);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+/* Dashboard-only structural minimum. The operator's tables need the width; the
+   prospect's phone must never be told to render 1320px, which is what this
+   rule did for as long as it sat on `body`. Deliberately NOT on .lg-app, so
+   the class stays safe to reuse on narrow operator surfaces such as /login. */
+.lg-dashboard {
+  min-width: 1320px;
+}
+
 
 /* ───────── Keyframes ───────── */
 @keyframes rise {
@@ -201,6 +548,22 @@
 @keyframes lg-spin { to { transform: rotate(360deg); } }
 @keyframes lg-menu-in { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPT-IN CLASSES.  Everything below is reached only by an explicit class name.
+   Verified unreachable from both client-facing routes: /a/[publicId] renders
+   zero className attributes, and /p/[publicId] uses only `mx-auto` and
+   `text-center` (pure Tailwind layout, no colour). Safe to keep global.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .lg-mono,
+  .mono { font-family: var(--font-mono), ui-monospace, "SF Mono", monospace; font-feature-settings: "ss01"; }
+  .lg-display,
+  .disp { font-family: var(--font-display); letter-spacing: -0.022em; }
+  .tnum { font-variant-numeric: tabular-nums; }
+}
+
 /* ───────── Helpers ───────── */
 .rise > * { animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
 .rise > *:nth-child(1) { animation-delay: 0.02s; }
@@ -235,9 +598,24 @@
   animation: pingRing 2.2s cubic-bezier(0, 0.55, 0.45, 1) infinite;
 }
 
+/* ── WHY THESE FOUR CARD PRIMITIVES SET `color` ──
+   A card that paints its own dark fill must also establish its own text colour,
+   or it depends on an ancestor to do it. Inside `.lg-app` that is a no-op. It
+   matters OUTSIDE the fence: /signup is the one operator page that is not in the
+   (dashboard) group, and it renders `<Button variant="outline">` inside
+   `.glass-card`. That shadcn variant sets no base colour, so it inherited it
+   from `body` — and `body` no longer paints, precisely so it cannot reach the
+   two client-facing routes. Declaring it here fixes /signup without a global
+   rule and without touching button.tsx or the auth pages.
+
+   Safe because these are OPT-IN CLASSES: /a/[publicId] renders no className at
+   all and /p/[publicId] uses only mx-auto and text-center, so no client-facing
+   document can pick one up. */
+
 /* surface — flat elevated card: solid fill, hairline border, soft shadow */
 .surface {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
@@ -246,6 +624,7 @@
 /* glass — subtle frosted depth for floating panels */
 .glass {
   background: var(--glass);
+  color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -303,7 +682,7 @@
 /* bar — thin, soft */
 .bar {
   position: relative; height: 3px; border-radius: 99px;
-  background: rgba(255,255,255,0.05); overflow: hidden;
+  background: rgba(250, 249, 245, 0.07); overflow: hidden;
 }
 .bar > span {
   position: absolute; inset: 0; transform-origin: left center;
@@ -313,15 +692,15 @@
 
 /* row hover */
 .row-hover { transition: background var(--t), transform var(--t); }
-.row-hover:hover { background: rgba(255,255,255,0.045); transform: translateX(2px); }
-.row-hover:active { background: rgba(255,255,255,0.06); transition-duration: 90ms; }
+.row-hover:hover { background: rgba(250, 249, 245, 0.05); transform: translateX(2px); }
+.row-hover:active { background: rgba(250, 249, 245, 0.07); transition-duration: 90ms; }
 
 /* faint grid */
 .grid-bg,
 .bg-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    linear-gradient(rgba(250, 249, 245, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 249, 245, 0.015) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: -1px -1px;
 }
@@ -329,12 +708,14 @@
 /* Backward-compat utility classes for landing + older pages */
 .glass-card {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 .panel {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
 }
@@ -392,24 +773,28 @@
 }
 .lg-icon-btn:hover { background: var(--surface-hi); border-color: var(--line-bright); color: var(--text); }
 
-/* Status pills — rounded-full, two reference tones (filled-blue / subtle) */
+/* Status pills — rounded-full, two reference tones (filled-accent / subtle) */
 .lg-pill {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 5px 12px; border-radius: 999px;
   font-size: 12.5px; font-weight: 600; line-height: 1;
   letter-spacing: -0.005em; white-space: nowrap;
 }
+/* white on the gradient's deep end (#b05730) is 4.94:1 — passes AA */
 .lg-pill-active { background: var(--accent-grad); color: #fff; }
 .lg-pill-muted { background: var(--surface-hi); color: var(--text-2); }
 .lg-pill-success { background: var(--success-soft); color: var(--success); }
 .lg-pill-warn { background: var(--warn-soft); color: var(--warn); }
 .lg-pill-danger { background: var(--danger-soft); color: var(--danger); }
 
-/* premium blue-gradient fill for accent buttons/CTAs (also legacy shadcn Button) */
+/* premium gradient fill for accent buttons/CTAs (also legacy shadcn Button) */
 .lg-grad { background: var(--accent-grad); color: #fff; border: 1px solid transparent; }
 .lg-grad:hover { background: var(--accent-grad-hover); }
 
-/* Sonner overrides — inherit theme tokens */
+/* Sonner overrides — inherit theme tokens.
+   Attribute-scoped, and <Toaster /> only ever renders a toast in response to a
+   toast() call from operator UI. The public routes are Server Components and
+   never call it, so this cannot paint on a client-facing page. */
 [data-sonner-toaster] [data-sonner-toast] {
   background: var(--surface) !important;
   border: 1px solid var(--line) !important;

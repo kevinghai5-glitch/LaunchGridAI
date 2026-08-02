@@ -556,7 +556,12 @@ check("B6 · the taxonomy marks it INVISIBLE, so it can never be written as a fl
   assert.equal(upgradesTo, "disclosed", "the intake ask no longer upgrades to disclosed");
 });
 
-check("B7 · it is NOT offered by the cold audit — the free scan cannot produce it by construction", () => {
+check("B7 · it is NOT in the most-provable (cold_audit-target) pool — a pre-sale selection cannot produce it by construction", () => {
+  // `cold_audit` survives in the taxonomy as the paid pack's most-provable
+  // top-3 selection (selectColdAudit → LeakContext.coldAudit); the free document
+  // it was named for is deleted. The law is unchanged: this leak fires off an
+  // intake answer, a pre-sale detection can never carry intake, so listing it in
+  // the pre-sale-capable pool would advertise a finding that pool cannot hold.
   const src = read("src/lib/leak-taxonomy.ts");
   const start = src.indexOf(`id: "${REVIEW_LEAK}"`);
   const entry = src.slice(start, src.indexOf("mathTemplate", start));
@@ -564,7 +569,7 @@ check("B7 · it is NOT offered by the cold audit — the free scan cannot produc
   show("deliverableTargets", targets.replace(/\s+/g, " ").trim());
   assert(
     !/cold_audit/.test(targets),
-    "no_review_replies lists cold_audit as a target. The cold audit runs pre-sale with no intake, so this leak can never fire there — listing it advertises a finding the free audit cannot produce."
+    "no_review_replies lists cold_audit as a target. That pool must stay reachable by a pre-sale detection, which can never carry the intake answer this leak fires on."
   );
 });
 
@@ -738,7 +743,8 @@ check("C5 · SOURCE-LEVEL — there is EXACTLY ONE cap, and no renderer applies 
     "src/lib/exporters/deliverables.ts",
     "src/lib/exporters/validate-pack.ts",
     "src/lib/asset-generation.ts",
-    "src/lib/cold-audit.ts",
+    // src/lib/cold-audit.ts was on this list until the pre-sale surface was
+    // deleted (2026-08-01); a deleted file cannot declare a second ceiling.
   ];
   const declares: string[] = [];
   const applies: string[] = [];
@@ -1513,6 +1519,13 @@ check("G3 · no roadmap field is silently dropped at render, beyond the gaps alr
       );
   }
 });
+
+// G4 — DELETED 2026-08-01. It asserted the booking button on the rendered cold
+// audit (configured → exactly one cta-book anchor; unconfigured → zero links,
+// close intact). The cold audit — renderer, generator, teaser and all — was
+// deleted by ruling on 2026-07-29 ("do not improve the cold audit instead of
+// deleting it"), so there is no pre-sale artifact left for the close law to run
+// on. The paid pack's generated ⇒ rendered discipline is G1–G3 above, untouched.
 
 /* ────────────────────────────────────────────────────────────────────────── */
 console.log(`\n${passed} passed, ${failed} failed`);

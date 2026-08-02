@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
 import type { SavedBusiness } from "@/types";
-import { APP_URL } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
-import { IntakeForm, type IntakeValues } from "@/components/businesses/IntakeForm";
-import { IntakeGaps } from "@/components/businesses/IntakeGaps";
-import { WorkflowPanel } from "@/components/businesses/WorkflowPanel";
+import { ClientDrawer, type ClientDrawerTab } from "@/components/businesses/ClientDrawer";
+import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
+// Type-only: the compute lives server-side (the feed ships the small object);
+// importing VALUES from the lib here would drag the detection layer into the
+// client bundle — see the note at the top of ObservedFactsRow.tsx.
+import type { ObservedFacts } from "@/lib/observed-facts";
 import {
   PackGateDialog,
   parsePackGateFailure,
@@ -28,18 +30,17 @@ import {
   Activity,
   Network,
   CalendarRange,
-  Stethoscope,
+  Gauge,
   ScrollText,
   Plus,
   Link as LinkIcon,
   Layers,
   Loader2,
-  Eye,
   SlidersHorizontal,
-  Check,
   ChevronRight,
   ChevronDown,
   Workflow,
+  HelpCircle,
 } from "lucide-react";
 
 type LibraryMode = "workspaces" | "saved";
@@ -53,12 +54,6 @@ interface ProposalRow {
   publicId: string;
   setupFee: number;
   monthlyPrice: number;
-  createdAt: string;
-}
-
-interface AuditRow {
-  id: string;
-  publicId: string;
   createdAt: string;
 }
 
@@ -100,23 +95,29 @@ interface LibraryItem {
     afterHoursHandling?: string | null;
     missedCallHandling?: string | null;
     responseSpeed?: string | null;
-    // THE TWO BUILD-BEARING ANSWERS. Same tolerance as the five above, and named
-    // here because they are the only intake answers that change what gets BUILT
-    // rather than only what a document says: "NO_ACCOUNTS" drops Social DM Capture
-    // and a `false` past-customer list drops Database Reactivation.
+    // THE FOUR ANSWERS NO FINDING ASKS FOR, but the BUILD does — they change what
+    // gets switched on rather than only what a document says. "NO_ACCOUNTS" drops
+    // Social DM Capture, a dormant past-customer list drives Database
+    // Reactivation, NEVER on deposits takes Text-to-Pay out, and NOBODY on review
+    // replies is a finding in its own right.
     //
-    // /api/assets/library does not select them today, which is safe but not ideal.
-    // Safe because the build panel resolves them server-side off the row itself,
-    // and because the intake form only PATCHes answers the operator actually
-    // changed — a question it was handed nothing for computes to "not asked" on
-    // both sides of the diff, so it is never written. Not ideal because an answer
-    // already on file shows blank in the Library's intake editor, which invites
-    // him to answer it a second time. The fix is one line in that route's select,
-    // and these two are declared here so it becomes a one-file change.
+    // CHECKED AGAINST THE ROUTE, not assumed: /api/assets/library selects AND
+    // returns all four (an earlier comment here claimed it didn't — it does).
+    // They are declared for one blunt reason: an answer the feed carries but this
+    // type doesn't name is an answer the drawer's form opens BLANK for, and a
+    // blank next to a question already answered is how he ends up asking a client
+    // the same thing twice on a fifteen-minute call.
     socialEnquiries?: string | null;
     pastCustomerContact?: string | null;
+    takesDeposits?: string | null;
+    reviewReplyOwner?: string | null;
   };
-  audits: AuditRow[];
+  // The four pre-dial values (mobile speed, reviews vs local median, booking
+  // link, click-to-call), computed SERVER-SIDE by /api/assets/library from the
+  // stored research/PSI snapshots. This replaced the cold-audit column when the
+  // free audit was deleted (owner ruling, 2026-08-01): a number cannot
+  // hallucinate, and "—" honestly means "we could not see".
+  observedFacts: ObservedFacts;
   proposals: ProposalRow[];
 }
 
@@ -133,28 +134,6 @@ const DELIVERABLE_META: {
   { id: "d3", label: "Conversion Asset Pack", short: "Assets", icon: FileText },
   { id: "d4", label: "Implementation & Optimization Timeline", short: "Execution", icon: CalendarRange },
 ];
-
-// The two affordances under a saved cold audit — an anchor and a button that
-// have to read as siblings, so they share one style object.
-const teaserActionStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 5,
-  fontSize: 11,
-  fontWeight: 600,
-  color: "var(--text-3)",
-  textDecoration: "none",
-};
-
-// Copies the ABSOLUTE public teaser URL. The "View" anchor beside this can stay
-// relative because the browser resolves it; a link pasted into the pre-call
-// email cannot, so it goes out with the configured host on the front.
-function copyTeaserLink(publicId: string) {
-  navigator.clipboard
-    .writeText(`${APP_URL}/a/${publicId}`)
-    .then(() => toast.success("Teaser link copied — this is what the prospect sees"))
-    .catch(() => toast.error("Couldn't copy"));
-}
 
 function nicheKey(item: LibraryItem): string {
   return (item.business.industry ?? item.business.category ?? "").toLowerCase();
@@ -193,7 +172,50 @@ function statusColor(status: string): { fg: string; bg: string } {
   }
 }
 
+// ── How tall an open business is allowed to get ───────────────────────────────
+//
+// THE COMPLAINT THIS ANSWERS: "it expands the page and makes it so long… i have
+// to scroll." Every column below is capped and scrolls INSIDE the panel, so an
+// open business is the same height whatever is in it — six proposals or none, a
+// generated pack or an empty state. Nothing that happens inside a column can move
+// the business rows underneath it.
+//
+// WHY A CAP AND NOT A FIXED HEIGHT. A fixed height would leave a tall empty box
+// under a client with one proposal and no pack. A cap only bites when there is
+// genuinely more content than fits; below it the panel is exactly as tall as its
+// content, and CSS grid stretches all three columns to match the tallest one, so
+// they still read as one block rather than three ragged ones.
+//
+// WHY clamp() AND NOT A PIXEL NUMBER. 46vh keeps roughly half the screen free —
+// enough that the next business is still visible under an open one — on his
+// laptop AND on the external monitor, where a fixed 420px would look like a
+// letterbox. The floor stops it collapsing to nothing in a short window; the
+// ceiling stops one client owning an entire 4K screen.
+const WORK_SURFACE_MAX = "clamp(280px, 46vh, 620px)";
+
 // ── Small section primitives ──────────────────────────────────────────────────
+
+// The three columns share one shape: a head that stays put and a body that
+// scrolls. The head carries Generate and the three ways into the client drawer, so
+// those are always one click away no matter how far down a column he has scrolled.
+const COLUMN_SHELL: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  // minHeight:0 is what actually makes the cap hold. A grid item's default
+  // minimum size is its content, which would push straight through maxHeight.
+  minHeight: 0,
+  maxHeight: WORK_SURFACE_MAX,
+  padding: "18px 20px",
+};
+
+const COLUMN_BODY: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+  // Reaching the bottom of a column must not start scrolling the whole Library
+  // underneath it — he is reading one client, not leaving.
+  overscrollBehavior: "contain",
+};
 
 function SectionHead({
   icon: Icon,
@@ -209,6 +231,10 @@ function SectionHead({
   return (
     <div
       style={{
+        // Pinned: the column body below scrolls, this does not. Losing the
+        // Generate button off the top of a scrolled column would be a new way to
+        // have to hunt for something.
+        flex: "none",
         display: "flex",
         alignItems: "center",
         flexWrap: "wrap",
@@ -278,16 +304,6 @@ function rowHover(e: React.MouseEvent, on: boolean) {
 // ── Inline generation UI ──────────────────────────────────────────────────────
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
-
-// Simulated cold-audit stages — the endpoint is a single POST, so we walk these
-// on a timer and snap to 100% on resolve (mirrors Studio's cold-audit progress).
-const AUDIT_STAGES = [
-  "Measuring live site speed",
-  "Reading their pages",
-  "Pulling recent reviews",
-  "Finding the most expensive leaks",
-  "Writing the cold-open audit",
-];
 
 // Compact in-place progress shown inside a column while it generates. Numeric
 // `pct` drives the bar for the streamed asset pack; when omitted the bar pulses
@@ -451,20 +467,26 @@ function BusinessPanel({
 
   // Per-column generation state. Each generator runs IN PLACE and, on success,
   // patches this business's item so the new artifact appears without a reload.
-  const [auditRunning, setAuditRunning] = useState(false);
-  const [auditProgress, setAuditProgress] = useState<{ pct: number; label: string } | null>(null);
   const [packRunning, setPackRunning] = useState(false);
   const [packProgress, setPackProgress] = useState<{ pct: number; label: string } | null>(null);
   const [proposalRunning, setProposalRunning] = useState(false);
-  const [showIntake, setShowIntake] = useState(false);
-  const [showBuild, setShowBuild] = useState(false);
-  // Refetch token for the two panels that are COMPUTED SERVER-SIDE from the intake
-  // answers and the stored research — "what's still guessed" and "what this build
-  // includes". Bumped on every intake save and on anything that captures a research
-  // snapshot. Neither can be adjusted optimistically: one answer can take a leak off
-  // the report entirely, and a newly-measured leak can lock a workflow's switch, and
-  // only a server-side re-run knows which. One token for both because they read the
-  // same two inputs and go stale at exactly the same moments.
+  // The questions, the sixteen intake fields and the fourteen build switches used
+  // to be toggles that appended themselves BELOW this panel — which is what made
+  // the page grow. They are now three tabs of one drawer over the page: one piece
+  // of state, where null means closed and the value is which tab it opens on.
+  const [drawer, setDrawer] = useState<ClientDrawerTab | null>(null);
+  // Refetch token for "what's still guessed", which is COMPUTED SERVER-SIDE from
+  // the intake answers plus the stored research. It has exactly one job left now
+  // that the panel itself lives in the drawer: a pack that finishes while the
+  // drawer is open has just captured a research snapshot, and the Questions tab
+  // is reading the one from before. The generator bumps it; the drawer forwards
+  // it as questionsReloadKey.
+  //
+  // It is never adjusted optimistically. One answer can upgrade a finding, take it
+  // off the report entirely — which moves the TOTAL, not just the guessed count —
+  // or change nothing at all, and only re-running detection server-side knows
+  // which. Guessing the new number here would be a second copy of the detection
+  // rules that the deliverables don't use.
   const [intelKey, setIntelKey] = useState(0);
   // A blocked governance gate. Both gates reachable from this panel answer with
   // a multi-check report that a toast can only show one truncated line of, so it
@@ -481,80 +503,58 @@ function BusinessPanel({
   // (correctly) reject the acknowledgement as stale.
   const pendingPackRef = useRef<unknown>(null);
   // Collapsed by default so 50 clients read as 50 scannable rows, not 50 tall
-  // cards. Any in-flight work (generation or the intake editor) forces it open.
+  // cards. Any in-flight generation forces it open, so progress is never running
+  // behind a collapsed row.
+  //
+  // The drawer is deliberately NOT in this list any more: it floats over the page
+  // and costs the panel no height, so whether it is open has nothing to do with
+  // whether this business is expanded.
   const [expanded, setExpanded] = useState(false);
-  const auditTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const open =
-    expanded || packRunning || auditRunning || proposalRunning || showIntake || showBuild;
+  const open = expanded || packRunning || proposalRunning;
 
-  useEffect(
-    () => () => {
-      if (auditTimer.current) clearInterval(auditTimer.current);
-    },
-    []
-  );
-
-  // Cold audit — single POST, simulated staged progress.
-  const runAudit = async () => {
-    if (auditRunning) return;
-    setAuditRunning(true);
-    let step = 0;
-    setAuditProgress({ pct: 8, label: AUDIT_STAGES[0] });
-    if (auditTimer.current) clearInterval(auditTimer.current);
-    auditTimer.current = setInterval(() => {
-      step = Math.min(step + 1, AUDIT_STAGES.length - 1);
-      setAuditProgress({
-        pct: Math.min(90, 8 + (step / (AUDIT_STAGES.length - 1)) * 82),
-        label: AUDIT_STAGES[step],
-      });
-    }, 3500);
-    const stop = () => {
-      if (auditTimer.current) {
-        clearInterval(auditTimer.current);
-        auditTimer.current = null;
-      }
-    };
-    try {
-      const res = await fetch("/api/generate/cold-audit", {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ businessId: b.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate cold audit");
-        return;
-      }
-      onChange({
-        ...item,
-        // REPLACE, don't prepend. Regeneration soft-deletes the previous audit row
-        // server-side and the new row inherits its publicId (F3), so prepending
-        // showed two entries carrying the SAME share link until the next fetch.
-        // One live audit per business is the intended post-F3 shape.
-        audits: [
-          {
-            id: data.system.id,
-            publicId: data.system.publicId,
-            createdAt: data.system.createdAt ?? new Date().toISOString(),
-          },
-        ],
-        lastActivity: new Date().toISOString(),
-      });
-      // A cold audit captures the research snapshot when there isn't one, so both
-      // computed panels may have just gone from "nothing scanned yet" to a real
-      // answer: the gaps list gets findings, and the build panel gets its locks —
-      // a newly-measured leak is what disables a workflow's switch. Re-read rather
-      // than leaving either stale beside a finished audit.
-      setIntelKey((n) => n + 1);
-      toast.success("Cold audit ready");
-    } catch {
-      toast.error("Failed to generate cold audit");
-    } finally {
-      stop();
-      setAuditRunning(false);
-      setAuditProgress(null);
-    }
+  /**
+   * Merge answers into this row's business — and the reason it goes through a ref
+   * instead of straight through `onChange`.
+   *
+   * THE DRAWER CAN HAND BACK TWO MERGES IN ONE TICK, and does on the mainline path:
+   * "Save & close" reports the form's whole answer set (onIntakeSaved) and then the
+   * chips he clicked on the Questions tab (onAnswersRecorded), one after the other,
+   * before React has re-rendered anything. `onChange` takes a WHOLE ROW, so two
+   * calls built from this render's `item` would both start from the same
+   * pre-merge copy and the second would silently drop the first — his sixteen-field
+   * save, gone from the row that seeds the form on the next open.
+   *
+   * The ref carries the last business object THIS panel produced, so the second
+   * merge composes onto the first. Everything else on `item` is untouched in that
+   * tick, so spreading the render's copy around the new business is correct.
+   *
+   * ORDER OF THE TWO, when one field is in both: the chips land last and win. That
+   * is right for the case that actually happens — a question answered by chip and
+   * never touched in the form, where the form's set carries a blank for it because
+   * it was seeded before the chip existed. It is wrong only if he answered the SAME
+   * question in the form afterwards, and then it is a stale digit on screen that
+   * the next load fixes: the database has whichever PATCH landed last, and the form
+   * writes nothing it thinks is unchanged.
+   */
+  const businessRef = useRef(item.business);
+  useEffect(() => {
+    businessRef.current = item.business;
+  }, [item.business]);
+  const mergeBusiness = <P extends object>(patch: P) => {
+    const nextBusiness = { ...businessRef.current, ...patch };
+    businessRef.current = nextBusiness;
+    onChange({ ...item, business: nextBusiness });
   };
+
+  /**
+   * Called by the one generator that can capture a research snapshot — the pack
+   * — and by nothing else. An ANSWER does not come through here any more: both
+   * places one can be given now live inside the drawer, and it re-reads its own
+   * count (the Questions tab after every chip, and again after a full-form
+   * save). WATCHING THE NUMBER DROP IS THE POINT, but the number is in the
+   * drawer, so the drawer is what has to re-read it.
+   */
+  const refreshIntel = () => setIntelKey((n) => n + 1);
 
   // Persist a generated pack. Split out of runPack because the save gate can
   // block it, and the override retry has to re-post that exact pack without
@@ -594,9 +594,9 @@ function BusinessPanel({
         packDate: saveData.savedAt ?? new Date().toISOString(),
         lastActivity: new Date().toISOString(),
       });
-      // Same reason as the audit path: generating the pack is what captures the
-      // research snapshot both computed panels read.
-      setIntelKey((n) => n + 1);
+      // Generating the pack is what captures the research snapshot the guessed
+      // list is computed from.
+      refreshIntel();
       // The route echoes its governance block back on a forced save, so a pack
       // that entered the Library over a known violation never reports as a
       // plain success.
@@ -698,7 +698,7 @@ function BusinessPanel({
     }
   };
 
-  // Proposal — one-shot: generate audit-grounded content, then persist a row.
+  // Proposal — one-shot: generate pack-grounded content, then persist a row.
   const runProposal = async () => {
     if (proposalRunning) return;
     setProposalRunning(true);
@@ -839,7 +839,7 @@ function BusinessPanel({
               {b.city ? `${b.city} · ` : ""}
               <span style={{ textTransform: "capitalize" }}>{niche}</span>
               <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
-              <span className="lg-mono tnum">Updated {fmtDate(item.lastActivity)}</span>
+              <span className="tnum">Updated {fmtDate(item.lastActivity)}</span>
             </div>
           </div>
         </div>
@@ -849,9 +849,6 @@ function BusinessPanel({
               <StatChip icon={Layers} label={item.hasPack ? "Pack" : "No pack"} on={item.hasPack} />
               {item.proposals.length > 0 && (
                 <StatChip icon={ScrollText} label={String(item.proposals.length)} on />
-              )}
-              {item.audits.length > 0 && (
-                <StatChip icon={Stethoscope} label={String(item.audits.length)} on />
               )}
             </div>
           )}
@@ -891,12 +888,7 @@ function BusinessPanel({
         }}
       >
         {/* Proposals */}
-        <section
-          style={{
-            padding: "18px 20px",
-            borderRight: "1px solid var(--line)",
-          }}
-        >
+        <section style={{ ...COLUMN_SHELL, borderRight: "1px solid var(--line)" }}>
           <SectionHead
             icon={ScrollText}
             label="Proposals"
@@ -910,159 +902,165 @@ function BusinessPanel({
               />
             }
           />
-          {proposalRunning && (
-            <div style={{ marginBottom: item.proposals.length ? 8 : 0 }}>
-              <InlineProgress label="Generating proposal…" />
-            </div>
-          )}
-          {item.proposals.length === 0 ? (
-            proposalRunning ? null : <EmptyRow text="No proposals yet." />
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {item.proposals.map((p) => {
-                const sc = statusColor(p.status);
-                return (
-                  <div
-                    key={p.id}
-                    style={{
-                      border: "1px solid var(--line)",
-                      borderRadius: 10,
-                      background: "rgba(255,255,255,0.015)",
-                      transition: "border-color 140ms ease, background 140ms ease",
-                    }}
-                    onMouseEnter={(e) => rowHover(e, true)}
-                    onMouseLeave={(e) => rowHover(e, false)}
-                  >
-                    <Link
-                      href={`/proposals/${p.id}`}
-                      style={{
-                        display: "block",
-                        padding: "10px 12px",
-                        textDecoration: "none",
-                        color: "inherit",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 8,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: "var(--text)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {p.title}
-                        </span>
-                        <span
-                          style={{
-                            flex: "none",
-                            fontSize: 9.5,
-                            fontWeight: 700,
-                            letterSpacing: "0.07em",
-                            textTransform: "uppercase",
-                            color: sc.fg,
-                            background: sc.bg,
-                            borderRadius: 999,
-                            padding: "2px 7px",
-                          }}
-                        >
-                          {p.status}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 8,
-                          marginTop: 7,
-                        }}
-                      >
-                        <span
-                          className="lg-mono tnum"
-                          style={{ fontSize: 11.5, color: "var(--money)", fontWeight: 600 }}
-                        >
-                          {formatCurrency(p.setupFee)}
-                          <span style={{ color: "var(--text-3)", fontWeight: 500 }}>
-                            {" "}
-                            + {formatCurrency(p.monthlyPrice)}/mo
-                          </span>
-                        </span>
-                        <span
-                          className="lg-mono tnum"
-                          style={{ fontSize: 10.5, color: "var(--text-subtle)" }}
-                        >
-                          {fmtDate(p.createdAt)}
-                        </span>
-                      </div>
-                    </Link>
+          <div style={COLUMN_BODY}>
+            {proposalRunning && (
+              <div style={{ marginBottom: item.proposals.length ? 8 : 0 }}>
+                <InlineProgress label="Generating proposal…" />
+              </div>
+            )}
+            {item.proposals.length === 0 ? (
+              proposalRunning ? null : <EmptyRow text="No proposals yet." />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {item.proposals.map((p) => {
+                  const sc = statusColor(p.status);
+                  return (
                     <div
+                      key={p.id}
                       style={{
-                        borderTop: "1px solid var(--line)",
-                        padding: "6px 12px",
+                        border: "1px solid var(--line)",
+                        borderRadius: 10,
+                        background: "rgba(255,255,255,0.015)",
+                        transition: "border-color 140ms ease, background 140ms ease",
                       }}
+                      onMouseEnter={(e) => rowHover(e, true)}
+                      onMouseLeave={(e) => rowHover(e, false)}
                     >
-                      <a
-                        href={`/p/${p.publicId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Link
+                        href={`/proposals/${p.id}`}
                         style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: "var(--text-3)",
+                          display: "block",
+                          padding: "10px 12px",
                           textDecoration: "none",
+                          color: "inherit",
                         }}
                       >
-                        <LinkIcon size={11} strokeWidth={2} />
-                        Public link
-                      </a>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "var(--text)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {p.title}
+                          </span>
+                          <span
+                            style={{
+                              flex: "none",
+                              fontSize: 9.5,
+                              fontWeight: 700,
+                              letterSpacing: "0.07em",
+                              textTransform: "uppercase",
+                              color: sc.fg,
+                              background: sc.bg,
+                              borderRadius: 999,
+                              padding: "2px 7px",
+                            }}
+                          >
+                            {p.status}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            marginTop: 7,
+                          }}
+                        >
+                          <span
+                            className="tnum"
+                            style={{ fontSize: 11.5, color: "var(--money)", fontWeight: 600 }}
+                          >
+                            {formatCurrency(p.setupFee)}
+                            <span style={{ color: "var(--text-3)", fontWeight: 500 }}>
+                              {" "}
+                              + {formatCurrency(p.monthlyPrice)}/mo
+                            </span>
+                          </span>
+                          <span
+                            className="tnum"
+                            style={{ fontSize: 10.5, color: "var(--text-subtle)" }}
+                          >
+                            {fmtDate(p.createdAt)}
+                          </span>
+                        </div>
+                      </Link>
+                      <div
+                        style={{
+                          borderTop: "1px solid var(--line)",
+                          padding: "6px 12px",
+                        }}
+                      >
+                        <a
+                          href={`/p/${p.publicId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "var(--text-3)",
+                            textDecoration: "none",
+                          }}
+                        >
+                          <LinkIcon size={11} strokeWidth={2} />
+                          Public link
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Deliverables (D1–D4) */}
-        <section
-          style={{
-            padding: "18px 20px",
-            borderRight: "1px solid var(--line)",
-          }}
-        >
+        <section style={{ ...COLUMN_SHELL, borderRight: "1px solid var(--line)" }}>
           <SectionHead
             icon={Layers}
             label="Deliverables"
             count={item.hasPack ? 4 : 0}
             action={
               <div style={{ display: "inline-flex", gap: 6 }}>
-                {/* The build sits beside intake, not behind it: the intake answers
-                    are what move it, so the two belong within one glance of each
-                    other. Its own disclosure rather than a section of the intake
-                    editor, because he opens this to CHECK the build far more often
-                    than he opens it to change an answer. */}
+                {/* THREE WAYS INTO THE SAME DRAWER, in the drawer's own tab order —
+                    Questions, Intake, Build — so the row and the tabs it lands on
+                    read as one thing, and the order is also most-used first: on a
+                    call he wants the five questions that move the report, then the
+                    other eleven, then the switches. All three used to unroll this
+                    panel downwards; now the panel behind does not move by a pixel.
+
+                    THE COUNT DOES NOT RIDE ON THE FIRST BUTTON. See the note above
+                    the drawer at the foot of this component for why. */}
                 <MiniButton
-                  onClick={() => setShowBuild((v) => !v)}
-                  icon={Workflow}
-                  title="The build — which of the 14 workflows this client gets"
+                  onClick={() => setDrawer("questions")}
+                  icon={HelpCircle}
+                  title="Questions — what the scan couldn't settle, and what to ask on the call"
                 />
                 <MiniButton
-                  onClick={() => setShowIntake((v) => !v)}
+                  onClick={() => setDrawer("intake")}
                   icon={SlidersHorizontal}
-                  title="Intake"
+                  title="Client intake — the full set of questions, beside this record"
+                />
+                <MiniButton
+                  onClick={() => setDrawer("build")}
+                  icon={Workflow}
+                  title="The build — which of the 14 workflows this client gets"
                 />
                 <MiniButton
                   onClick={runPack}
@@ -1073,302 +1071,185 @@ function BusinessPanel({
               </div>
             }
           />
-          {/* What's still guessed, hosted HERE rather than inside the intake form,
-              so it's visible the moment the panel opens — the count is a reason to
-              open intake at all, and hiding it behind the editor means he only
-              learns what he failed to collect once he's already gone looking. The
-              form is told not to render its own copy (showGaps={false}); this one
-              re-reads on every intake save via intelKey. */}
-          <div
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: 10,
-              background: "rgba(255,255,255,0.015)",
-              padding: "11px 12px",
-              marginBottom: 10,
-            }}
-          >
-            <IntakeGaps businessId={b.id} reloadKey={intelKey} density="compact" />
-          </div>
-          {/* What this client's build includes — the fourteen workflows, whether
-              each is in, and why. Above the intake editor and sharing its refetch
-              token, so answering a question and watching a workflow drop out of the
-              build is one continuous motion rather than two screens. */}
-          {showBuild && (
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                background: "rgba(255,255,255,0.015)",
-                padding: "12px 12px 13px",
-                marginBottom: 10,
-              }}
-            >
-              <WorkflowPanel businessId={b.id} reloadKey={intelKey} density="compact" />
-            </div>
-          )}
-          {/* Intake sits right next to the Generate button because these answers
-              are the only inputs that change what D1–D4 say. Same questions, same
-              component, same save path as the business-detail card. */}
-          {showIntake && (
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                background: "rgba(255,255,255,0.015)",
-                padding: "12px 12px 13px",
-                marginBottom: 10,
-              }}
-            >
-              <IntakeForm
-                business={item.business}
-                density="compact"
-                successMessage="Intake saved — regenerate to apply"
-                showGaps={false}
-                onSaved={(next: IntakeValues) => {
-                  onChange({ ...item, business: { ...item.business, ...next } });
-                  // Both computed panels live one level up, so the save has to reach
-                  // them from here — he answers a question and watches the guessed
-                  // list shrink and the build change in the same breath. An answer
-                  // that moves a workflow (no social accounts, no past-customer
-                  // list) has to be visible in the build immediately, or he has no
-                  // way to tell whether it landed.
-                  setIntelKey((n) => n + 1);
-                }}
-                renderFooter={({ save, saving, dirty }) => (
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <MiniButton
-                      onClick={save}
-                      icon={Check}
-                      label={dirty ? "Save intake" : "Saved"}
-                      busy={saving}
-                    />
-                  </div>
-                )}
+          {/* DELIVERABLES ONLY. The guessed-answers card used to sit at the top of
+              this body and it was the tallest thing in the column — a scrollbar
+              inside a scrollbar, in a third of a row, for a list he fills in live
+              on a Zoom. It is the drawer's first tab now; nothing summarising it is
+              left behind here, on purpose.
+
+              THE CAP AND THE SCROLL STAY (COLUMN_SHELL / COLUMN_BODY). Checked
+              rather than assumed: what is left is four fixed deliverable rows plus
+              the generated-on line, about 250px of body, and the cap's FLOOR is
+              280px — which is what is in force on any window shorter than ~610px
+              tall (46vh < 280px). So on the laptop in a split screen this column
+              still overflows and still needs its own scrollbar. Above that the cap
+              simply never bites, which costs nothing: overflow:auto draws no
+              scrollbar when there is nothing to scroll. Exempting one of three grid
+              siblings from the shared shape would also make it the one column free
+              to push the row taller the day a D5 appears. */}
+          <div style={COLUMN_BODY}>
+            {packRunning ? (
+              <InlineProgress
+                label={packProgress?.label || "Generating deliverables…"}
+                pct={packProgress?.pct}
               />
-            </div>
-          )}
-          {packRunning ? (
-            <InlineProgress
-              label={packProgress?.label || "Generating deliverables…"}
-              pct={packProgress?.pct}
-            />
-          ) : !item.hasPack ? (
-            <EmptyRow text="No asset pack generated yet." />
-          ) : (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {DELIVERABLE_META.map((d, i) => {
-                  const Icon = d.icon;
-                  return (
-                    <Link
-                      key={d.id}
-                      href={`${studioBase}&restore=pack&deliverable=${d.id}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "9px 11px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 10,
-                        background: "rgba(255,255,255,0.015)",
-                        textDecoration: "none",
-                        color: "inherit",
-                        transition: "border-color 140ms ease, background 140ms ease",
-                      }}
-                      onMouseEnter={(e) => rowHover(e, true)}
-                      onMouseLeave={(e) => rowHover(e, false)}
-                    >
-                      <span
+            ) : !item.hasPack ? (
+              <EmptyRow text="No asset pack generated yet." />
+            ) : (
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {DELIVERABLE_META.map((d, i) => {
+                    const Icon = d.icon;
+                    return (
+                      <Link
+                        key={d.id}
+                        href={`${studioBase}&restore=pack&deliverable=${d.id}`}
                         style={{
-                          flex: "none",
-                          display: "inline-flex",
+                          display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          width: 28,
-                          height: 28,
-                          borderRadius: 8,
-                          background: "var(--accent-soft)",
-                          color: "var(--accent)",
-                          fontSize: 10,
-                          fontWeight: 700,
+                          gap: 10,
+                          padding: "9px 11px",
+                          border: "1px solid var(--line)",
+                          borderRadius: 10,
+                          background: "rgba(255,255,255,0.015)",
+                          textDecoration: "none",
+                          color: "inherit",
+                          transition: "border-color 140ms ease, background 140ms ease",
                         }}
+                        onMouseEnter={(e) => rowHover(e, true)}
+                        onMouseLeave={(e) => rowHover(e, false)}
                       >
-                        <Icon size={14} strokeWidth={1.9} />
-                      </span>
-                      <span style={{ minWidth: 0 }}>
                         <span
                           style={{
-                            display: "block",
-                            fontSize: 12.5,
-                            fontWeight: 600,
-                            color: "var(--text)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            flex: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: "var(--accent-soft)",
+                            color: "var(--accent)",
+                            fontSize: 10,
+                            fontWeight: 700,
                           }}
                         >
-                          <span
-                            className="lg-mono"
-                            style={{ color: "var(--text-3)", marginRight: 6 }}
-                          >
-                            D{i + 1}
-                          </span>
-                          {d.label}
+                          <Icon size={14} strokeWidth={1.9} />
                         </span>
-                        <span style={{ fontSize: 10.5, color: "var(--text-subtle)" }}>
-                          {d.short}
-                        </span>
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-              {item.packDate && (
-                <div
-                  className="lg-mono tnum"
-                  style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 10 }}
-                >
-                  Pack generated {fmtDate(item.packDate)}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Cold Audits */}
-        <section style={{ padding: "18px 20px" }}>
-          <SectionHead
-            icon={Stethoscope}
-            label="Cold Audits"
-            count={item.audits.length}
-            action={
-              <MiniButton
-                onClick={runAudit}
-                icon={Plus}
-                label={item.audits.length ? "Run" : "Generate"}
-                busy={auditRunning}
-              />
-            }
-          />
-          {auditRunning && (
-            <div style={{ marginBottom: item.audits.length ? 8 : 0 }}>
-              <InlineProgress
-                label={auditProgress?.label || "Running cold audit…"}
-                pct={auditProgress?.pct}
-              />
-            </div>
-          )}
-          {item.audits.length === 0 ? (
-            auditRunning ? null : <EmptyRow text="No cold audits yet." />
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {item.audits.map((a, i) => (
-                <div
-                  key={a.id}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 10,
-                    background: "rgba(255,255,255,0.015)",
-                    transition: "border-color 140ms ease, background 140ms ease",
-                  }}
-                  onMouseEnter={(e) => rowHover(e, true)}
-                  onMouseLeave={(e) => rowHover(e, false)}
-                >
-                  <Link
-                    href={`${studioBase}&view=audit`}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      padding: "10px 12px",
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                      <Stethoscope
-                        size={14}
-                        strokeWidth={1.8}
-                        style={{ color: "var(--text-3)", flex: "none" }}
-                      />
-                      <span
-                        style={{
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          color: "var(--text)",
-                        }}
-                      >
-                        Cold audit
-                        {i === 0 && (
+                        <span style={{ minWidth: 0 }}>
                           <span
                             style={{
-                              marginLeft: 7,
-                              fontSize: 9,
-                              fontWeight: 700,
-                              letterSpacing: "0.06em",
-                              textTransform: "uppercase",
-                              color: "var(--money)",
-                              background: "rgba(74,222,128,0.10)",
-                              borderRadius: 999,
-                              padding: "1px 6px",
+                              display: "block",
+                              fontSize: 12.5,
+                              fontWeight: 600,
+                              color: "var(--text)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                             }}
                           >
-                            Latest
+                            <span
+                              className="lg-mono"
+                              style={{ color: "var(--text-3)", marginRight: 6 }}
+                            >
+                              D{i + 1}
+                            </span>
+                            {d.label}
                           </span>
-                        )}
-                      </span>
-                    </span>
-                    <span
-                      className="lg-mono tnum"
-                      style={{ fontSize: 10.5, color: "var(--text-subtle)", flex: "none" }}
-                    >
-                      {fmtDate(a.createdAt)}
-                    </span>
-                  </Link>
-                  <div
-                    className="flex items-center"
-                    style={{
-                      borderTop: "1px solid var(--line)",
-                      padding: "6px 12px",
-                      gap: 14,
-                    }}
-                  >
-                    <a
-                      href={`/a/${a.publicId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={teaserActionStyle}
-                    >
-                      <Eye size={11} strokeWidth={2} />
-                      View public teaser
-                    </a>
-                    {/* Same URL the anchor opens, but absolute — this is the link
-                        that gets pasted into the pre-call email, so it has to
-                        carry the host, not the relative path. */}
-                    <button
-                      onClick={() => copyTeaserLink(a.publicId)}
-                      style={{
-                        ...teaserActionStyle,
-                        background: "transparent",
-                        border: "none",
-                        padding: 0,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      <LinkIcon size={11} strokeWidth={2} />
-                      Copy link
-                    </button>
-                  </div>
+                          <span style={{ fontSize: 10.5, color: "var(--text-subtle)" }}>
+                            {d.short}
+                          </span>
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
+                {item.packDate && (
+                  <div
+                    className="tnum"
+                    style={{ fontSize: 10.5, color: "var(--text-subtle)", marginTop: 10 }}
+                  >
+                    Pack generated {fmtDate(item.packDate)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Observed facts — the cold-audit column's replacement (owner ruling,
+            2026-08-01). Not a document and not a generator: four measured values
+            computed server-side from the snapshots the feed already reads, each
+            "—" when we could not see. There is deliberately NO run button — the
+            row costs nothing to read, and a missing snapshot degrades to "—"
+            rather than triggering a scrape. The count in the head is how many of
+            the four were actually measured. */}
+        <section style={COLUMN_SHELL}>
+          <SectionHead
+            icon={Gauge}
+            label="Observed facts"
+            count={
+              [
+                item.observedFacts.mobileSpeed.score != null ||
+                  item.observedFacts.mobileSpeed.loadSeconds != null,
+                item.observedFacts.reviews.count != null,
+                item.observedFacts.bookingLink.state !== "unknown",
+                item.observedFacts.clickToCall.state !== "unknown",
+              ].filter(Boolean).length
+            }
+            action={null}
+          />
+          <div style={COLUMN_BODY}>
+            <ObservedFactsRow facts={item.observedFacts} />
+          </div>
         </section>
       </div>
       )}
+
+      {/* The questions, the intake form and the build switches, over the page
+          instead of under it. It is `position: fixed`, so it costs this panel no
+          height and the Library keeps its scroll position exactly where he left it.
+
+          WHY THERE IS NO COUNT BADGE ON THE QUESTIONS BUTTON. "5 of 8 findings
+          will read as industry pattern" is the reason to press it, and a number on
+          the button would be labelling the button rather than putting the card back
+          in this column — so it was worth having. It is not affordable HERE. The
+          count is computed server-side from the research snapshot plus the intake
+          answers, /api/assets/library does not carry it, and this component is
+          rendered once per client — so a badge means one leak-detection GET per
+          expanded row purely to draw a digit, and a second code path onto the same
+          endpoint that the drawer's own panel is already the authority on. Two
+          copies of one number is exactly what this change removed. The honest
+          version is one field in the library feed; see the handoff. Until then the
+          count is the first line inside the tab that opens by default, and the
+          button's tooltip says what is behind it. */}
+      <ClientDrawer
+        open={drawer !== null}
+        business={item.business}
+        businessName={b.name}
+        // `?? "questions"` is only ever read while open; on close the drawer
+        // unmounts, and the next open re-asserts whichever button he pressed.
+        initialTab={drawer ?? "questions"}
+        // A pack generation started BEFORE he opened this can land while it is
+        // open, and it can capture the research snapshot the whole guessed list
+        // is computed from — so the token that tracks that reaches the Questions
+        // tab. Nothing else needs to: it re-reads itself after each of its own
+        // answers, and it remounts fresh on every open.
+        questionsReloadKey={intelKey}
+        onClose={() => setDrawer(null)}
+        successMessage="Intake saved — regenerate to apply"
+        // MERGING IS NOT OPTIONAL (see ClientDrawer.onIntakeSaved): the form diffs
+        // its draft against this object to decide what is unsaved, so a merge
+        // skipped here leaves it looking dirty forever and it would ask him to save
+        // again on the way out, over a write that already landed.
+        onIntakeSaved={mergeBusiness}
+        // The answers he clicked straight onto the Questions tab, handed over as it
+        // closes (see ClientDrawer.onAnswersRecorded for why not sooner). They are
+        // already in the database; this is what stops the same question opening
+        // blank next time and getting asked twice on a call. Both of these can fire
+        // in the same tick — see mergeBusiness for why that needs a ref.
+        onAnswersRecorded={mergeBusiness}
+      />
 
       {gate && (
         <PackGateDialog
@@ -1424,9 +1305,9 @@ export default function LibraryPage() {
         let nextItems = data.items ?? [];
 
         // If we were sent here for a specific business that has no work yet, it
-        // won't be in the library feed (which only returns businesses that already
-        // have a pack/audit/proposal or are in deliverable status). Fetch it and
-        // synthesize an empty workspace row so its panel exists to generate into.
+        // won't be in the library feed (which only returns businesses in
+        // deliverable status). Fetch it and synthesize an empty workspace row so
+        // its panel exists to generate into.
         if (bizId && !nextItems.some((i) => i.businessId === bizId)) {
           try {
             const oneRes = await fetch(`/api/businesses/${bizId}`, { cache: "no-store" });
@@ -1436,6 +1317,9 @@ export default function LibraryPage() {
                   | (LibraryItem["business"] & {
                       createdAt?: string;
                       lastActivityAt?: string;
+                      // The single-business endpoint computes the same four
+                      // pre-dial values server-side and ships the small object.
+                      observedFacts?: ObservedFacts | null;
                     })
                   | null;
               };
@@ -1467,16 +1351,36 @@ export default function LibraryPage() {
                     bookingToolName: b.bookingToolName ?? null,
                     gbpManagement: b.gbpManagement ?? null,
                     buildPriorities: b.buildPriorities ?? null,
-                    // This path reads the single-business endpoint, which returns
-                    // the whole row — so unlike the library feed it does carry the
-                    // five "how enquiries are handled" answers.
+                    // EVERY intake answer, copied across. This path reads the
+                    // single-business endpoint, which returns the whole row — so
+                    // any answer left out here is left out on purpose or by
+                    // accident, and it was by accident: the four below were being
+                    // dropped, so a client reached through the CRM's "Generate
+                    // asset pack" button opened the intake drawer showing blanks
+                    // for questions that were already answered. Nothing was
+                    // overwritten (the form only writes what he actually changes),
+                    // but a blank is an invitation to ask it again on the call.
                     hasCallTracking: b.hasCallTracking ?? null,
                     hasOnlinePayment: b.hasOnlinePayment ?? null,
                     afterHoursHandling: b.afterHoursHandling ?? null,
                     missedCallHandling: b.missedCallHandling ?? null,
                     responseSpeed: b.responseSpeed ?? null,
+                    socialEnquiries: b.socialEnquiries ?? null,
+                    pastCustomerContact: b.pastCustomerContact ?? null,
+                    takesDeposits: b.takesDeposits ?? null,
+                    reviewReplyOwner: b.reviewReplyOwner ?? null,
                   },
-                  audits: [],
+                  // The endpoint computed these from the stored snapshots; a row
+                  // it didn't send degrades to the honest all-unknown shape,
+                  // which renders as four dashes — "we could not see", never
+                  // "nothing is wrong".
+                  observedFacts: b.observedFacts ?? {
+                    mobileSpeed: { score: null, loadSeconds: null, verdict: "unknown" },
+                    reviews: { count: null, rating: null, localAvg: null, verdict: "unknown" },
+                    bookingLink: { state: "unknown", verdict: "unknown" },
+                    clickToCall: { state: "unknown", verdict: "unknown" },
+                    observedAt: null,
+                  },
                   proposals: [],
                 };
                 nextItems = [synth, ...nextItems];
@@ -1546,11 +1450,10 @@ export default function LibraryPage() {
     return items.reduce(
       (acc, i) => {
         acc.proposals += i.proposals.length;
-        acc.audits += i.audits.length;
         acc.packs += i.hasPack ? 1 : 0;
         return acc;
       },
-      { proposals: 0, audits: 0, packs: 0 }
+      { proposals: 0, packs: 0 }
     );
   }, [items]);
 
@@ -1618,8 +1521,6 @@ export default function LibraryPage() {
                 {totals.packs} asset pack{totals.packs === 1 ? "" : "s"}
                 <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
                 {totals.proposals} proposal{totals.proposals === 1 ? "" : "s"}
-                <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
-                {totals.audits} cold audit{totals.audits === 1 ? "" : "s"}
               </>
             )}
           </div>

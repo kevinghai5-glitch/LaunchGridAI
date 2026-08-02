@@ -5,7 +5,16 @@ produced by running the code, not by typing it out, and `npm run verify:phase4`
 re-checks this document against the code on every run — so if somebody changes a
 question on the intake form and forgets this page, the suite fails.
 
-Last regenerated against the code on 2026-07-28.
+Last regenerated against the code on 2026-08-01.
+
+**The free cold audit is gone (deleted 2026-07-29, by ruling).** Every pre-sale
+generative surface — the generated document, its public teaser link, its
+pipeline and its stored reports — was deleted after a third fabrication in a
+real document. Old COLD_AUDIT rows are soft-deleted (retained, never rendered).
+What replaced it is not a document: it is the observed-facts row — four measured
+numbers with hardcoded thresholds, a "—" wherever we could not see, pinned by
+`npm run verify:facts`. Everything below describes the PAID deliverables, which
+are unchanged.
 
 ---
 
@@ -60,12 +69,10 @@ findings stay outside that list, and this is the honest reason for each:
 |---|---|
 | `no_webchat` — No website chat capture | **We measure it.** The scan sees whether a chat widget is on the page, so there is nothing to ask. It grades *observed*. |
 | `no_lead_qualification` — No lead qualification at intake | **We measure it.** The scan reads the form's fields. It grades *observed*. |
-| `weak_landing_cta` — Weak landing page conversion path | **We measure it.** The scan reads the calls to action on the page. It grades *observed*. |
+| `weak_landing_cta` — Weak landing page conversion path | **We cannot measure it, and we no longer claim to.** The one checkable signal is whether a `tel:` link exists in the page HTML. Whether a call to action is "clear", or where it sits, is a judgment nothing here renders — so the leak is classified INTERPRETIVE: it can never grade *observed*, it never appears pre-sale, and in the paid pack it is labelled site advisory rather than a finding. |
 | `low_review_velocity` — Review volume behind local competitors | **We measure it.** Review counts come off the listing, ours and the competitors'. It grades *observed*. |
 
-**So the answer to "which leaks still have no evidence source" is: none.** Every
-one of the seventeen in-scope findings is either something we measure ourselves
-or something one of the twelve questions settles. That was not true before this
+**So the answer to "which leaks still have no evidence source" is: one, and it says so out loud.** Sixteen of the seventeen in-scope findings are either measured by us or settled by one of the twelve questions. The seventeenth, `weak_landing_cta`, is a judgment about a rendered page — it has no evidence source, it cannot be given one, and that is why it is INTERPRETIVE, advisory-only and absent from every pre-sale document. That was not true before this
 programme: social DMs and the dormant past-customer list used to be permanent
 guesses, and each got the one question that could actually settle it
 (`socialEnquiries`, `pastCustomerContact`).
@@ -113,19 +120,20 @@ new lead the day they get in touch again.
 ## 4. The three fixture clients
 
 `npm run fixtures:clients` writes three complete, invented clients into
-`_fixtures/clients/`. Every one gets the four paid deliverables plus the free
-cold audit, and every one passes the same validator a paying client's pack has to
-pass. Nothing in them traces to a real business: reserved `.example` domains,
-`555-01xx` phone numbers, invented reviews and invented competitors.
+`_fixtures/clients/`. Every one gets the four paid deliverables, and every one
+passes the same validator a paying client's pack has to pass. Nothing in them
+traces to a real business: reserved `.example` domains, `555-01xx` phone
+numbers, invented reviews and invented competitors. (Each client used to get a
+free cold audit beside the pack; those files were deleted with that surface.)
 
 They exist so the three situations a client actually arrives in can be read side
 by side:
 
 | Fixture | What it demonstrates | Result |
 |---|---|---|
-| `01-pre-sale-cedar-ridge-plumbing` | Public data only — no intake, nothing they told us. | 10 leaks: **3 observed, 0 disclosed, 7 inferred**. Every cover carries the "generated without client intake" marker. |
-| `02-full-intake-harbourline-electric` | Every question on the form answered. | 13 leaks: **5 observed, 8 disclosed, 0 inferred**. The hedging is gone; the gaps they confirmed are attributed to them. |
-| `03-toggled-pinecrest-roofing` | Full intake, plus three workflows switched off by hand. | 14 leaks: **5 observed, 9 disclosed, 0 inferred** — and the build is visibly smaller: 11 of 14 workflows, and the Conversion Asset Pack carries 6 workflow copy tables instead of 9 (Text-to-Pay, Database Reactivation and Review Response are gone from the document, not just from the switchboard). |
+| `01-pre-sale-cedar-ridge-plumbing` | Public data only — no intake, nothing they told us. | 9 leaks: **2 observed, 0 disclosed, 7 inferred**. Every cover carries the "generated without client intake" marker. |
+| `02-full-intake-harbourline-electric` | Every question on the form answered. | 12 leaks: **4 observed, 8 disclosed, 0 inferred**. The hedging is gone; the gaps they confirmed are attributed to them. |
+| `03-toggled-pinecrest-roofing` | Full intake, plus three workflows switched off by hand. | 13 leaks: **4 observed, 9 disclosed, 0 inferred** — and the build is visibly smaller: 11 of 14 workflows, and the Conversion Asset Pack carries 6 workflow copy tables instead of 9 (Text-to-Pay, Database Reactivation and Review Response are gone from the document, not just from the switchboard). |
 
 Read `01` against `02` and you can see exactly what the intake form buys you: the
 same scan, the same site, and seven hedged "this is the industry pattern"
@@ -239,19 +247,14 @@ explicitly and fails if a **third** roadmap field ever starts being dropped. It
 also proves the two prices really do reach the page, so the one exemption on that
 list that is a *reformat* rather than a loss cannot hide a loss.
 
-### 5.4 One heading exists in two places
+### 5.4 One heading exists in two places — RESOLVED by deletion (2026-07-29)
 
-**Where:** `src/app/a/[publicId]/page.tsx` declares its own
-`const SCAN_SECTION_LABEL = "What a scan can see from out here"`, and
-`src/lib/exporters/cold-audit-html.ts` now exports the same string.
-
-Every other word the emailed document and the public teaser share is imported
-from one place, on purpose: a prospect reads those words in the pre-call email
-and then hears them out of your mouth on the Zoom, and that match is the whole
-effect. This one heading is a second copy that can drift. The suite currently
-reads the literal out of the page and asserts it is byte-identical to the
-exported one, so a drift fails — but the right fix is to delete the local copy
-and import it.
+This entry recorded a duplicated heading between the public teaser
+(`src/app/a/[publicId]/page.tsx`) and the cold-audit renderer
+(`src/lib/exporters/cold-audit-html.ts`). Both files were deleted with the
+pre-sale surface, so there is no second copy left to drift. Kept as history:
+the rule it illustrated — every word two surfaces share is imported from one
+place — still governs the paid deliverables.
 
 **Nothing else contradicted the model.** Specifically checked and clean: no
 document anywhere recommends ads, SEO, lead generation or "more traffic"; nothing
@@ -270,8 +273,10 @@ API key — and each prints what it checked before it says whether it passed.
 | Command | What it proves |
 |---|---|
 | `npm run verify:all` | **The whole thing.** Runs everything below plus the typecheck and the unit tests, in order, and stops at the first failure. This is the one to run before you send anything to a client. |
-| `npm run typecheck` | The guarantees that are compile errors rather than tests. Two matter most: a pre-sale document is structurally incapable of carrying anything the client told us, and the free audit's generator cannot be handed an intake field even by copy-paste. |
-| `npm run verify:phase4` | The free cold audit behaves like the credibility beat it now is: the "this is the smaller half" frame lands before any finding, the six invisible leaks are asked in your own phone words on both the document and the teaser link, there is exactly one ask and it books the call, nothing is claimed as disclosed before the sale, unmeasured findings read as patterns, every dollar figure says it is a benchmark, nothing recommends work you do not sell, and the public proposal page never shows a bare dollar sign. |
+| `npm run typecheck` | The guarantees that are compile errors rather than tests. The one that matters most: a pre-sale surface is structurally incapable of carrying anything the client told us — `intake?: never` on the pre-sale detection variant, which the observed-facts row declares. |
+| `npm run verify:phase4` | The money law and this document. The public proposal page never shows a bare dollar sign — "CAD $6,500", never "$6,500", proved on the rendered page AND at source level across every prospect-facing file — and every list in this document (the twelve questions, the no-question leaks, the 60-day map, the commands, the fixture figures) is re-derived from the code and compared, not trusted. |
+| `npm run verify:facts` | The cold audit's replacement stays a table row: the observed-facts surface contains no model call and no network call, its thresholds are pinned literals (the review threshold is byte-for-byte the paid detector's own statistic), a scanned business renders all four measured values, an unscanned one renders "—" — never "none" — and the three-sentence "just email me" note is exactly three sentences in every variant, with a visible placeholder when the booking URL is unset. |
+| `npm run verify:fabrication` | A sentence nobody measured cannot reach a client-facing page: the fabrication lint rejects position/prominence claims by name, the pack validator refuses them at the gate, every committed pack passes its own laws, and no committed document carries anything key-shaped. |
 | `npm run verify:phase3` | The four paid documents agree with each other: the report's total is bounded and says so, the pipeline in the Blueprint is the pipeline in the build, every asset in the Asset Pack names the box it goes in, and the schedule prices the fortnight and the months separately. |
 | `npm run verify:phase1` | Every finding carries where it came from, and that grade — not the wording — decides how flatly it may be written. |
 | `npm run verify:phase2` | The fourteen workflows, and what switches each one off. |

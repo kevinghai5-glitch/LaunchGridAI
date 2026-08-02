@@ -52,9 +52,15 @@
  * here is the PROSE, and only the prose.
  *
  * The script refuses to write (exit 1) if any pack fails assertPackValid or the
- * rendered-HTML checks, or if any cold audit fails assertColdAuditValid. A
- * fixture that does not pass is worse than no fixture, because the suite would
- * go green on a lie.
+ * rendered-HTML checks. A fixture that does not pass is worse than no fixture,
+ * because the suite would go green on a lie.
+ *
+ * THE COLD AUDIT IS GONE (2026-08-01). This script used to write a fourth and
+ * fifth file per client — 00-cold-audit.html and cold-audit.json — from a
+ * separate pre-sale detection. The whole pre-sale generative surface was deleted
+ * by ruling on 2026-07-29 ("do not improve the cold audit instead of deleting
+ * it"), so each client is now the four paid deliverables plus pack.json, and
+ * nothing pre-sale is generated anywhere in this file.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -85,22 +91,18 @@ import {
   type LeakInput,
 } from "@/lib/leak-narrative";
 import {
-  assertColdAuditValid,
   assertPackValid,
   formatValidation,
   validatePack,
 } from "@/lib/exporters/validate-pack";
 import { validateRenderedDeliverables } from "@/lib/exporters";
 import { DELIVERABLES, renderDeliverableHtml } from "@/lib/exporters/deliverables";
-import { enforceColdAuditLaws, renderColdAuditHtml } from "@/lib/exporters/cold-audit-html";
-import { gradeColdAuditFindings } from "@/lib/cold-audit";
 import type { DataForSeoBundle } from "@/lib/dataforseo";
 import type { FirecrawlPage, FirecrawlScrape } from "@/lib/firecrawl";
 import type { PsiBundle } from "@/lib/pagespeed";
 import type { ClientIntake, ScrapeData } from "@/lib/leak-taxonomy";
 import type {
   AssetPack,
-  ColdAuditReport,
   Difficulty,
   GrowthIntelligence,
   LeakAnalysisItem,
@@ -764,9 +766,15 @@ function leakProseFor(s: ClientSpec): Record<string, LeakProse> {
       priority: "high",
     },
 
+    // SCRUBBED, AND THIS LEAK IS THE REASON THE ROUND HAPPENED. The evidence line
+    // used to open "The two calls to action above the fold are…", which is a
+    // position on a page nothing in the pipeline renders. `weak_landing_cta` is
+    // classified INTERPRETIVE, so its grade can never be `observed` and the
+    // fabrication lint is FATAL on a position claim at any grade — the prose now
+    // says only what the `tel:` fingerprint and the link parse actually establish.
     weak_landing_cta: {
       evidence:
-        "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both need the office to be open before they do anything.",
+        "The two routes into the business we can find in the page HTML are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both need the office to be open before they do anything.",
       explanation:
         "A visitor who arrives outside office hours has no action available that produces a result, so the page quietly converts nobody between five in the evening and eight the next morning. This is an observation about the page, not a project we are proposing.",
       businessImpact:
@@ -1130,7 +1138,6 @@ function axisProseFor(
 interface BuiltClient {
   spec: ClientSpec;
   pack: AssetPack;
-  coldAudit: ColdAuditReport;
   allowedNumbers: number[];
   leakInputs: LeakInput[];
   resolutions: ResolvedWorkflow[];
@@ -1189,19 +1196,11 @@ function buildClient(s: ClientSpec): BuiltClient {
     asOf: RESEARCH_AS_OF,
   });
 
-  // THE FREE COLD AUDIT. Always a separate PRE-SALE detection, on every client,
-  // including the two who have filled in the form. That is not belt-and-braces:
-  // the cold audit is the document emailed BEFORE the Zoom, so by definition
-  // nothing has been disclosed when it is written, and `mode: "pre_sale"` makes
-  // handing it intake a compile error rather than a thing to remember.
-  const preSale = detectLeaks({
-    mode: "pre_sale",
-    business,
-    intel,
-    scrape: SCRAPE,
-    asOf: RESEARCH_AS_OF,
-  });
-  const preSaleInputs = buildLeakInputs(preSale.report, preSale.data);
+  // (A separate PRE-SALE detection used to run here to write the free cold
+  // audit. The surface was deleted 2026-08-01; the paid pack below is the only
+  // artifact this fixture produces, and its own most-provable selection —
+  // detected.coldAudit — arrives from the same detectLeaks call as everything
+  // else.)
 
   const leakInputs = buildLeakInputs(detected.report, detected.data);
   const allowedNumbers = allowedNumbersFor(detected.report, detected.data);
@@ -1724,12 +1723,17 @@ function buildClient(s: ClientSpec): BuiltClient {
       where: "",
       scopeNote: "",
       standingRules: [],
-      summary: `The page does the honest things well: the headline says what you do and where, the phone number is tappable, and there is a clear request-a-quote button above the fold. What it does not do is give a visitor any way to act outside the hours your office is open. Measured on mobile the page scores ${s.psi.mobileScore} with a largest contentful paint of ${s.psi.mobileLcp} seconds, and ${s.psi.desktopScore} at ${s.psi.desktopLcp} seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.`,
+      // See the matching note in scripts/make-golden-sample.ts: the advisory surface
+      // is exempt from being read as a MEASUREMENT, not from being true. Position
+      // and prominence claims are forbidden in every deliverable
+      // (docs/detector-checkability.md §2.7), so the observation half of each note
+      // states a fingerprint and the judgment half stays in the recommendation.
+      summary: `The page does the honest things well: the headline says what you do and where, and the phone number is a real tap-to-call link in the HTML rather than typed-out digits. What it does not do is give a visitor any way to act outside the hours your office is open. Measured on mobile the page scores ${s.psi.mobileScore} with a largest contentful paint of ${s.psi.mobileLcp} seconds, and ${s.psi.desktopScore} at ${s.psi.desktopLcp} seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.`,
       notes: [
         {
           area: "Buttons",
           whatWeSaw:
-            "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both routes need the office to be open.",
+            "The two routes into the business we can find in the page HTML are a request-a-quote link to the contact form and a tap-to-call link to the main line. Both of those routes need the office to be open.",
           recommendation:
             "Point the existing buttons at the booking page and keep one visible at every scroll position. This is the cheapest change on the list and the one with the most behind it.",
           priority: "critical",
@@ -1870,9 +1874,7 @@ function buildClient(s: ClientSpec): BuiltClient {
     workflowCopy,
   };
 
-  const coldAudit = coldAuditFor(s, preSaleInputs);
-
-  return { spec: s, pack, coldAudit, allowedNumbers, leakInputs, resolutions, files: [] };
+  return { spec: s, pack, allowedNumbers, leakInputs, resolutions, files: [] };
 }
 
 /** Short helper so the executive-summary template can reach the trade words
@@ -2640,132 +2642,15 @@ function file5For(s: ClientSpec): AssetPack["file5"] {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
- * 8 · THE COLD AUDIT
+ * 8 · (THE COLD AUDIT — DELETED 2026-08-01)
  *
- * Hand-written to the shape the generator asks the model for, then run through
- * the SAME two functions a real generation runs it through — gradeColdAuditFindings
- * (which stamps each finding with the grade of the leak it was written from) and
- * enforceColdAuditLaws (the frame, the six questions, the single ask, the
- * benchmark labelling and the scope sweep). Nothing about this document is
- * decided here except the words.
+ * This section held coldAuditCopyFor() and coldAuditFor(): hand-written copy per
+ * fired leak, run through gradeColdAuditFindings and enforceColdAuditLaws to
+ * write 00-cold-audit.html / cold-audit.json beside each pack. The pre-sale
+ * surface was deleted by ruling, those files are gone from _fixtures/clients/,
+ * and nothing pre-sale is generated here any more. Section numbering is kept so
+ * old run logs still line up.
  * ══════════════════════════════════════════════════════════════════════════ */
-
-/** Cold-audit copy per leak, keyed by taxonomy leak id. The document only ever
- *  contains findings for leaks that ACTUALLY FIRED on the pre-sale scan — the
- *  set is taken from the detection below, not typed here — so an audit can never
- *  name a leak that is not in the governed set for this business. */
-function coldAuditCopyFor(s: ClientSpec): Record<
-  string,
-  { title: string; problem: string; whyItCosts: string; severity: "high" | "medium" | "low" }
-> {
-  const cap = (x: string) => `${x.charAt(0).toUpperCase()}${x.slice(1)}`;
-  return {
-    no_online_booking: {
-      title: "There is no way to book you without a phone call",
-      problem:
-        "Neither the site nor your Google profile carries a booking link, so every appointment has to go through a conversation while somebody in the office is free to have one.",
-      whyItCosts:
-        "A homeowner who decides at 10pm has to remember to ring in the morning, and remembering is where a lot of that intent quietly dies.",
-      severity: "high",
-    },
-    no_lead_qualification: {
-      title: "Every enquiry arrives looking exactly the same",
-      problem:
-        "The contact form collects a name, an email, a phone number and a message box. Nothing on it says what the job is, where it is, or how urgent it has become.",
-      whyItCosts: `${cap(s.trade.bigJob)} gets read in the same order as ${s.trade.smallJob}, so the biggest job of the week routinely waits the longest.`,
-      severity: "high",
-    },
-    no_after_hours_coverage: {
-      title: "Evenings and weekends have nowhere for an enquiry to land",
-      problem:
-        "Your Google listing shows evenings and weekends closed, and the scan found no booking path and no chat window anywhere on the site.",
-      whyItCosts: `${s.trade.urgencyLine}, and where nothing catches those hours the enquiry typically goes to whoever answered first.`,
-      severity: "high",
-    },
-    no_webchat: {
-      title: "A visitor with one small question has no light way to ask it",
-      problem:
-        "No chat or messaging widget was found on any scanned page, so the only two routes are a phone call or a form and a wait.",
-      whyItCosts:
-        "The lighter the question, the more likely the visitor closes the tab instead of asking it — and those are the cheapest visitors you will ever convert.",
-      severity: "medium",
-    },
-    missed_calls_no_recovery: {
-      title: "A call that rings out has nothing behind it",
-      problem:
-        "The published number is a single line with no text-back path anywhere on the site, so what happens to a call nobody picks up is not something a scan can see from out here.",
-      whyItCosts:
-        "Where that pattern holds, a caller who cannot get through typically dials the next company within minutes, and nothing brings them back.",
-      severity: "high",
-    },
-    low_review_velocity: {
-      title: "Your review count sits behind the companies beside you",
-      problem: `You show ${s.reviewCount} Google reviews at ${s.rating} stars. ${s.competitors[0].name} nearby shows ${s.competitors[0].reviewCount}.`,
-      whyItCosts:
-        "Side by side on a phone, a homeowner reads volume as safety, and every completed job that never gets asked widens that gap.",
-      severity: "medium",
-    },
-    weak_landing_cta: {
-      title: "Both buttons on the page need the office to be open",
-      problem:
-        "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line, and neither produces a result outside office hours.",
-      whyItCosts:
-        "A visitor who arrives with a problem in front of them at 9pm has nothing on the page that completes.",
-      severity: "medium",
-    },
-  };
-}
-
-function coldAuditFor(s: ClientSpec, preSaleInputs: LeakInput[]): ColdAuditReport {
-  const copy = coldAuditCopyFor(s);
-  // The taxonomy's own ranking already decided which leaks a cold audit may
-  // carry (RULES.ranking: top 3 by score, at least two of them provable). We
-  // take that order and write to it, capped at four, and we NEVER introduce a
-  // leak the scan did not fire.
-  const chosen = preSaleInputs.filter((li) => copy[li.id]).slice(0, 4);
-  if (chosen.length < 3)
-    throw new Error(
-      `${s.name}'s pre-sale scan fired only ${chosen.length} leak(s) with cold-audit copy — write copy for the others in coldAuditCopyFor() or the free document will be thin.`
-    );
-
-  const raw = gradeColdAuditFindings(
-    chosen.map((li) => ({ leak: li.name, ...copy[li.id] })),
-    preSaleInputs
-  );
-
-  return enforceColdAuditLaws({
-    businessName: s.name,
-    city: s.city,
-    industry: s.industry,
-    websiteUrl: s.domain,
-    screenshotUrl: null,
-    headline: `Where ${s.name} is quietly losing clients`,
-    intro: `The site is clear about what you do and where you do it — but here is where enquiries are going missing before they ever reach you.`,
-    headlineCost: `You already pay to get these leads, through referrals and the time you put into being found. Every one that hits this gap is money you have already spent to earn somebody who now slips away before they reach you.`,
-    findings: raw,
-    // Replaced by the six fixed questions inside enforceColdAuditLaws. Kept here
-    // because it is what the model returns, and the fixture models the real path.
-    deeperLeakQuestions: [
-      "When an enquiry lands after hours, how fast does it actually get a reply?",
-      "What happens to the people who ask for a price and then go quiet?",
-    ],
-    performance: {
-      available: true,
-      mobileScore: s.psi.mobileScore,
-      lcpSeconds: s.psi.mobileLcp,
-      clsValue: 0.04,
-      readout:
-        "Measured on a typical phone. Slower, less stable pages quietly cost calls and bookings before people ever see your offer.",
-    },
-    closingCta: {
-      tiedToFinding: "There is no way to book you without a phone call",
-      message: "",
-    },
-    agencyName: "our team",
-    generatedAt: GENERATED_AT,
-    dataConfidence: "medium",
-  });
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
  * 9 · VALIDATE AND WRITE
@@ -2857,7 +2742,7 @@ function kickoffRuleCorrected(pack: AssetPack, d1Html: string): string[] {
 }
 
 function writeClient(built: BuiltClient): void {
-  const { spec, pack, coldAudit, allowedNumbers, leakInputs, resolutions } = built;
+  const { spec, pack, allowedNumbers, leakInputs, resolutions } = built;
   const dir = resolve(OUT_ROOT, spec.dir);
 
   console.log(`\n${"═".repeat(78)}`);
@@ -2869,7 +2754,6 @@ function writeClient(built: BuiltClient): void {
 
   const verdict = assertPackValid(pack);
   const rendered = validateRenderedDeliverables(pack);
-  const auditVerdict = assertColdAuditValid(coldAudit);
 
   const grades = leakInputs.reduce<Record<string, number>>((acc, li) => {
     acc[li.grade] = (acc[li.grade] ?? 0) + 1;
@@ -2888,7 +2772,6 @@ function writeClient(built: BuiltClient): void {
   console.log(`  workflows on:   ${on.length}/${resolutions.length}`);
   if (off.length)
     console.log(`  workflows off:  ${off.map((r) => `${r.workflow.id} (${r.source})`).join(", ")}`);
-  console.log(`  cold audit:     ${coldAudit.findings.length} finding(s), ${coldAudit.deeperLeakQuestions.length} questions`);
 
   // ── THE INVARIANTS THIS FIXTURE EXISTS TO DEMONSTRATE ──────────────────────
   const problems: string[] = [];
@@ -2958,7 +2841,6 @@ function writeClient(built: BuiltClient): void {
     }
     problems.push(`rendered HTML: ${v}`);
   }
-  if (!auditVerdict.ok) problems.push(`cold audit: ${auditVerdict.fails.length} failure(s).\n${auditVerdict.report}`);
 
   if (problems.length) {
     refused = true;
@@ -2975,9 +2857,7 @@ function writeClient(built: BuiltClient): void {
   };
 
   for (const d of DELIVERABLES) put(`${d.filename}`, renderDeliverableHtml(pack, d.id));
-  put("00-cold-audit.html", renderColdAuditHtml(coldAudit));
   put("pack.json", `${JSON.stringify(pack, null, 2)}\n`);
-  put("cold-audit.json", `${JSON.stringify(coldAudit, null, 2)}\n`);
 
   built.files = written;
   console.log(`\n  wrote _fixtures/clients/${spec.dir}/`);

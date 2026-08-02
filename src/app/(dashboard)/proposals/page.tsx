@@ -271,7 +271,15 @@ function ProposalRow({
           style={{
             position: "relative",
             overflow: "hidden",
-            background: `linear-gradient(135deg, ${won ? "var(--money)" : "var(--accent)"}18, transparent 60%), var(--bg-deep)`,
+            // NOTE: this used to append a hex alpha pair to the colour
+            // (`${...}18`). That idiom is only valid when the colour is a hex
+            // literal; against a var() it substitutes to `#6dbf95 18`, which is
+            // invalid at computed-value time, so the WHOLE `background` shorthand
+            // — including the var(--bg-deep) base — was being dropped and these
+            // thumbnails rendered transparent. color-mix is the var()-safe form.
+            background: `linear-gradient(135deg, color-mix(in oklab, ${
+              won ? "var(--money)" : "var(--accent)"
+            } 9%, transparent), transparent 60%), var(--bg-deep)`,
             borderRight: "1px solid var(--line)",
             textDecoration: "none",
           }}
@@ -302,7 +310,7 @@ function ProposalRow({
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
               {[80, 60, 70, 50].map((w, i) => (
-                <div key={i} style={{ height: 2.5, width: `${w}%`, borderRadius: 99, background: "rgba(255,255,255,0.10)" }} />
+                <div key={i} style={{ height: 2.5, width: `${w}%`, borderRadius: 99, background: "var(--line)" }} />
               ))}
             </div>
           </div>
@@ -335,6 +343,8 @@ function ProposalRow({
             gap: 12,
             borderLeft: "1px solid var(--line)",
             minWidth: 160,
+            // DELIBERATE LITERAL: a recess/vignette, i.e. shading rather than
+            // colour — the same reasoning as the black --shadow-* tokens.
             background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.15))",
           }}
         >
@@ -401,14 +411,26 @@ function TimelineEvent({
         display: "flex",
         gap: 10,
         padding: "10px 12px",
-        background: highlight ? "linear-gradient(90deg, oklch(0.55 0.16 158 / 0.06), transparent 70%)" : "transparent",
+        background: highlight
+          ? "linear-gradient(90deg, color-mix(in oklab, var(--money) 8%, transparent), transparent 70%)"
+          : "transparent",
         borderLeft: highlight ? "2px solid var(--money)" : "2px solid transparent",
         borderRadius: 6,
       }}
     >
       <div
         className="grid place-items-center"
-        style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: "rgba(255,255,255,0.03)", border: `1px solid ${c}30`, color: c }}
+        // `${c}30` here was the same invalid hex-alpha-on-var() idiom as the
+        // thumbnail above, so this border has not been rendering at all.
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 7,
+          flexShrink: 0,
+          background: "var(--surface-2)",
+          border: `1px solid color-mix(in oklab, ${c} 30%, transparent)`,
+          color: c,
+        }}
       >
         <Icon size={12} strokeWidth={1.75} />
       </div>

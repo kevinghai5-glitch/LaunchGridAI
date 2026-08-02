@@ -1,5 +1,5 @@
 // Library API — returns the operator's saved businesses, most-recent first, each
-// with its full work history: generated asset pack (→ 4 deliverables), cold audits,
+// with its full work history: generated asset pack (→ 4 deliverables)
 // and proposals. Powers the /library control centre.
 
 import { NextResponse } from "next/server";
@@ -7,6 +7,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DELIVERABLE_STATUSES } from "@/lib/crm";
+import {
+  observedFactsFor,
+  peekObservedFacts,
+  unknownObservedFacts,
+} from "@/lib/observed-facts";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +44,14 @@ export async function GET() {
       website: true,
       photoUrl: true,
       createdAt: true,
+      // Observed-facts cache key fields (see peekObservedFacts). DELIBERATELY
+      // NOT the snapshot JSON columns themselves — those are megabytes per row,
+      // and this list pulls up to 200 rows on every Library open. The blobs are
+      // fetched below, once per process per input-change, only for cache misses.
+      rating: true,
+      reviewCount: true,
+      psiSnapshotAt: true,
+      researchSnapshotAt: true,
       // Intake fields — surfaced inline in the Library so the operator can set
       // the confirmed-vs-benchmark framing + copy emphasis right where they
       // regenerate the D1–D4 deliverables (these are the only inputs that change
@@ -78,7 +91,10 @@ export async function GET() {
       gbpManagement: true,
       buildPriorities: true,
       generatedSystems: {
-        where: { type: { in: ["ASSETS", "COLD_AUDIT"] }, deletedAt: null },
+        // ASSETS only. COLD_AUDIT rows still exist (soft-deleted, content kept) but
+        // the surface that displayed them is gone — matching them here would only
+        // resurrect UI state nothing renders.
+        where: { type: "ASSETS", deletedAt: null },
         orderBy: { createdAt: "desc" },
         select: { id: true, type: true, publicId: true, createdAt: true },
       },
@@ -98,9 +114,46 @@ export async function GET() {
     },
   });
 
+  // ── Observed facts, computed SERVER-SIDE per business ───────────────────────
+  // The four pre-dial values (mobile speed, reviews vs local median, booking
+  // link, click-to-call) are derived from the persisted research/PSI snapshots.
+  // Those snapshots are huge JSON and must never reach the client — so the row
+  // is computed here and only the small ObservedFacts object ships. Two-phase
+  // read: the list query above fetched only the cheap cache-key columns; the
+  // snapshot blobs are pulled once, for cache misses only, then memoized until
+  // an input changes (a refresh-research bumps the timestamps and busts the key).
+  const misses = businesses.filter((b) => !peekObservedFacts(b));
+  if (misses.length > 0) {
+    const hosts = await prisma.business.findMany({
+      // Session-scoped like the list itself — the blobs belong to the caller.
+      where: {
+        id: { in: misses.map((m) => m.id) },
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        industry: true,
+        category: true,
+        city: true,
+        phone: true,
+        address: true,
+        website: true,
+        rating: true,
+        reviewCount: true,
+        ownerName: true,
+        psiSnapshot: true,
+        psiSnapshotAt: true,
+        researchSnapshot: true,
+        researchSnapshotAt: true,
+      },
+    });
+    for (const host of hosts) observedFactsFor(host);
+  }
+
   const items = businesses.map((b) => {
     const packs = b.generatedSystems.filter((g) => g.type === "ASSETS");
-    const audits = b.generatedSystems.filter((g) => g.type === "COLD_AUDIT");
     const latestPack = packs[0];
 
     // The most-recent activity timestamp across all artifacts for this business.
@@ -118,6 +171,10 @@ export async function GET() {
       packDate: latestPack?.createdAt.toISOString() ?? null,
       lastActivity: lastActivity.toISOString(),
       createdAt: b.createdAt.toISOString(),
+      // The four pre-dial values, small and prose-free. The all-unknown shape
+      // only appears if the row vanished between the two queries above — and
+      // all-unknown honestly reads as "nothing seen", never as "nothing wrong".
+      observedFacts: peekObservedFacts(b) ?? unknownObservedFacts(),
       business: {
         id: b.id,
         name: b.name,
@@ -157,11 +214,6 @@ export async function GET() {
         gbpManagement: b.gbpManagement,
         buildPriorities: b.buildPriorities,
       },
-      audits: audits.map((a) => ({
-        id: a.id,
-        publicId: a.publicId,
-        createdAt: a.createdAt.toISOString(),
-      })),
       proposals: b.proposals.map((p) => ({
         id: p.id,
         title: p.title,

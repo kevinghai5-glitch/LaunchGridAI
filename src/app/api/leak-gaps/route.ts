@@ -8,20 +8,34 @@
 // generates — the leaks still guessed, and the exact question that would move
 // each one from a guess to something the client told us.
 //
-// TWO RULES THIS ROUTE EXISTS TO KEEP:
+// IT IS ALSO THE READ SIDE OF AN INPUT SURFACE. The panel renders a control on
+// every collectible gap so the answer gets recorded in the row that asks for it,
+// and then re-reads this route so the count visibly drops. That means it is now
+// called several times during one 15-minute call rather than once — which is
+// exactly why rule 1 below is not negotiable.
+//
+// THREE RULES THIS ROUTE EXISTS TO KEEP:
 //
 //  1. IT COSTS NOTHING TO OPEN. It reads the PERSISTED research + PageSpeed
 //     snapshots straight off the Business row and never calls
 //     resolveResearchSnapshot / resolvePsiSnapshot, because those CAPTURE when
 //     the snapshot is missing or stale — every panel open would spend Firecrawl,
 //     Places, DataForSEO and PageSpeed quota. An operator panel that bills for
-//     being looked at is a panel he stops looking at.
+//     being looked at is a panel he stops looking at. Detection itself is pure
+//     CPU over the stored bundle, so re-reading after every answer is free.
 //
 //  2. NO SNAPSHOT MEANS "WE HAVEN'T LOOKED", NOT "NOTHING IS MISSING". With no
 //     stored research there is nothing to run detection against, so the answer is
 //     `scanned: false` and an empty list — and the UI says "run a scan first"
 //     rather than rendering the empty list as a clean bill of health. An empty
 //     list that means two opposite things is how a quality panel starts lying.
+//
+//  3. IT IS FED EXACTLY WHAT THE GENERATOR IS FED. This panel is a claim about
+//     what the NEXT pack will say. Every intake answer the generator reads has to
+//     be read here too — an answer this route silently ignores shows up as a
+//     question the operator answers, watches not clear, and concludes is broken.
+//     See the clientIntake block below: it mirrors /api/generate/assets field for
+//     field, and the only deliberate omissions are documented there.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -36,7 +50,10 @@ import {
   AFTER_HOURS_HANDLING_OPTIONS,
   BOOKING_METHOD_OPTIONS,
   MISSED_CALL_HANDLING_OPTIONS,
+  PAST_CUSTOMER_CONTACT_OPTIONS,
   RESPONSE_SPEED_OPTIONS,
+  REVIEW_REPLY_OWNER_OPTIONS,
+  SOCIAL_ENQUIRIES_OPTIONS,
 } from "@/lib/intake-options";
 import type { ResearchBundle } from "@/lib/research-snapshot";
 import type { PsiBundle } from "@/lib/pagespeed";
@@ -62,25 +79,56 @@ type IntakeRow = {
   missedCallHandling: string | null;
   responseSpeed: string | null;
   bookingMethod: string | null;
+  socialEnquiries: string | null;
+  pastCustomerContact: string | null;
+  reviewReplyOwner: string | null;
 };
+
+/**
+ * The stored answer for one intake field, in the TWO shapes the panel needs:
+ *
+ *   · `value` — the raw slug / boolean, which is what a control renders its
+ *     selected state from. Without it the panel would have to map a human label
+ *     back to an option to know which chip is lit, and a reverse lookup over
+ *     labels is a second copy of the vocabulary free to disagree with the first.
+ *   · `label` — the same answer in the operator's own words ("Not sure"), which
+ *     is what the copy quotes back at him.
+ *
+ * Resolved together from ONE lookup, so the chip that lights up and the sentence
+ * underneath it can never disagree about what is on file.
+ */
+interface StoredAnswer {
+  value: string | boolean | null;
+  label: string | null;
+}
+
+/** Nothing recorded. Both halves null — "never asked", which is emphatically not
+ *  the same fact as "no" and must never be rendered as one. */
+const NOT_ON_FILE: StoredAnswer = { value: null, label: null };
 
 /** Look a stored slug up in the vocabulary the operator saw on the form, so the
  *  panel echoes his own words back ("Not sure") instead of a database slug. An
- *  unrecognised slug reads as unanswered — it can't be shown in the control
- *  either, so claiming it as an answer on file would be a fiction. */
-function optionLabel(
+ *  unrecognised slug reads as unanswered in BOTH halves — it can't be shown in
+ *  the control either, so claiming it as an answer on file would be a fiction. */
+function fromOptions(
   raw: string | null,
   options: { value: string; label: string }[]
-): string | null {
-  if (!raw) return null;
-  return options.find((o) => o.value === raw)?.label ?? null;
+): StoredAnswer {
+  if (!raw) return NOT_ON_FILE;
+  const hit = options.find((o) => o.value === raw);
+  return hit ? { value: hit.value, label: hit.label } : NOT_ON_FILE;
 }
 
-const YES_NO = (v: boolean | null): string | null =>
-  v === true ? "Yes" : v === false ? "No" : null;
+/** A yes/no column has three states, not two: true, false, and never-asked. The
+ *  third one is a real answer and stays null here — collapsing it into "No" is
+ *  the single mistake the whole evidence-grade system turns on. */
+function fromBoolean(v: boolean | null): StoredAnswer {
+  if (v === null) return NOT_ON_FILE;
+  return { value: v, label: v ? "Yes" : "No" };
+}
 
 /**
- * THE ANSWER ALREADY ON FILE for the field a gap names, or null when that
+ * THE ANSWER ALREADY ON FILE for the field a gap names, or NOT_ON_FILE when that
  * question was never answered. This is the difference between the two reasons a
  * leak is still guessed, and the operator needs them apart:
  *   · nothing on file  → he never asked. Ask it.
@@ -93,20 +141,30 @@ const YES_NO = (v: boolean | null): string | null =>
  * unanswered — the safe default, because it lands the gap in the to-do list
  * where it will be looked at, rather than silently claiming an answer we can't
  * actually show.
+ *
+ * EVERY FIELD ANY intakeAsk POINTS AT MUST HAVE AN ENTRY. Three of them
+ * (socialEnquiries, pastCustomerContact, reviewReplyOwner) were missing, which
+ * meant the questions that closed the last structural gaps were the only ones
+ * whose recorded answer the panel could not show — and now that the panel is
+ * where the answer gets typed, a field with no entry renders a control that never
+ * shows what is already selected.
  */
-const ANSWER_ON_FILE: Partial<
-  Record<keyof ClientIntake, (row: IntakeRow) => string | null>
+const STORED_ANSWER: Partial<
+  Record<keyof ClientIntake, (row: IntakeRow) => StoredAnswer>
 > = {
-  hasCrm: (r) => YES_NO(r.hasCrm),
-  hasFollowUpSequence: (r) => YES_NO(r.hasFollowUpSequence),
-  hasReminderSystem: (r) => YES_NO(r.hasReminderSystem),
-  hasPastCustomerDatabase: (r) => YES_NO(r.hasPastCustomerDatabase),
-  hasCallTracking: (r) => YES_NO(r.hasCallTracking),
-  hasOnlinePayment: (r) => YES_NO(r.hasOnlinePayment),
-  afterHoursHandling: (r) => optionLabel(r.afterHoursHandling, AFTER_HOURS_HANDLING_OPTIONS),
-  missedCallHandling: (r) => optionLabel(r.missedCallHandling, MISSED_CALL_HANDLING_OPTIONS),
-  responseSpeed: (r) => optionLabel(r.responseSpeed, RESPONSE_SPEED_OPTIONS),
-  bookingMethod: (r) => optionLabel(r.bookingMethod, BOOKING_METHOD_OPTIONS),
+  hasCrm: (r) => fromBoolean(r.hasCrm),
+  hasFollowUpSequence: (r) => fromBoolean(r.hasFollowUpSequence),
+  hasReminderSystem: (r) => fromBoolean(r.hasReminderSystem),
+  hasPastCustomerDatabase: (r) => fromBoolean(r.hasPastCustomerDatabase),
+  hasCallTracking: (r) => fromBoolean(r.hasCallTracking),
+  hasOnlinePayment: (r) => fromBoolean(r.hasOnlinePayment),
+  afterHoursHandling: (r) => fromOptions(r.afterHoursHandling, AFTER_HOURS_HANDLING_OPTIONS),
+  missedCallHandling: (r) => fromOptions(r.missedCallHandling, MISSED_CALL_HANDLING_OPTIONS),
+  responseSpeed: (r) => fromOptions(r.responseSpeed, RESPONSE_SPEED_OPTIONS),
+  bookingMethod: (r) => fromOptions(r.bookingMethod, BOOKING_METHOD_OPTIONS),
+  socialEnquiries: (r) => fromOptions(r.socialEnquiries, SOCIAL_ENQUIRIES_OPTIONS),
+  pastCustomerContact: (r) => fromOptions(r.pastCustomerContact, PAST_CUSTOMER_CONTACT_OPTIONS),
+  reviewReplyOwner: (r) => fromOptions(r.reviewReplyOwner, REVIEW_REPLY_OWNER_OPTIONS),
 };
 
 /** A stored snapshot is JSON, which means it can predate today's shape or have
@@ -221,10 +279,20 @@ export async function GET(req: NextRequest) {
     });
 
     // ── The intake the DETECTORS read ─────────────────────────────────────────
-    // The answers below are exactly the ones that change which leaks fire and how
-    // each one is graded — the six yes/no systems, the three "how is an enquiry
-    // handled today" answers, and how they book. Every detector reads them; none
-    // of them reads a number.
+    // Everything the generator's intake carries, minus the two money numbers —
+    // the six yes/no systems, the three "how is an enquiry handled today"
+    // answers, how they book, and the four vocabulary answers that close the
+    // last structural gaps. Every detector reads them; none of them reads a
+    // number.
+    //
+    // THIS LIST HAS TO STAY EQUAL TO /api/generate/assets, and it did not: three
+    // answers the detectors genuinely read (socialEnquiries, pastCustomerContact,
+    // reviewReplyOwner) were absent here, so this panel kept reporting a leak as
+    // still-guessed after the client had answered the very question that settles
+    // it. That was survivable while the panel was only a to-do list. It is not
+    // survivable now that the question is answered IN the panel: he clicks the
+    // answer, the row refuses to clear, and the feature reads as broken. If you
+    // add an intake field the detectors read, add it here in the same commit.
     //
     // THE TWO MONEY NUMBERS ARE DELIBERATELY ABSENT, and it is not an oversight.
     // The client's average customer value and enquiry count feed the DOLLAR MATH
@@ -252,6 +320,30 @@ export async function GET(req: NextRequest) {
       responseSpeed: (business.responseSpeed as ClientIntake["responseSpeed"]) ?? undefined,
       bookingMethod: (business.bookingMethod as ClientIntake["bookingMethod"]) ?? undefined,
       bookingToolName: business.bookingToolName ?? undefined,
+      // The four answers that closed the last structural evidence gaps, same
+      // string-column convention as the three above. Each one genuinely moves a
+      // leak, so leaving it out made this panel disagree with the pack:
+      //   socialEnquiries     → social_dm_unmanaged. YES confirms it; NO and
+      //                         NO_ACCOUNTS both suppress it entirely.
+      //   pastCustomerContact → no_database_reactivation. SYSTEMATIC suppresses;
+      //                         the other three confirm the list is going cold.
+      //   reviewReplyOwner    → no_review_replies. NOBODY fires it as disclosed;
+      //                         OWNER / STAFF_OR_AGENCY suppress it; unanswered
+      //                         does not fire it at all. It can therefore never
+      //                         appear as a collectible gap — it is carried so the
+      //                         COUNTS (total / disclosed) match the pack's.
+      //   takesDeposits       → NO leak reads it. It decides whether Text-to-Pay
+      //                         is in the build. Carried purely so this object
+      //                         stays field-for-field identical to the generator's,
+      //                         because a partial copy is how the drift above got
+      //                         in and stayed invisible.
+      socialEnquiries:
+        (business.socialEnquiries as ClientIntake["socialEnquiries"]) ?? undefined,
+      pastCustomerContact:
+        (business.pastCustomerContact as ClientIntake["pastCustomerContact"]) ?? undefined,
+      reviewReplyOwner:
+        (business.reviewReplyOwner as ClientIntake["reviewReplyOwner"]) ?? undefined,
+      takesDeposits: (business.takesDeposits as ClientIntake["takesDeposits"]) ?? undefined,
     };
 
     // POST-INTAKE, declared. This is a post-sale operator surface, and declaring
@@ -298,22 +390,26 @@ export async function GET(req: NextRequest) {
     for (const gap of gaps) {
       if (!gap.ask) {
         // No question we ask can settle this one. It is NOT a to-do — presenting
-        // it as one would be a permanent nag he can never clear.
+        // it as one would be a permanent nag he can never clear, and it gets no
+        // control in the panel for the same reason.
         structural.push({
           leakId: gap.leakId,
           leakName: gap.leakName,
           question: null,
           field: null,
           answerOnFile: null,
+          currentValue: null,
         });
         continue;
       }
+      const stored = STORED_ANSWER[gap.ask.field]?.(business) ?? NOT_ON_FILE;
       collectible.push({
         leakId: gap.leakId,
         leakName: gap.leakName,
         question: gap.ask.question,
         field: gap.ask.field,
-        answerOnFile: ANSWER_ON_FILE[gap.ask.field]?.(business) ?? null,
+        answerOnFile: stored.label,
+        currentValue: stored.value,
       });
     }
 

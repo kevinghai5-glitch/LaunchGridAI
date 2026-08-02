@@ -5,8 +5,9 @@
  * fixtures and asserts:
  *   1. Detection unit tests   — specific leaks fire at the expected evidence tier.
  *   2. Three golden fixtures  — a dentist, a roofer, and a law firm snapshot their
- *                               fired leaks / tiers / ranking / cold-audit top-3 /
- *                               deterministic grading.
+ *                               fired leaks / tiers / ranking / most-provable top-3
+ *                               (selectColdAudit, which survives as the paid pack's
+ *                               pre-call context) / deterministic grading.
  *   3. Output validators      — stat guard, voice lint, out-of-scope containment,
  *                               taxonomy containment.
  *
@@ -51,10 +52,6 @@ import {
 } from "@/lib/leak-narrative";
 import { formatCurrency } from "@/lib/utils";
 import { validatePack } from "@/lib/exporters/validate-pack";
-import {
-  distinctDeeperQuestions,
-  PIPELINE_DISCOVERY_QUESTION,
-} from "@/lib/exporters/cold-audit-html";
 import type { AssetPack } from "@/types";
 
 // ── tiny test harness ─────────────────────────────────────────────────────────
@@ -289,7 +286,7 @@ test("no_review_replies fires ONLY on the client's answer, and only ever as disc
   assert.strictEqual(leak.evidenceClass, "INVISIBLE");
   assert.ok(
     !leak.deliverableTargets.includes("cold_audit"),
-    "the free cold audit advertises a finding it can never produce"
+    "the most-provable (cold_audit-target) selection advertises a finding a pre-sale detection can never produce"
   );
 });
 
@@ -910,32 +907,10 @@ test("Parts E+G: leak prompt block states the evidence-override and citation rul
   assert.ok(block.includes("CITATIONS (Part G)"), "missing Part G rule");
 });
 
-// Part H2 — distinct discovery questions + guaranteed pipeline probe.
-test("Part H2: duplicate questions collapse to distinct probes", () => {
-  const out = distinctDeeperQuestions([
-    "How fast do leads hear back after hours?",
-    "How fast do leads hear back after hours?", // exact dup
-    "What happens to enquiries that never book?",
-  ]);
-  assert.strictEqual(new Set(out).size, out.length, "duplicates survived");
-});
-
-test("Part H2: the pipeline question is guaranteed among the probes", () => {
-  const out = distinctDeeperQuestions([
-    "How fast do leads hear back after hours?",
-    "What happens to enquiries that never book?",
-  ]);
-  assert.ok(out.includes(PIPELINE_DISCOVERY_QUESTION), "pipeline question not injected");
-  assert.ok(out.length <= 3, "exceeded 3 questions");
-});
-
-test("Part H2: an existing pipeline probe is not duplicated", () => {
-  const out = distinctDeeperQuestions([
-    "How many leads came in last month, and how many became clients?",
-    "What happens to enquiries that never book?",
-  ]);
-  assert.ok(!out.includes(PIPELINE_DISCOVERY_QUESTION), "double-added the pipeline question");
-});
+// Part H2 (distinct discovery questions / pipeline probe) — DELETED 2026-08-01.
+// `distinctDeeperQuestions` and `PIPELINE_DISCOVERY_QUESTION` lived in the
+// cold-audit renderer, which was deleted with the whole pre-sale generative
+// surface. The tests died with their subject; nothing surviving reads them.
 
 // Part D1 — clean (grade-95) axes must read neutral, not assert a problem.
 function packWithMetric(score: number, diagnosis: string): AssetPack {

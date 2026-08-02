@@ -1,6 +1,6 @@
 /**
- * PHASE 4 PROOF — the last round, demonstrated against the REAL shipped code,
- * offline. No network, no database, no API key.
+ * PHASE 4 PROOF — what survives the cold audit's deletion, demonstrated against
+ * the REAL shipped code, offline. No network, no database, no API key.
  *
  *   node_modules/.bin/tsx scripts/verify-phase4.ts
  *   npm run verify:phase4
@@ -8,124 +8,58 @@
  * Every check prints its own inputs and outputs before it asserts, so a reader
  * can audit the claim without trusting the assertion. Exits 1 if ANY check fails.
  *
- * THE ROUND IN ONE SENTENCE: the cold audit stopped being the thing that closes
- * the deal. The sale now runs cold call → the prospect books a 15-minute Zoom →
- * this document lands in their inbox BEFORE the Zoom → on the Zoom it gets two or
- * three minutes as a credibility beat → and then the conversation moves inside
- * the business, where the leaks are priced live from the owner's own answers.
- * So the document's whole job is to prove we looked, prove we can count, and EARN
- * THE RIGHT TO ASK QUESTIONS. It is not trying to close anybody, and the eight
- * sections below are the eight ways that could quietly stop being true.
+ * WHAT THIS FILE USED TO BE, AND WHAT DIED (2026-08-01). Phase 4's original
+ * subject was the cold audit as a credibility beat: the outside/inside frame,
+ * the six pivot phrases, the single CTA, the pre-sale disclosure gates, the
+ * evidence voice and the benchmark labelling ON THE AUDIT (old sections A–G).
+ * The owner deleted that entire surface by ruling on 2026-07-29 — "the output
+ * shape demands three or four prose findings from thin public data… when the
+ * real material runs out, the model fills the space" — so those sections died
+ * with their subject. (The pre-sale disclosure gates themselves survive where
+ * the union survives: verify-phase1 section D proves them against the
+ * observed-facts row, the audit's non-generative replacement.)
  *
- *   A. THE FRAME IS ON THE      — "everything here was read from the outside…
- *      PAGE, BEFORE ANY FINDING   that is the smaller half", printed before the
- *                                 first finding lands, on the document AND on the
- *                                 public teaser, from ONE constant.
- *   B. THE SIX INVISIBLE LEAKS  — the six phrases he says out loud on the Zoom
- *      ARE ONE SET OF STRINGS     are the six phrases the prospect read in the
- *                                 email. Asserted as IDENTITY, not similarity:
- *                                 one copy of each string exists in the codebase,
- *                                 and the teaser imports it rather than retyping
- *                                 it. A divergence between the document and what
- *                                 he says on the phone is the failure this guards.
- *   C. ONE ASK, AND IT BOOKS    — exactly one call to action on the document and
- *      THE CALL                   exactly one on the teaser, counted on the
- *                                 rendered markup rather than promised in a
- *                                 comment, with every "just reply to this email"
- *                                 shape swapped at the boundary.
- *   D. NOTHING IS DISCLOSED     — already a COMPILE ERROR (twice). Said plainly,
- *      BEFORE THE SALE            then the three runtime backstops are fired one
- *                                 at a time so the guarantee is not resting on a
- *                                 type nobody has tested.
- *   E. AN INFERRED LEAK NEVER   — in BOTH artifacts. What we did not measure is
- *      READS AS A MEASUREMENT     hedged and labelled a pattern; what we DID
- *                                 measure is left alone, because hedging a
- *                                 measurement makes the whole document read as
- *                                 guesswork.
- *   F. EVERY DOLLAR FIGURE      — a figure on a cold audit is an industry
- *      SAYS IT IS A BENCHMARK     benchmark over an ASSUMED volume, and it says
- *                                 so in the same breath as the number.
- *   G. NOTHING RECOMMENDS ADS,  — he sells conversion of demand that already
- *      SEO, LEAD GEN OR A         exists, and he does not build websites. A
- *      WEBSITE REBUILD            NEGATED mention ("we don't rebuild websites")
- *                                 is his best line and must survive the sweep.
+ * WHAT REMAINS is everything here that protects a SURVIVING surface:
+ *
  *   H. THE MONEY LAW HOLDS ON   — "CAD $6,500", never a bare "$6,500", anywhere a
  *      THE PUBLIC PROPOSAL        prospect can see. Proved by rendering the real
  *                                 component and reading the visible words.
+ *   I. THE OWNER'S DOCUMENT IS  — every list in docs/final-verification.md is
+ *      KEPT TRUE BY THE CODE      re-derived from the shipped code and compared,
+ *                                 not trusted: the twelve intake questions, the
+ *                                 no-question leaks, the 60-day nurture map, the
+ *                                 commands, and the three fixture clients.
+ *   J. THE MONEY LAW,           — the SOURCE of every prospect-facing file, so a
+ *      MECHANICALLY               new bare "$" cannot be typed in the first place.
  *
- * READ THE LABELS. Some checks below prove a COMPILE-TIME guarantee (the code
- * does not build), some prove RUNTIME behaviour (the code behaves), and some are
- * a SOURCE-LEVEL scan (the code does not contain a second copy of a string that
- * must exist once). They are not the same strength of promise, so every check
- * that makes a structural claim says which it is — the same discipline as
- * section D of scripts/verify-phase1.ts and the header of verify-phase3.ts.
+ * READ THE LABELS. Some checks below prove RUNTIME behaviour (the code behaves)
+ * and some are a SOURCE-LEVEL scan (the code does not contain what must not
+ * exist). They are not the same strength of promise, so every check that makes a
+ * structural claim says which it is — the same discipline as section D of
+ * scripts/verify-phase1.ts and the header of verify-phase3.ts.
  */
 
 import assert from "node:assert";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-  BENCHMARK_FIGURE_LABEL,
-  BOOKING_CTA_LABEL,
-  COLD_AUDIT_CTA_FALLBACK,
-  OUTSIDE_INSIDE_FRAME,
-  PIPELINE_DISCOVERY_QUESTION,
-  PIVOT_LEAK_PHRASES,
-  PIVOT_QUESTIONS,
-  PIVOT_SECTION_INTRO,
-  PIVOT_SECTION_LABEL,
-  SCAN_SECTION_LABEL,
-  countCallsToAction,
-  ctaOffersCompetingChannel,
-  enforceColdAuditLaws,
-  outOfScopeHits,
-  pivotQuestionLines,
-  renderColdAuditHtml,
-  scopeViolations,
-} from "@/lib/exporters/cold-audit-html";
-import { assertNoDisclosedFindings, gradeColdAuditFindings } from "@/lib/cold-audit";
-import {
-  assertStoredColdAuditSafe,
-  validateColdAudit,
-} from "@/lib/exporters/validate-pack";
 import { buildAuditIntelligence } from "@/lib/audit-intelligence";
 import { detectLeaks } from "@/lib/leak-detection";
-import { intakeFieldsForZeroInferred, LEAKS } from "@/lib/leak-taxonomy";
+import { gradeOf, intakeFieldsForZeroInferred, LEAKS } from "@/lib/leak-taxonomy";
 import { NURTURE_SEQUENCE } from "@/lib/asset-generation";
-import {
-  ASSUMPTION_CAVEAT,
-  buildLeakInputs,
-  cad,
-  flatAssertionLint,
-  type LeakInput,
-} from "@/lib/leak-narrative";
-import { BOOKING_URL } from "@/lib/constants";
 import { buildProposalDefaults } from "@/lib/proposal-defaults";
 import { PublicProposal } from "@/components/proposals/PublicProposal";
 import type { AuditIntelligence } from "@/lib/audit-intelligence";
 import type { FirecrawlScrape } from "@/lib/firecrawl";
-import type { ColdAuditFinding, ColdAuditReport, ProposalContent } from "@/types";
+import type { ProposalContent } from "@/types";
 
 /* ════════════════════════════════════════════════════════════════════════════
- * THE CTA PROBE — a child process, and it is not an affectation.
- *
- * BOOKING_URL is read from the environment ONCE, when src/lib/constants.ts is
- * first imported. This repo runs with it unset, which is a real and correct
- * state (the close renders as plain text rather than shipping a dead button to a
- * prospect) — but it means a check run in THIS process can only ever see the
- * unconfigured branch, and the rule we actually care about is "when a booking URL
- * IS configured, there is exactly one link and it is that one".
- *
- * So section C re-runs this same file as a child with the variable set and reads
- * back one line of JSON. Same code, same renderer, both branches proved.
+ * (THE CTA PROBE — DELETED 2026-08-01. It re-ran this file as a child process
+ * with NEXT_PUBLIC_BOOKING_URL set to prove the audit's configured-CTA branch.
+ * The audit renderer is deleted; there is no branch left to probe.)
  * ══════════════════════════════════════════════════════════════════════════ */
-
-const CTA_PROBE_FLAG = "--cta-probe";
-const PROBE_BOOKING_URL = "https://booking.example/reclaimedhq/15-minute-call";
 
 let passed = 0;
 let failed = 0;
@@ -169,12 +103,22 @@ function codeOnly(rel: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1 "); // line comments, but not "https://"
 }
 
-/** JSX comments too — the teaser page is a React component and half its rules are
- *  explained inside `{/* … *\/}` blocks, which the TypeScript stripper above
- *  leaves behind as ordinary block comments only when they are not wrapped in
- *  braces. Strip both forms so "is this string in the code" means the code. */
-function jsxCodeOnly(rel: string): string {
-  return codeOnly(rel).replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, " ");
+/** Every .ts/.tsx file under src/, repo-relative. Walked with fs (no shell), so
+ *  the I2 pre-sale-caller scan covers a file the day it is created. */
+function allSrcFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(resolve(REPO, dir))) {
+      const rel = `${dir}/${entry}`;
+      if (statSync(resolve(REPO, rel)).isDirectory()) {
+        walk(rel);
+        continue;
+      }
+      if (/\.(ts|tsx)$/.test(entry)) out.push(rel);
+    }
+  };
+  walk("src");
+  return out;
 }
 
 /** The words a reader actually sees, markup removed. Same shape the pack
@@ -208,40 +152,13 @@ function bareDollarFigures(text: string): string[] {
   }
   return out;
 }
-
-function sentencesOf(text: string): string[] {
-  return text
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-/** Every model-authored passage of a cold audit, tagged with where it lives. */
-function auditPassages(r: ColdAuditReport): { where: string; text: string }[] {
-  const out: { where: string; text: string }[] = [];
-  const push = (where: string, text: string | null | undefined) => {
-    if (text && text.trim()) out.push({ where, text });
-  };
-  push("headline", r.headline);
-  push("intro", r.intro);
-  push("headlineCost", r.headlineCost);
-  (r.findings ?? []).forEach((f, i) => {
-    push(`finding ${i + 1} title`, f.title);
-    push(`finding ${i + 1} problem`, f.problem);
-    push(`finding ${i + 1} cost`, f.whyItCosts);
-  });
-  (r.deeperLeakQuestions ?? []).forEach((q, i) => push(`question ${i + 1}`, q));
-  push("close", r.closingCta?.message);
-  push("performance readout", r.performance?.readout);
-  return out;
-}
-
 /* ════════════════════════════════════════════════════════════════════════════
  * THE FIXTURES
  *
  * Synthetic, like the golden pack and for the same reason: a .example domain that
  * can never resolve and a phone number in the reserved 555-01xx block, so nothing
- * in this file traces to a real prospect.
+ * in this file traces to a real prospect. Only the raw site material survives
+ * here — section I2 derives its no-tel variant from it.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 const SCAN_DATE = "2026-07-01T12:00:00.000Z";
@@ -292,909 +209,36 @@ const COLD_SCRAPE: FirecrawlScrape = {
   subpages: [],
 };
 
-/** Built by the REAL intelligence layer rather than hand-shaped, so the leaks
- *  that fire below fire for the same reasons they fire for a paying client. */
-const COLD_INTEL: AuditIntelligence = buildAuditIntelligence({
-  websiteHtml: COLD_HTML,
-  hasWebsiteUrl: true,
-  reviews: [],
-  competitors: [
-    { name: "Ridgeline Mechanical", rating: 4.6, reviewCount: 150, website: "", category: "HVAC contractor", address: "Halifax NS" },
-    { name: "Two Rivers Comfort", rating: 4.5, reviewCount: 120, website: "", category: "HVAC contractor", address: "Dartmouth NS" },
-  ],
-  self: { rating: 4.3, reviewCount: 38 },
-  verifiedFacts: null,
-  performance: null,
-  dataForSeo: null,
-  screenshots: null,
-});
-
-/** A COLD PRE-SALE DETECTION. `mode: "pre_sale"` is the declaration the compiler
- *  enforces — see section D1. Nothing here can carry intake, by construction. */
-const preSale = detectLeaks({
-  mode: "pre_sale",
-  business: {
-    name: "Harbourline Air",
-    industry: "HVAC",
-    category: "HVAC contractor",
-    city: "Dartmouth",
-    phone: "902-555-0117",
-    website: "https://harbourline-air.example",
-    rating: 4.3,
-    reviewCount: 38,
-  },
-  intel: COLD_INTEL,
-  scrape: COLD_SCRAPE,
-  asOf: SCAN_DATE,
-});
-
-const preSaleInputs: LeakInput[] = buildLeakInputs(preSale.report, preSale.data);
-
-/** The model's output for this business, hand-written to the shape the generator
- *  asks for. Written the way a GOOD draft reads — this is the baseline every
- *  section below deforms in one specific way to prove the boundary repairs it. */
-function modelFindings(): Parameters<typeof gradeColdAuditFindings>[0] {
-  return [
-    {
-      leak: "No online booking path",
-      title: "There is no way to book you without a phone call",
-      problem:
-        "Neither the site nor the Google profile carries a booking link, so every appointment has to go through a conversation during office hours.",
-      whyItCosts:
-        "A homeowner who decides at 10pm has to remember to ring in the morning, and remembering is where a lot of that intent quietly dies.",
-      severity: "high",
-    },
-    {
-      leak: "No webchat / messaging capture",
-      title: "A visitor with one small question has no light way to ask it",
-      problem:
-        "No chat or messaging widget was found on any scanned page, so the only routes are a phone call or a form and a wait.",
-      whyItCosts:
-        "The lighter the question, the more likely the visitor closes the tab instead of asking it.",
-      severity: "medium",
-    },
-    {
-      leak: "Missed calls with no recovery",
-      title: "A call that rings out has nothing behind it",
-      problem:
-        "The published number is a single line with no text-back path anywhere on the site. Most owner-run trades let it fall through to voicemail while the crew is on a job.",
-      whyItCosts:
-        "Where that pattern holds, a caller who cannot get through typically dials the next company within minutes.",
-      severity: "high",
-    },
-  ];
-}
-
-function baseReport(): ColdAuditReport {
-  return {
-    businessName: "Harbourline Air",
-    city: "Dartmouth",
-    industry: "HVAC",
-    websiteUrl: "https://harbourline-air.example",
-    screenshotUrl: null,
-    headline: "Where Harbourline Air is quietly losing clients",
-    intro:
-      "The site is honest about what you do and where you do it — but here is where enquiries are going missing before they ever reach you.",
-    headlineCost:
-      "You already pay to get these leads. Every one that hits this gap is money you spent to earn somebody who now slips away before they reach you.",
-    findings: gradeColdAuditFindings(modelFindings(), preSaleInputs),
-    deeperLeakQuestions: [
-      "When a lead reaches out after hours, how fast do they actually hear back?",
-    ],
-    closingCta: {
-      tiedToFinding: "There is no way to book you without a phone call",
-      message: COLD_AUDIT_CTA_FALLBACK,
-    },
-    agencyName: "our team",
-    generatedAt: SCAN_DATE,
-    dataConfidence: "medium",
-  };
-}
-
-/** The enforced document — what a prospect actually reads. Every section that
- *  makes a claim about "the document" runs against THIS, never the raw row. */
-const enforced = enforceColdAuditLaws(baseReport());
-const documentHtml = renderColdAuditHtml(baseReport());
-const documentVisible = visibleText(documentHtml);
-
-const TEASER_PAGE = "src/app/a/[publicId]/page.tsx";
-const AUDIT_RENDERER = "src/lib/exporters/cold-audit-html.ts";
-const teaserSource = jsxCodeOnly(TEASER_PAGE);
-
-/* ════════════════════════════════════════════════════════════════════════════
- * THE CTA PROBE CHILD — runs first and exits, when asked.
- * ══════════════════════════════════════════════════════════════════════════ */
-
-interface CtaProbe {
-  bookingUrl: string;
-  links: number;
-  bookingLinks: number;
-  secondaryAsks: string[];
-  buttonLabelOnPage: boolean;
-}
-
-if (process.argv.includes(CTA_PROBE_FLAG)) {
-  const counts = countCallsToAction(documentHtml);
-  const probe: CtaProbe = {
-    bookingUrl: BOOKING_URL ?? "",
-    links: counts.links,
-    bookingLinks: counts.bookingLinks,
-    secondaryAsks: counts.secondaryAsks,
-    buttonLabelOnPage: documentVisible.includes(BOOKING_CTA_LABEL),
-  };
-  console.log(`__CTA_PROBE__${JSON.stringify(probe)}`);
-  process.exit(0);
-}
-
-/** Run this file again with a booking URL configured and read back the counts. */
-function ctaProbeWithBookingUrl(): CtaProbe {
-  const out = execFileSync(
-    process.execPath,
-    [resolve(REPO, "node_modules/.bin/tsx"), resolve(REPO, "scripts/verify-phase4.ts"), CTA_PROBE_FLAG],
-    {
-      cwd: REPO,
-      encoding: "utf8",
-      env: { ...process.env, NEXT_PUBLIC_BOOKING_URL: PROBE_BOOKING_URL },
-    }
-  );
-  const line = out.split("\n").find((l) => l.startsWith("__CTA_PROBE__"));
-  assert(line, `the CTA probe child printed no result. Its output was:\n${out}`);
-  return JSON.parse(line!.slice("__CTA_PROBE__".length)) as CtaProbe;
-}
+// (COLD_INTEL, the pre-sale detection, the hand-written model findings, the
+// enforced baseReport and the teaser source all lived here — the raw material of
+// old sections A–G. Deleted with the surface on 2026-08-01. COLD_HTML and
+// COLD_SCRAPE above SURVIVE because section I2 derives its no-tel variant from
+// them, which is what keeps that check non-vacuous.)
 
 /* ════════════════════════════════════════════════════════════════════════════
  * RUN
  * ══════════════════════════════════════════════════════════════════════════ */
 
-console.log("\nPHASE 4 VERIFICATION — the cold audit is no longer the persuasion instrument");
-console.log(
-  `  fired pre-sale leaks: ${preSale.report.length} · grades: ` +
-    `${JSON.stringify(
-      preSaleInputs.reduce<Record<string, number>>((acc, li) => {
-        acc[li.grade] = (acc[li.grade] ?? 0) + 1;
-        return acc;
-      }, {})
-    )}`
-);
+console.log("\nPHASE 4 VERIFICATION — the money law and the owner's document, on the surviving surfaces");
 
-/* ──────────────────────────────────────────────────────────────────────────
- * A · THE OUTSIDE/INSIDE FRAME
- * ────────────────────────────────────────────────────────────────────── */
-section("A · THE FRAME — the outside is the smaller half, and the document says so first");
-
-check("A1 · RUNTIME — the frame's exact words are on the rendered document", () => {
-  show("label", OUTSIDE_INSIDE_FRAME.label);
-  show("lead ", OUTSIDE_INSIDE_FRAME.lead);
-  show("body ", `${OUTSIDE_INSIDE_FRAME.body.slice(0, 90)}…`);
-  for (const [name, text] of Object.entries(OUTSIDE_INSIDE_FRAME)) {
-    assert(
-      documentVisible.includes(text),
-      `OUTSIDE_INSIDE_FRAME.${name} is not on the rendered page — the frame was reworded or dropped`
-    );
-  }
-});
-
-check("A2 · RUNTIME — the frame lands BEFORE the first finding, not after it", () => {
-  const frameAt = documentVisible.indexOf(OUTSIDE_INSIDE_FRAME.lead);
-  const scanSectionAt = documentVisible.indexOf(SCAN_SECTION_LABEL);
-  const firstFindingAt = documentVisible.indexOf(enforced.findings[0].title);
-  show("frame at        ", frameAt);
-  show("scan heading at ", scanSectionAt);
-  show("first finding at", firstFindingAt);
-  assert(frameAt >= 0, "the frame is not on the page at all");
-  assert(
-    frameAt < scanSectionAt && frameAt < firstFindingAt,
-    "a finding lands before the frame — the reader meets the evidence before being told it is the small half, " +
-      "which is what makes the pivot on the call feel like moving the goalposts"
-  );
-});
-
-check("A3 · RUNTIME — the frame renders even when the stored row has never heard of it", () => {
-  // A cold audit saved before Phase 4 carries no frame anywhere in its JSON. The
-  // renderer stamps it from the constant rather than reading it off the report,
-  // so there is no report state in which the honesty move goes missing.
-  const stale = baseReport();
-  const staleJson = JSON.stringify(stale);
-  show("frame text anywhere in the stored row", staleJson.includes(OUTSIDE_INSIDE_FRAME.lead));
-  assert(
-    !staleJson.includes(OUTSIDE_INSIDE_FRAME.lead),
-    "the fixture already contains the frame — this check is proving nothing"
-  );
-  assert(
-    visibleText(renderColdAuditHtml(stale)).includes(OUTSIDE_INSIDE_FRAME.lead),
-    "the frame did not render from a report that does not contain it"
-  );
-});
-
-check("A4 · SOURCE — the teaser IMPORTS the frame; there is no second copy of it", () => {
-  const imports =
-    /import\s*\{[^}]*\bOUTSIDE_INSIDE_FRAME\b[^}]*\}\s*from\s*"@\/lib\/exporters\/cold-audit-html"/.test(
-      teaserSource
-    );
-  const literal = teaserSource.includes(OUTSIDE_INSIDE_FRAME.lead);
-  show("teaser imports OUTSIDE_INSIDE_FRAME", imports);
-  show("teaser retypes the lead sentence  ", literal);
-  assert(imports, `${TEASER_PAGE} no longer imports OUTSIDE_INSIDE_FRAME`);
-  assert(
-    !literal,
-    `${TEASER_PAGE} contains a literal copy of the frame — two copies drift, and a drift here is a drift ` +
-      "between the pre-call email and what he says on the Zoom"
-  );
-});
-
-check("A5 · SOURCE — the frame is defined exactly once in src/", () => {
-  const files = ["src/lib/exporters/cold-audit-html.ts", TEASER_PAGE, "src/components/businesses/ColdAuditView.tsx"];
-  const copies = files.filter((f) => jsxCodeOnly(f).includes(OUTSIDE_INSIDE_FRAME.lead));
-  show("files containing the lead sentence verbatim", copies);
-  assert.deepEqual(
-    copies,
-    ["src/lib/exporters/cold-audit-html.ts"],
-    "the frame sentence exists in more than one file"
-  );
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * B · THE SIX SANCTIONED PHRASES
- * ────────────────────────────────────────────────────────────────────── */
-section("B · THE SIX INVISIBLE LEAKS — one set of strings, IDENTITY not similarity");
-
-check("B1 · RUNTIME — the six questions name the six phrases by reference, not by retyping", () => {
-  show("phrases", PIVOT_LEAK_PHRASES);
-  assert.equal(PIVOT_QUESTIONS.length, 6, "the pivot set is no longer six questions");
-  assert.equal(PIVOT_LEAK_PHRASES.length, 6, "the phrase set is no longer six phrases");
-  PIVOT_QUESTIONS.forEach((q, i) => {
-    // Identity, not equality-by-value: `q.leak` IS `PIVOT_LEAK_PHRASES[i]`, the
-    // same string, because the questions are built from the phrase array. A
-    // second copy that happened to match today would pass an equality check and
-    // fail the day one of them is edited.
-    assert.strictEqual(
-      q.leak,
-      PIVOT_LEAK_PHRASES[i],
-      `question ${i + 1} names "${q.leak}" but phrase ${i + 1} is "${PIVOT_LEAK_PHRASES[i]}"`
-    );
-  });
-});
-
-check("B2 · RUNTIME — all six phrases render VERBATIM on the document", () => {
-  for (const phrase of PIVOT_LEAK_PHRASES) {
-    show("on the page", `"${phrase}"`);
-    assert(documentVisible.includes(phrase), `"${phrase}" is not on the rendered document`);
-  }
-  for (const q of PIVOT_QUESTIONS) {
-    assert(documentVisible.includes(q.ask), `the question "${q.ask}" is not on the rendered document`);
-  }
-});
-
-check("B3 · RUNTIME — they are printed as QUESTIONS, never asserted as findings", () => {
-  const findingProse = enforced.findings
-    .flatMap((f) => [f.title, f.problem, f.whyItCosts])
-    .join("\n")
-    .toLowerCase();
-  for (const phrase of PIVOT_LEAK_PHRASES) {
-    assert(
-      !findingProse.includes(phrase.toLowerCase()),
-      `"${phrase}" turned up inside a FINDING. We have measured none of the six — asserting one on a ` +
-        "document sent to somebody we have never spoken to is inventing a fact about the inside of their business"
-    );
-  }
-  show("every pivot row ends in a question mark", PIVOT_QUESTIONS.every((q) => q.ask.trim().endsWith("?")));
-  assert(PIVOT_QUESTIONS.every((q) => q.ask.trim().endsWith("?")), "a pivot row is not written as a question");
-});
-
-check("B4 · RUNTIME — the enforcer REPLACES the model's own questions with the fixed six", () => {
-  const drifting = baseReport();
-  drifting.deeperLeakQuestions = [
-    "What is your current lead-response cadence?",
-    "How mature is your follow-up motion?",
-  ];
-  const out = enforceColdAuditLaws(drifting);
-  show("model wrote  ", drifting.deeperLeakQuestions);
-  show("document asks", out.deeperLeakQuestions.slice(0, 2));
-  assert.deepEqual(
-    out.deeperLeakQuestions,
-    [...pivotQuestionLines(), PIPELINE_DISCOVERY_QUESTION],
-    "the model's consultant-vocabulary questions survived to the page"
-  );
-});
-
-check("B5 · SOURCE — the teaser IMPORTS the six; not one of them is retyped there", () => {
-  const imports = /import\s*\{[^}]*\bPIVOT_QUESTIONS\b[^}]*\}\s*from\s*"@\/lib\/exporters\/cold-audit-html"/.test(
-    teaserSource
-  );
-  const retyped = PIVOT_LEAK_PHRASES.filter((p) => teaserSource.includes(p));
-  show("teaser imports PIVOT_QUESTIONS", imports);
-  show("phrases retyped on the teaser ", retyped);
-  assert(imports, `${TEASER_PAGE} no longer imports PIVOT_QUESTIONS`);
-  assert.deepEqual(retyped, [], "the teaser carries its own copy of a pivot phrase");
-});
-
-check("B6 · SOURCE — each phrase exists exactly ONCE in the whole codebase", () => {
-  // The single copy is PIVOT_LEAK_PHRASES. Anything else — a renderer, a page, a
-  // prompt, a fixture — reaches it by name. This is the check that makes "he
-  // reads it in the email and then hears it on the Zoom" a property of the code
-  // rather than a thing somebody remembered to keep in sync.
-  const files = [
-    "src/lib/exporters/cold-audit-html.ts",
-    "src/lib/cold-audit.ts",
-    "src/lib/exporters/validate-pack.ts",
-    TEASER_PAGE,
-    "src/components/businesses/ColdAuditView.tsx",
-  ];
-  for (const phrase of PIVOT_LEAK_PHRASES) {
-    const where = files.filter((f) => jsxCodeOnly(f).includes(phrase));
-    show(`"${phrase}"`, where);
-    assert.deepEqual(
-      where,
-      ["src/lib/exporters/cold-audit-html.ts"],
-      `"${phrase}" appears in ${where.length} files — a second copy is a copy that drifts`
-    );
-  }
-});
-
-check("B7 · SOURCE+RUNTIME — every heading the two surfaces share is the SAME string", () => {
-  // PIVOT_SECTION_LABEL, PIVOT_SECTION_INTRO, the pipeline question and the button
-  // label are all imported by the teaser. SCAN_SECTION_LABEL is the exception and
-  // it is called out rather than waved through: the page still declares its own
-  // `const SCAN_SECTION_LABEL`, so this check reads that literal out of the source
-  // and asserts it is byte-identical to the exported constant. It fails the day
-  // one of the two is edited — which is the only failure mode that matters.
-  const imported = ["PIVOT_SECTION_LABEL", "PIVOT_SECTION_INTRO", "PIPELINE_DISCOVERY_QUESTION", "BOOKING_CTA_LABEL"];
-  for (const name of imported) {
-    assert(
-      new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*"@/lib/exporters/cold-audit-html"`).test(
-        teaserSource
-      ),
-      `${TEASER_PAGE} no longer imports ${name}`
-    );
-  }
-  show("imported by the teaser", imported);
-  const m = teaserSource.match(/const\s+SCAN_SECTION_LABEL\s*=\s*"([^"]+)"/);
-  show("teaser's own SCAN_SECTION_LABEL", m ? m[1] : "(imported — the duplicate is gone)");
-  show("document's SCAN_SECTION_LABEL  ", SCAN_SECTION_LABEL);
-  if (m) {
-    assert.strictEqual(
-      m[1],
-      SCAN_SECTION_LABEL,
-      "the teaser's copy of the findings heading no longer matches the document's"
-    );
-  }
-  assert(documentVisible.includes(SCAN_SECTION_LABEL), "the findings heading is not on the document");
-  assert(documentVisible.includes(PIVOT_SECTION_LABEL), "the pivot heading is not on the document");
-  assert(documentVisible.includes(PIVOT_SECTION_INTRO), "the pivot intro is not on the document");
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * C · ONE ASK
- * ────────────────────────────────────────────────────────────────────── */
-section("C · ONE CALL TO ACTION — counted on the markup, on both surfaces");
-
-const unconfigured = countCallsToAction(documentHtml);
-
-check("C1 · RUNTIME — with no booking URL configured the document ships ZERO links", () => {
-  show("BOOKING_URL   ", BOOKING_URL ?? "(not configured)");
-  show("links on page ", unconfigured.links);
-  show("secondary asks", unconfigured.secondaryAsks);
-  assert.equal(BOOKING_URL, undefined, "this repo has a booking URL configured — the probe below covers that branch");
-  assert.equal(unconfigured.links, 0, "a link rendered with no booking URL configured — that is a dead button to a prospect");
-  assert.deepEqual(unconfigured.secondaryAsks, [], "the page offers a second way to respond");
-  assert(documentVisible.includes("Where this goes next"), "the close block did not render at all");
-});
-
-check("C2 · RUNTIME (child process) — with a booking URL, EXACTLY ONE link and it is the booking link", () => {
-  const probe = ctaProbeWithBookingUrl();
-  show("child booking URL", probe.bookingUrl);
-  show("links            ", probe.links);
-  show("booking links    ", probe.bookingLinks);
-  show("secondary asks   ", probe.secondaryAsks);
-  show("button label     ", probe.buttonLabelOnPage ? BOOKING_CTA_LABEL : "(missing)");
-  assert.equal(probe.bookingUrl, PROBE_BOOKING_URL, "the child did not pick up the configured booking URL");
-  assert.equal(probe.links, 1, `the document rendered ${probe.links} links — the rule is exactly one`);
-  assert.equal(probe.bookingLinks, 1, "the one link on the page is not the booking link");
-  assert.deepEqual(probe.secondaryAsks, [], "the page offers a second way to respond alongside the button");
-  assert(probe.buttonLabelOnPage, "the booking button rendered without its label");
-});
-
-check("C3 · SOURCE — the teaser emits exactly one anchor, and nothing else clickable", () => {
-  const anchors = teaserSource.match(/<a\b/g) ?? [];
-  const buttons = teaserSource.match(/<button\b/g) ?? [];
-  const forms = teaserSource.match(/<form\b/g) ?? [];
-  show("<a> in the teaser     ", anchors.length);
-  show("<button> in the teaser", buttons.length);
-  show("<form> in the teaser  ", forms.length);
-  assert.equal(anchors.length, 1, `${TEASER_PAGE} emits ${anchors.length} anchors — every extra option is a way not to book`);
-  assert.equal(buttons.length, 0, `${TEASER_PAGE} emits a <button>`);
-  assert.equal(forms.length, 0, `${TEASER_PAGE} emits a <form>`);
-  // The one thing we must never link is the site we just told them is leaking.
-  assert(
-    /meta\.websiteUrl \|\| meta\.businessName/.test(teaserSource),
-    "the business's own URL is no longer printed as plain text in the screenshot caption"
-  );
-});
-
-check("C4 · RUNTIME — a close that offers a second way to respond is swapped at the boundary", () => {
-  const competing = [
-    "Have a read and just reply to this email if anything stands out.",
-    "Give me a call if you want to talk it through.",
-    "Let me know what you think and we can go from there.",
-    "Feel free to reach out to me any time.",
-  ];
-  for (const message of competing) {
-    const drifting = baseReport();
-    drifting.closingCta = { tiedToFinding: "", message };
-    const out = enforceColdAuditLaws(drifting);
-    show("model wrote", `"${message}"`);
-    show("shipped    ", `"${out.closingCta.message}"`);
-    assert(ctaOffersCompetingChannel(message), `"${message}" was not recognised as a competing ask`);
-    assert.equal(
-      out.closingCta.message,
-      COLD_AUDIT_CTA_FALLBACK,
-      "a second way to respond survived onto a prospect's page"
-    );
-  }
-});
-
-check("C5 · RUNTIME — the pre-sale validator FAILS a document carrying a second ask", () => {
-  // The enforcer repairs the close, so the only place a second ask can survive is
-  // somewhere the repair does not reach — a finding title. That is exactly where
-  // the validator looks, and it is fatal there.
-  const bad = baseReport();
-  bad.findings = [
-    { ...bad.findings[0], title: "Just reply to this email and I will send the fixes over" },
-    ...bad.findings.slice(1),
-  ];
-  const result = validateColdAudit(bad);
-  const fails = result.checks.filter((c) => c.level === "fail");
-  show("fail count", fails.length);
-  show("laws      ", Array.from(new Set(fails.map((c) => c.law))));
-  assert(fails.length > 0, "a finding title offering a second way to respond passed the gate");
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * D · NOTHING IS DISCLOSED BEFORE THE SALE
- * ────────────────────────────────────────────────────────────────────── */
-section("D · NOTHING DISCLOSED PRE-SALE — a compile error first, three runtime backstops after");
-
-check("D1 · COMPILE-TIME — a pre-sale detection cannot carry intake at all", () => {
-  // This is the strongest guarantee in the round and it is NOT enforced by this
-  // script: `intake?: never` means `detectLeaks({ mode: "pre_sale", intake: {…} })`
-  // does not compile, so `npm run typecheck` is what proves it. What this check
-  // does is make sure the declaration is still there — a check that says "the
-  // compiler is doing the work" is worthless if somebody deleted the type.
-  const src = codeOnly("src/lib/leak-detection.ts");
-  const preSaleDecl = /interface PreSaleResearch extends RawResearchBase \{[^}]*mode: "pre_sale";[^}]*intake\?: never;/;
-  show("PreSaleResearch declares `intake?: never`", preSaleDecl.test(src));
-  assert(preSaleDecl.test(src), "PreSaleResearch no longer declares `intake?: never` — the compile-time gate is gone");
-});
-
-check("D1b · COMPILE-TIME — a pre-sale generation context cannot carry an intake-derived field", () => {
-  const src = codeOnly("src/lib/cold-audit.ts");
-  const fields = ["servicesFocus", "intakePresent", "bookingToolName", "gbpManagement", "buildPriorities"];
-  const decl = src.slice(src.indexOf("PreSaleGenerationContext"), src.indexOf("PreSaleGenerationContext") + 400);
-  for (const f of fields) {
-    show(`${f}?: never`, new RegExp(`${f}\\?:\\s*never`).test(decl));
-    assert(
-      new RegExp(`${f}\\?:\\s*never`).test(decl),
-      `PreSaleGenerationContext no longer declares ${f}?: never — a copy-paste from the paid pack would compile`
-    );
-  }
-});
-
-check("D2 · RUNTIME backstop 1 — detectLeaks THROWS if intake reaches a pre-sale run", () => {
-  // Reachable only by defeating the type system, which is exactly why it is here.
-  let threw = "";
-  try {
-    detectLeaks({
-      mode: "pre_sale",
-      business: { name: "Harbourline Air", industry: "HVAC", city: "Dartmouth" },
-      intel: COLD_INTEL,
-      scrape: COLD_SCRAPE,
-      asOf: SCAN_DATE,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      intake: { reviewReplyOwner: "NOBODY", hasCrm: false } as any,
-    });
-  } catch (err) {
-    threw = (err as Error).message;
-  }
-  show("threw", threw ? `${threw.slice(0, 140)}…` : "(nothing — the backstop did not fire)");
-  assert(threw, "a cast pushed intake into a pre-sale detection and nothing stopped it");
-});
-
-check("D3 · RUNTIME backstop 2 — assertNoDisclosedFindings THROWS on the way out of generation", () => {
-  const smuggled = baseReport();
-  smuggled.findings = [
-    { ...smuggled.findings[0], evidenceGrade: "disclosed" as ColdAuditFinding["evidenceGrade"] },
-    ...smuggled.findings.slice(1),
-  ];
-  let threw = "";
-  try {
-    assertNoDisclosedFindings(smuggled, "verify-phase4");
-  } catch (err) {
-    threw = (err as Error).message;
-  }
-  show("threw", threw ? `${threw.slice(0, 140)}…` : "(nothing)");
-  assert(threw.includes("disclosed"), "a disclosed finding left the generator for a prospect's inbox");
-  // And it does NOT throw on the honest document — a gate that always fires is a
-  // gate somebody comments out.
-  assertNoDisclosedFindings(enforced, "verify-phase4 clean");
-});
-
-check("D4 · RUNTIME backstop 3 — the READ path throws on an already-stored disclosure", () => {
-  // Backstops 1 and 2 protect documents generated from now on. A cold audit saved
-  // yesterday is only caught by reading it back, which is what the teaser's
-  // loadReport does on every request.
-  const stored = baseReport();
-  stored.findings = stored.findings.map((f) => ({ ...f, evidenceGrade: "disclosed" as const }));
-  let threw = "";
-  try {
-    assertStoredColdAuditSafe(stored, "public teaser /a/probe");
-  } catch (err) {
-    threw = (err as Error).message;
-  }
-  show("threw", threw ? `${threw.slice(0, 140)}…` : "(nothing)");
-  assert(threw, "a stored disclosure rendered straight onto the public teaser");
-  assertStoredColdAuditSafe(enforced, "public teaser clean");
-});
-
-check("D4b · SOURCE — the teaser actually CALLS the read-path gate before rendering", () => {
-  show("imports assertStoredColdAuditSafe", /assertStoredColdAuditSafe/.test(teaserSource));
-  assert(
-    /assertStoredColdAuditSafe\(\s*raw\s*,/.test(teaserSource),
-    `${TEASER_PAGE} loads a stored audit without running the disclosure gate on it`
-  );
-  assert(
-    /enforceColdAuditLaws\(\s*raw\s*\)/.test(teaserSource),
-    `${TEASER_PAGE} renders the raw stored row instead of the law-enforced document`
-  );
-});
-
-check("D5 · RUNTIME — the pre-sale validator marks a disclosure FATAL, on the raw row", () => {
-  const stored = baseReport();
-  stored.findings = [{ ...stored.findings[0], evidenceGrade: "disclosed" }, ...stored.findings.slice(1)];
-  const fails = validateColdAudit(stored).checks.filter((c) => c.level === "fail");
-  show("fatal laws", fails.map((c) => c.law));
-  assert(
-    fails.some((c) => /disclos/i.test(c.law) || /disclos/i.test(c.message)),
-    "the validator did not treat a disclosed grade as fatal"
-  );
-});
-
-check("D6 · RUNTIME — a real pre-sale run produces NO disclosed leak in either artifact", () => {
-  const grades = preSaleInputs.map((li) => li.grade);
-  const findingGrades = enforced.findings.map((f) => f.evidenceGrade ?? "(unstamped)");
-  show("leak grades from the scan", Array.from(new Set(grades)));
-  show("finding grades on the doc", findingGrades);
-  assert(!grades.includes("disclosed"), "a pre-sale scan produced a disclosed leak");
-  assert(!findingGrades.includes("disclosed"), "a pre-sale document carries a disclosed finding");
-  // The teaser reads the same enforced report through the same gate, so the same
-  // absence holds there — proved by D4/D4b rather than re-asserted here.
-  assert.equal(validateColdAudit(enforced, documentHtml).fails, 0, "the honest document does not pass its own gate");
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * E · AN INFERRED LEAK NEVER READS AS A MEASUREMENT
- * ────────────────────────────────────────────────────────────────────── */
-section("E · EVIDENCE VOICE — hedged where we guessed, flat where we measured, in BOTH artifacts");
-
-check("E1 · RUNTIME — the fired set actually contains both grades (this section is not vacuous)", () => {
-  const byGrade = preSaleInputs.reduce<Record<string, string[]>>((acc, li) => {
-    (acc[li.grade] ??= []).push(li.id);
-    return acc;
-  }, {});
-  show("observed", byGrade.observed ?? []);
-  show("inferred", byGrade.inferred ?? []);
-  assert((byGrade.observed ?? []).length > 0, "no observed leak fired — the 'left alone' half proves nothing");
-  assert((byGrade.inferred ?? []).length > 0, "no inferred leak fired — the 'hedged' half proves nothing");
-});
-
-check("E2 · RUNTIME — a flat claim on an INFERRED finding is softened before it renders", () => {
-  const flat = baseReport();
-  const inferredIdx = flat.findings.findIndex((f) => f.evidenceGrade === "inferred");
-  assert(inferredIdx >= 0, "the fixture has no inferred finding to deform");
-  const before = "You receive no follow-up on a quote, and your team does not return calls after five.";
-  flat.findings = flat.findings.map((f, i) => (i === inferredIdx ? { ...f, problem: before } : f));
-  const after = enforceColdAuditLaws(flat).findings[inferredIdx].problem;
-  show("grade ", flat.findings[inferredIdx].evidenceGrade);
-  show("before", before);
-  show("after ", after);
-  assert.notEqual(after, before, "a flat operational assertion about an unmeasured business rendered untouched");
-  assert.equal(
-    flatAssertionLint(after, { grade: "inferred" }).hits.length,
-    0,
-    "the softened sentence still asserts an internal behaviour as fact"
-  );
-});
-
-check("E3 · RUNTIME — an OBSERVED finding is left alone (hedging a measurement is the other failure)", () => {
-  const measured = baseReport();
-  const observedIdx = measured.findings.findIndex((f) => f.evidenceGrade === "observed");
-  assert(observedIdx >= 0, "the fixture has no observed finding");
-  const before = measured.findings[observedIdx].problem;
-  const after = enforceColdAuditLaws(measured).findings[observedIdx].problem;
-  show("grade ", measured.findings[observedIdx].evidenceGrade);
-  show("before", before);
-  show("after ", after);
-  assert.equal(after, before, "a measured finding was hedged — the whole document then reads as guesswork");
-});
-
-check("E4 · RUNTIME — every finding on the rendered DOCUMENT passes the lint at its own grade", () => {
-  for (const f of enforced.findings) {
-    const grade = f.evidenceGrade ?? "inferred";
-    for (const [field, text] of [
-      ["problem", f.problem],
-      ["whyItCosts", f.whyItCosts],
-    ] as const) {
-      if (!text?.trim()) continue;
-      const lint = flatAssertionLint(text, { grade });
-      show(`${grade} · ${f.title.slice(0, 42)}… (${field})`, lint.ok ? "clean" : lint.hits[0]);
-      assert(lint.ok, `"${lint.hits[0]}" on a ${grade} finding`);
-    }
-  }
-});
-
-check("E5 · RUNTIME+SOURCE — the TEASER renders the same enforced prose, and says so per finding", () => {
-  // The teaser calls the same enforceColdAuditLaws (proved at D4b), so E2–E4 hold
-  // there by construction — the page never sees an unsoftened sentence. What the
-  // page adds on top is the per-finding admission, and that IS page-local, so it
-  // is checked here at source level.
-  const stamps = [
-    'stamp: "Pattern — we have not measured yours"',
-    "We have not measured this at ",
-    "Measured — ",
-  ];
-  for (const s of stamps) {
-    show("teaser carries", `"${s}"`);
-    assert(teaserSource.includes(s), `${TEASER_PAGE} no longer carries the evidence stamp "${s}"`);
-  }
-  // "disclosed" is unreachable on this page (D4 throws first) and is mapped onto
-  // the INFERRED treatment anyway, so a future hole fails towards under-claiming
-  // rather than towards a "you told us…" sentence about a conversation that
-  // never happened.
-  assert(
-    /grade === "inferred" \|\| grade === "disclosed"/.test(teaserSource),
-    `${TEASER_PAGE} no longer maps a disclosed grade onto the unmeasured treatment`
-  );
-  // And the document's own equivalent: a per-finding provenance line.
-  assert(
-    documentVisible.includes("Industry pattern — not measured for you"),
-    "the document dropped the per-finding provenance line for inferred findings"
-  );
-  assert(
-    /Measured on your public pages/.test(documentVisible),
-    "the document dropped the per-finding measurement citation for observed findings"
-  );
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * F · EVERY DOLLAR FIGURE READS AS A BENCHMARK
- * ────────────────────────────────────────────────────────────────────── */
-section("F · MONEY ON THE AUDIT — benchmark-derived, over a labelled assumption, in the same breath");
-
-/** Wording that tells the reader a figure is an estimate over an assumption. Same
- *  set the renderer's backstop uses, read from the same constant. */
-const BENCHMARK_MARKERS: RegExp[] = [
-  new RegExp(ASSUMPTION_CAVEAT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-  /\bassum(e|es|ing|ption)\b/i,
-  /\bbenchmark\b/i,
-  /\bindustry (average|rate|figure|number|estimate)\b/i,
-  /\bestimate[ds]?\b/i,
-];
-
-check("F1 · RUNTIME — a bare figure gets the benchmark label appended, in the same block", () => {
-  const bare = baseReport();
-  bare.headlineCost = `Missed calls are costing you around ${cad(1290)} a month.`;
-  const out = enforceColdAuditLaws(bare);
-  show("model wrote", bare.headlineCost);
-  show("shipped    ", out.headlineCost);
-  assert(out.headlineCost.includes(BENCHMARK_FIGURE_LABEL), "a bare dollar figure shipped with nothing qualifying it");
-  assert(
-    BENCHMARK_MARKERS.some((re) => re.test(out.headlineCost)),
-    "the labelled figure still does not read as an estimate"
-  );
-});
-
-check("F2 · RUNTIME — the label is idempotent (running the enforcer twice does not stack it)", () => {
-  const bare = baseReport();
-  bare.headlineCost = `Missed calls are costing you around ${cad(1290)} a month.`;
-  const once = enforceColdAuditLaws(bare);
-  const twice = enforceColdAuditLaws(once);
-  show("once ", `${once.headlineCost.length} chars`);
-  show("twice", `${twice.headlineCost.length} chars`);
-  assert.equal(twice.headlineCost, once.headlineCost, "the benchmark label stacked on a second pass");
-});
-
-check("F3 · RUNTIME — a governed math frame is left ALONE (it already labels itself)", () => {
-  const governed = baseReport();
-  governed.headlineCost =
-    `Missed calls: about ${cad(860)} a month in paid-for demand going unanswered, assuming 20 enquiries a month ` +
-    `(${ASSUMPTION_CAVEAT}) — benchmark figures, not your books.`;
-  const out = enforceColdAuditLaws(governed);
-  show("in ", governed.headlineCost);
-  show("out", out.headlineCost);
-  assert.equal(out.headlineCost, governed.headlineCost, "the backstop re-labelled a frame that already labels itself");
-});
-
-check("F4 · RUNTIME — EVERY dollar-bearing block on the document says what kind of number it is", () => {
-  // THE GRANULARITY IS THE BLOCK, NOT THE SENTENCE, and that is the honest
-  // statement of the law rather than a weaker one. A governed math frame labels
-  // itself IN the sentence ("assuming 20 enquiries a month (our assumption…)").
-  // A bare figure the model typed gets BENCHMARK_FIGURE_LABEL appended as the
-  // next sentence — same paragraph, same box on the page, directly under the
-  // reader's eye. Both are "beside the number"; only a footnote somewhere else
-  // in the document would not be, and there is no such thing here. So the sweep
-  // asks the question the reader's eye asks: does the block I am looking at tell
-  // me this is an estimate?
-  // Run against a document deliberately STUFFED with money, in every slot a
-  // figure can legitimately reach: the headline block (a governed frame that
-  // labels itself), a finding's problem (a bare figure the backstop must label),
-  // and a finding's cost line (an already-labelled one). A version of this check
-  // run against the baseline document is vacuous — it quotes no figures at all —
-  // so the fixture is loaded on purpose and the count is asserted below.
-  const moneyed = baseReport();
-  moneyed.headlineCost =
-    `Missed calls: about ${cad(860)} a month in paid-for demand going unanswered, assuming 20 enquiries a month ` +
-    `(${ASSUMPTION_CAVEAT}) — benchmark figures, not your books.`;
-  moneyed.findings = moneyed.findings.map((f, i) =>
-    i === 0
-      ? {
-          ...f,
-          problem: `${f.problem} At the trade benchmark that is roughly ${cad(430)} a month.`,
-          whyItCosts: `Every one of those is ${cad(215)} of demand you already paid for.`,
-        }
-      : f
-  );
-  const out = enforceColdAuditLaws(moneyed);
-  const moneyBlocks = auditPassages(out).filter((p) => /\$\s?\d/.test(p.text));
-  const unlabelled = moneyBlocks
-    .filter((p) => !BENCHMARK_MARKERS.some((re) => re.test(p.text)))
-    .map((p) => `${p.where}: "${p.text}"`);
-  // How far the label sits from the figure, in characters, worst case. A number
-  // in the hundreds means "same paragraph"; a footnote would be thousands away.
-  const worstGap = Math.max(
-    ...moneyBlocks.map((p) => {
-      const fig = p.text.search(/\$\s?\d/);
-      const marker = Math.min(
-        ...BENCHMARK_MARKERS.map((re) => {
-          const m = re.exec(p.text);
-          return m ? Math.abs(m.index - fig) : Number.POSITIVE_INFINITY;
-        })
-      );
-      return marker;
-    })
-  );
-  show("dollar-bearing blocks", moneyBlocks.map((p) => p.where));
-  show("sample               ", moneyBlocks[0]?.text ?? "(none)");
-  show("unlabelled           ", unlabelled);
-  show("worst figure→label gap", `${worstGap} characters`);
-  assert(moneyBlocks.length >= 3, "the money fixture did not produce figures — this check would be vacuous");
-  assert.deepEqual(unlabelled, [], "a figure on a cold audit reads as a measurement of their books");
-  assert(
-    worstGap < 400,
-    `the qualifying wording sits ${worstGap} characters from its figure — that is a footnote, not a label`
-  );
-  // And the same sweep over the BASELINE document, which quotes nothing: the rule
-  // is "no unlabelled figure", not "there must be a figure". A spend-anchored
-  // audit with no figure at all is the correct pre-intake shape.
-  const baselineUnlabelled = auditPassages(enforced)
-    .filter((p) => /\$\s?\d/.test(p.text) && !BENCHMARK_MARKERS.some((re) => re.test(p.text)))
-    .map((p) => p.where);
-  assert.deepEqual(baselineUnlabelled, [], "the spend-anchored baseline document quotes an unlabelled figure");
-});
-
-check("F5 · RUNTIME — a figure on the document sets the eyebrow to 'industry estimate'", () => {
-  const withFigure = baseReport();
-  withFigure.headlineCost = `Missed calls are costing you around ${cad(1290)} a month.`;
-  const html = visibleText(renderColdAuditHtml(withFigure));
-  const withoutFigure = visibleText(renderColdAuditHtml(baseReport()));
-  show("with a figure   ", /Your single biggest leak · industry estimate/.test(html));
-  show("without a figure", /Your single biggest leak(?! · industry estimate)/.test(withoutFigure));
-  assert(
-    html.includes("Your single biggest leak · industry estimate"),
-    "the figure renders with no eyebrow saying what kind of number it is"
-  );
-  assert(
-    !withoutFigure.includes("industry estimate"),
-    "the estimate eyebrow renders on a document that quotes no figure"
-  );
-});
-
-check("F6 · RUNTIME — the money law holds INSIDE the audit: no bare '$' the prospect can see", () => {
-  const withFigure = baseReport();
-  withFigure.headlineCost = `Missed calls: about ${cad(1290)} a month, ${ASSUMPTION_CAVEAT}.`;
-  const bare = bareDollarFigures(visibleText(renderColdAuditHtml(withFigure)));
-  show("figures on the page", (visibleText(renderColdAuditHtml(withFigure)).match(/CAD \$[\d,]+/g) ?? []).join(", "));
-  show("bare figures       ", bare);
-  assert.deepEqual(bare, [], "a bare dollar figure reached the audit — 'CAD' goes BEFORE the figure, everywhere");
-});
-
-/* ──────────────────────────────────────────────────────────────────────────
- * G · NOTHING RECOMMENDS TRAFFIC WORK OR A WEBSITE REBUILD
- * ────────────────────────────────────────────────────────────────────── */
-section("G · SCOPE — we fix conversion of demand that already exists, and we do not build websites");
-
-check("G1 · RUNTIME — the clean document contains ZERO out-of-scope recommendations", () => {
-  const hits = scopeViolations(enforced);
-  show("passages scanned", auditPassages(enforced).length);
-  show("hits            ", hits);
-  assert.deepEqual(hits, [], "the baseline document already recommends work we do not sell");
-  assert.deepEqual(outOfScopeHits(documentVisible), [], "the RENDERED page carries an out-of-scope recommendation");
-});
-
-check("G2 · RUNTIME — a prescription is lifted out sentence by sentence, and the rest survives", () => {
-  const straying = baseReport();
-  const keep = "Neither the site nor the Google profile carries a booking link.";
-  const drop = "You should invest in SEO and redesign your website to fix it.";
-  straying.findings = straying.findings.map((f, i) =>
-    i === 0 ? { ...f, problem: `${keep} ${drop}` } : f
-  );
-  const out = enforceColdAuditLaws(straying);
-  show("in ", `${keep} ${drop}`);
-  show("out", out.findings[0].problem);
-  assert(out.findings[0].problem.includes(keep), "the sweep took the good sentence with the bad one");
-  assert(!out.findings[0].problem.includes("invest in SEO"), "an SEO recommendation reached the page");
-  assert(!/redesign your website/i.test(out.findings[0].problem), "a rebuild recommendation reached the page");
-});
-
-check("G3 · RUNTIME — the ESCAPE HATCH: a document is never emptied of findings", () => {
-  // Every problem statement is a recommendation we do not make. Stripping them
-  // all would leave a "findings" heading with nothing under it. A cold audit with
-  // a bad sentence in it is recoverable at 11pm; one with no findings is not a
-  // document, so the findings stay and the operator sees the problem.
-  const allBad = baseReport();
-  allBad.findings = allBad.findings.map((f) => ({
-    ...f,
-    problem: "You should run Google Ads and rebuild the website.",
-  }));
-  const out = enforceColdAuditLaws(allBad);
-  show("findings in ", allBad.findings.length);
-  show("findings out", out.findings.length);
-  assert.equal(out.findings.length, allBad.findings.length, "the sweep emptied the document of findings");
-});
-
-check("G4 · RUNTIME — a NEGATED mention survives, because it is his best line", () => {
-  const negations = [
-    "We do not need a new website.",
-    "It does not cover how to get more enquiries, which is out of scope for this engagement by design.",
-    "This is not a website redesign.",
-    "We never rebuild your site.",
-  ];
-  for (const s of negations) {
-    show("survives", `"${s}"`);
-    assert.deepEqual(
-      outOfScopeHits(s),
-      [],
-      `"${s}" was flagged as out of scope — it is the sentence that stops a prospect reading this as a web-design pitch`
-    );
-  }
-});
-
-check("G5 · RUNTIME — the prescriptions that MUST be caught, one shape at a time", () => {
-  const prescriptions = [
-    "You should invest in SEO to fix this.",
-    "Consider running Google Ads to bring in more leads.",
-    "You need to drive more traffic to the site.",
-    "Redesign your website so it converts.",
-    "A new website would solve this.",
-    "This will help you rank higher on Google.",
-  ];
-  for (const s of prescriptions) {
-    const hits = outOfScopeHits(s);
-    show("caught", `"${s}" → ${hits.length}`);
-    assert.equal(hits.length, 1, `"${s}" was not caught by the scope sweep`);
-  }
-});
-
-check("G6 · RUNTIME — a header that strays is REPLACED, not trimmed to nothing", () => {
-  const strayHeader = baseReport();
-  strayHeader.headline = "Rebuild your website and rank higher on Google";
-  strayHeader.intro = "You need to drive more traffic to this page.";
-  const out = enforceColdAuditLaws(strayHeader);
-  show("headline out", out.headline);
-  show("intro out   ", out.intro);
-  assert(out.headline.includes("Harbourline Air"), "the replacement headline lost the business name");
-  assert.deepEqual(outOfScopeHits(out.headline), [], "the headline still strays");
-  assert.deepEqual(outOfScopeHits(out.intro), [], "the intro still strays");
-  assert(out.intro.trim().length > 0, "the intro was emptied rather than replaced");
-});
+/* ════════════════════════════════════════════════════════════════════════════
+ * A–G — DELETED 2026-08-01, WITH THEIR SURFACE.
+ *
+ * A (the outside/inside frame), B (the six pivot phrases as one set of strings),
+ * C (one CTA, counted on the markup, both branches via a child probe), D (the
+ * pre-sale disclosure gates on the audit pipeline), E (evidence voice on both
+ * artifacts), F (benchmark labelling on every audit dollar figure) and G (the
+ * scope sweep on the audit) all asserted on the cold audit and its public
+ * teaser. Both are deleted by ruling; a check whose surface is gone is a check
+ * that can only rot. Where a law they enforced outlives the audit, it is
+ * enforced elsewhere on the survivor:
+ *   · pre-sale cannot carry intake      → verify-phase1 D (against the union and
+ *                                          the observed-facts row)
+ *   · interpretive leaks stay barred    → verify-fabrication A, and I2 below
+ *   · tier-aware voice / money laws     → verify-phase05 (paid pack), H/J here
+ *   · scope discipline on the pack      → validate-pack, exercised in
+ *                                          verify-fabrication B5
+ * ══════════════════════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────────────────────────────────
  * H · THE MONEY LAW ON THE PUBLIC PROPOSAL PAGE
@@ -1298,6 +342,15 @@ function docTableRows(): string[][] {
 }
 const docRows = docTableRows();
 
+/* THE STALE-DOC LEDGER IS CLOSED (2026-08-01). This file used to carry
+ * STALE_DOC_CLAIMS — four recorded, bounded exemptions where the doc still held
+ * sentences the code had outgrown (the weak_landing_cta row, the "none have no
+ * evidence source" conclusion, and the three fixture-figure rows), each with its
+ * exact replacement, plus I7 to keep the ledger honest. The doc has now been
+ * edited: the recorded replacements are IN, the cold-audit claims are OUT, and
+ * the fixture figures below are asserted byte-for-byte with no exemption
+ * branch. A new mismatch is drift and fails I5 outright. */
+
 check("I1 · the twelve intake questions in the doc ARE intakeFieldsForZeroInferred()", () => {
   const fields = intakeFieldsForZeroInferred();
   // The doc's question table is the one whose rows carry a backticked field name
@@ -1320,7 +373,84 @@ check("I1 · the twelve intake questions in the doc ARE intakeFieldsForZeroInfer
   });
 });
 
-check("I2 · the doc's 'no question asked' list IS the taxonomy's, and every one of them is MEASURED", () => {
+/**
+ * I2 · WHAT CHANGED HERE, AND WHY THE OLD ASSERTION HAD TO GO.
+ *
+ * This check used to assert one thing about every in-scope leak with no intake
+ * question: `evidenceClass === "OBSERVED"`. Its reasoning was the doc's — nothing
+ * is left with NO evidence source, because a leak nobody is asked about is a leak
+ * we measure ourselves. That was true of the code as it stood, and the code was
+ * wrong: `weak_landing_cta` was declared OBSERVED and "measured" by a thirteen-
+ * phrase regex over 1500 characters of markdown, which is how a law firm with a
+ * tappable number in its header received "your phone number is buried" under the
+ * words "Measured on your public pages".
+ *
+ * The leak is now classified INTERPRETIVE, so the old assertion fails — CORRECTLY.
+ * Weakening it to "OBSERVED or INTERPRETIVE" would prove nothing at all, so the
+ * replacement is strictly STRONGER: a question-less in-scope leak is either
+ * something we measure (OBSERVED class, HARD checkability), or it is INTERPRETIVE,
+ * and then FIVE structural consequences are asserted one at a time — the grade
+ * ceiling, the most-provable-pool exclusion (targets AND selector output), the
+ * advisory routing, and the absence of any pre-sale detectLeaks caller at all.
+ * The old check proved one field on one leak; this proves the whole blast
+ * radius, on a fixture where the leak actually FIRES.
+ *
+ * ONE CONSEQUENCE CHANGED SHAPE ON 2026-08-01. detectLeaks used to DROP
+ * interpretive fires in pre_sale mode at runtime; that branch policed the free
+ * cold-audit generator and was deleted with it (detectLeaks is mode-blind now —
+ * its own doc comment says so). The surviving guarantee is structural instead:
+ * NO pre-sale surface calls detectLeaks at all — the observed-facts row reads
+ * toScrapeData directly and composes no findings — and that is asserted here at
+ * SOURCE level, so the day somebody adds a pre-sale detectLeaks call site this
+ * check names the file.
+ */
+
+/** A scrape shaped so `weak_landing_cta` genuinely fires: identical to the cold
+ *  fixture above except the phone number is TYPED OUT rather than linked, so
+ *  `/href=["']tel:/i` finds nothing and `hasClickToCallOnMobile` resolves ABSENT.
+ *
+ *  It exists so I2 is not vacuous. Asserting "the interpretive leak never reaches
+ *  a pre-sale document" against data where it never fires in the first place is
+ *  the shape of check that passes forever and guards nothing. */
+const NO_TEL_HTML = COLD_HTML.replace(
+  '<a class="btn" href="tel:+19025550117">902-555-0117</a>',
+  "<span class=\"phone\">902-555-0117</span>"
+);
+
+const NO_TEL_SCRAPE: FirecrawlScrape = {
+  used: true,
+  homepage: {
+    ...COLD_SCRAPE.homepage!,
+    html: NO_TEL_HTML,
+    rawHtml: NO_TEL_HTML,
+  },
+  subpages: [],
+};
+
+const NO_TEL_BUSINESS = {
+  name: "Harbourline Air",
+  industry: "HVAC",
+  category: "HVAC contractor",
+  city: "Dartmouth",
+  phone: "902-555-0117",
+  website: "https://harbourline-air.example",
+  rating: 4.3,
+  reviewCount: 38,
+};
+
+const NO_TEL_INTEL: AuditIntelligence = buildAuditIntelligence({
+  websiteHtml: NO_TEL_HTML,
+  hasWebsiteUrl: true,
+  reviews: [],
+  competitors: [],
+  self: { rating: 4.3, reviewCount: 38 },
+  verifiedFacts: null,
+  performance: null,
+  dataForSeo: null,
+  screenshots: null,
+});
+
+check("I2 · a question-less leak is MEASURED, or it is INTERPRETIVE and barred from every pre-sale surface", () => {
   const noAsk = LEAKS.filter((l) => !l.intakeAsk);
   const inScope = noAsk.filter((l) => l.scope !== "out_of_scope");
   show("leaks with no intake question", noAsk.map((l) => l.id));
@@ -1331,21 +461,94 @@ check("I2 · the doc's 'no question asked' list IS the taxonomy's, and every one
       `${DOC_PATH} does not mention "${l.id}", which has no intake question behind it — the owner would not know it exists`
     );
   }
-  // The claim the document makes out loud: nothing is left with NO evidence
-  // source. That is only true because every question-less in-scope leak is one
-  // we measure ourselves.
+
+  // The detection the interpretive half is proved against: the cold fixture's
+  // site with the phone number TYPED OUT rather than linked, so the leak
+  // genuinely fires. detectLeaks is mode-blind since 2026-08-01 (the pre-sale
+  // drop died with the audit generator), so ONE detection serves: what matters
+  // is where a fire is ROUTED, plus consequence 5's proof that no pre-sale
+  // caller exists to receive it.
+  const fires = detectLeaks({
+    mode: "post_intake",
+    business: NO_TEL_BUSINESS,
+    intel: NO_TEL_INTEL,
+    scrape: NO_TEL_SCRAPE,
+    asOf: SCAN_DATE,
+  });
+  show("no-tel scrape · hasClickToCallOnMobile", fires.data.website?.hasClickToCallOnMobile);
+  assert.equal(
+    fires.data.website?.hasClickToCallOnMobile,
+    "ABSENT",
+    "the no-tel fixture still fingerprints a tel: link — the interpretive half of this check would be vacuous"
+  );
+
+  // 5 (proved once, not per leak) · SOURCE — no pre-sale surface calls
+  // detectLeaks at all. The one pre-sale consumer of the adapter is the
+  // observed-facts row, which reads toScrapeData directly and composes no
+  // findings; every detectLeaks call site in src/ is a post-intake surface.
+  const srcFiles = allSrcFiles();
+  const preSaleCallers = srcFiles.filter((rel) => {
+    const code = codeOnly(rel);
+    const i = code.indexOf("detectLeaks({");
+    if (i < 0) return false;
+    // A call site that passes the pre_sale discriminator anywhere in the file.
+    return /detectLeaks\(\s*\{[^}]*mode:\s*"pre_sale"/.test(code);
+  });
+  show("src files calling detectLeaks", srcFiles.filter((rel) => codeOnly(rel).includes("detectLeaks(")).length);
+  show("of those, pre-sale call sites", preSaleCallers.length ? preSaleCallers : "(none)");
+  assert.deepEqual(
+    preSaleCallers,
+    [],
+    `a PRE-SALE detectLeaks call site exists again: ${preSaleCallers.join(", ")}. detectLeaks no longer drops ` +
+      "interpretive fires at runtime (that branch died with the cold audit), so a pre-sale caller would put a " +
+      "judgment about a rendered page in front of a prospect with nothing left to stop it."
+  );
+
+  const interpretive: string[] = [];
   for (const l of inScope) {
+    if (l.checkability === "INTERPRETIVE") {
+      interpretive.push(l.id);
+      // 1 · the grade ceiling: OBSERVED tier cannot buy the "measured" label.
+      const graded = gradeOf({ tier: "OBSERVED", leak: l });
+      show(`${l.id} · gradeOf(tier OBSERVED)`, graded);
+      assert.notEqual(graded, "observed", `"${l.id}" can still be graded observed — that label prints "Measured on your public pages"`);
+      // 2 · the leak is not in the most-provable (cold_audit-target) pool — the
+      //     pool a pre-sale-shaped detection may fill, which is why an
+      //     interpretive leak can never be listed in it.
+      show(`${l.id} · deliverableTargets`, l.deliverableTargets);
+      assert(
+        !l.deliverableTargets.includes("cold_audit"),
+        `"${l.id}" is still routed to the pre-sale-capable cold_audit pool — a judgment about a rendered page has no place there`
+      );
+      // 3 · it fires (non-vacuity) …
+      const fired = fires.fired.some((f) => f.leak.id === l.id);
+      show(`${l.id} · fires on the no-tel fixture`, fired);
+      assert(fired, `"${l.id}" does not fire even on the no-tel fixture — nothing below is being tested`);
+      // 4 · … and it is nowhere near the most-provable selection.
+      assert(
+        !fires.coldAudit.some((f) => f.leak.id === l.id),
+        `"${l.id}" reached selectColdAudit's output — the most-provable selection the paid pack threads through as pre-call context`
+      );
+      // 5 · it routes to the advisory surface instead of being dropped silently.
+      assert(
+        fires.advisoryOnly.some((f) => f.leak.id === l.id),
+        `"${l.id}" is filtered out of the findings and does NOT appear on the advisory surface — the leak has been silently deleted rather than reclassified`
+      );
+      continue;
+    }
     assert.equal(
       l.evidenceClass,
       "OBSERVED",
-      `"${l.id}" has no intake question AND is not something we observe — the doc's claim that no leak is left without an evidence source is now false`
+      `"${l.id}" has no intake question, is not INTERPRETIVE, and is not something we observe — it now has no evidence source at all`
+    );
+    assert.equal(
+      l.checkability,
+      "HARD",
+      `"${l.id}" claims to be observable but its checkability is not HARD`
     );
   }
-  assert(
-    doc.includes("the answer to “which leaks still have no evidence source” is: none") ||
-      doc.includes("is: none"),
-    "the doc no longer states the conclusion this check verifies"
-  );
+  show("interpretive, therefore never measured", interpretive);
+  show("advisory-only fires on the no-tel scan  ", fires.advisoryOnly.map((f) => f.leak.id));
 });
 
 check("I3 · the 60-day mapping printed in the doc IS NURTURE_SEQUENCE, step for step", () => {
@@ -1412,16 +615,15 @@ check("I5 · the three fixture clients described in the doc are the ones on disk
     const leaks = pack.intelligence?.leakAnalysis ?? [];
     const count = (g: string) => leaks.filter((l) => (l.evidenceGrade ?? "inferred") === g).length;
     show(d, `${leaks.length} leaks · observed ${count("observed")} · disclosed ${count("disclosed")} · inferred ${count("inferred")}`);
-    // Byte-for-byte against the sentence the owner reads. No fallback branch: a
-    // check that passes when EITHER the leak count OR the grade split matches is
-    // a check that goes quiet exactly when the two disagree.
+    // Byte-for-byte against the sentence the owner reads, with NO exemption
+    // branch: the stale-doc ledger this check used to consult is closed, so a
+    // mismatch here is drift — re-run npm run fixtures:clients, then update the
+    // table in section 4 of the doc.
+    const sentence = `${leaks.length} leaks: **${count("observed")} observed, ${count("disclosed")} disclosed, ${count("inferred")} inferred**`;
     assert(
-      doc.includes(
-        `${leaks.length} leaks: **${count("observed")} observed, ${count("disclosed")} disclosed, ${count("inferred")} inferred**`
-      ),
-      `${DOC_PATH} quotes different figures for "${d}" than the committed pack carries ` +
-        `(pack: ${leaks.length} leaks, ${count("observed")}/${count("disclosed")}/${count("inferred")}). ` +
-        "Re-run npm run fixtures:clients, then update the table in section 4."
+      doc.includes(sentence),
+      `${DOC_PATH} does not quote "${sentence}" for "${d}". The committed pack and the doc's section-4 table disagree — ` +
+        "one of them changed without the other."
     );
     // The pre-sale client is the one claim in the doc that is a promise rather
     // than a description, so it is asserted rather than merely quoted.
@@ -1435,66 +637,15 @@ check("I5 · the three fixture clients described in the doc are the ones on disk
   }
 });
 
-check("I6 · sections A–G hold on the COMMITTED fixture cold audits, not only on this file's fixture", () => {
-  // The loop closed. Everything above runs against a report built in this file,
-  // which is a fair test of the code but not of the artifacts. These are the
-  // documents `npm run fixtures:clients` actually wrote to disk — the ones a
-  // reader opens — and the whole of Phase 4 is re-asserted on their rendered
-  // markup. If a fixture is regenerated with a different shape, this fails.
-  const dirs = [
-    "01-pre-sale-cedar-ridge-plumbing",
-    "02-full-intake-harbourline-electric",
-    "03-toggled-pinecrest-roofing",
-  ];
-  for (const d of dirs) {
-    const html = read(`_fixtures/clients/${d}/00-cold-audit.html`);
-    const visible = visibleText(html);
-    const stored = JSON.parse(read(`_fixtures/clients/${d}/cold-audit.json`)) as ColdAuditReport;
-    const counts = countCallsToAction(html);
-    const money = bareDollarFigures(visible);
-    show(
-      d,
-      `findings ${stored.findings.length} · links ${counts.links} · secondary asks ${counts.secondaryAsks.length} · bare $ ${money.length}`
-    );
+// I6 — DELETED 2026-08-01. It re-asserted old sections A–G on the COMMITTED
+// fixture cold audits (00-cold-audit.html / cold-audit.json). Those artifacts
+// are deleted with their surface; the committed PACKS get the equivalent
+// treatment in verify-fabrication B5/C7/E1, which run the full validator and
+// the claim scans over every pack document on disk.
 
-    // A — the frame, before any finding.
-    assert(visible.includes(OUTSIDE_INSIDE_FRAME.lead), `${d}: the outside/inside frame is not on the page`);
-    assert(
-      visible.indexOf(OUTSIDE_INSIDE_FRAME.lead) < visible.indexOf(stored.findings[0].title),
-      `${d}: a finding lands before the frame`
-    );
-    // B — the six, verbatim.
-    for (const phrase of PIVOT_LEAK_PHRASES)
-      assert(visible.includes(phrase), `${d}: "${phrase}" is not on the page`);
-    // C — one ask. BOOKING_URL is unset in this repo, so the correct link count
-    // here is zero; the configured branch is proved by the child probe at C2.
-    assert.equal(counts.links, BOOKING_URL ? 1 : 0, `${d}: wrong number of links on the page`);
-    assert.deepEqual(counts.secondaryAsks, [], `${d}: the page offers a second way to respond`);
-    // D — nothing disclosed, on a document emailed before the Zoom. Note this
-    // holds for the two clients who HAVE filled in the intake form: their audit
-    // is written from a separate pre-sale detection.
-    assert(
-      !stored.findings.some((f) => f.evidenceGrade === "disclosed"),
-      `${d}: the cold audit carries a disclosed finding`
-    );
-    // E — voice matches grade, per finding.
-    for (const f of stored.findings) {
-      const grade = f.evidenceGrade ?? "inferred";
-      for (const text of [f.problem, f.whyItCosts]) {
-        if (!text?.trim()) continue;
-        const lint = flatAssertionLint(text, { grade });
-        assert(lint.ok, `${d}: "${lint.hits[0]}" on a ${grade} finding`);
-      }
-    }
-    // F — the money law inside the audit.
-    assert.deepEqual(money, [], `${d}: a bare dollar figure reached the audit`);
-    // G — nothing recommends work we do not sell.
-    assert.deepEqual(scopeViolations(stored), [], `${d}: the stored audit carries an out-of-scope recommendation`);
-    assert.deepEqual(outOfScopeHits(visible), [], `${d}: the rendered page carries an out-of-scope recommendation`);
-    // And the whole pre-sale gate, on the artifact.
-    assert.equal(validateColdAudit(stored, html).fails, 0, `${d}: the written cold audit does not pass its own gate`);
-  }
-});
+// I7 — DELETED 2026-08-01 with the ledger it audited. Every recorded stale
+// claim was applied to the doc as part of the cold-audit deletion, so the
+// exemptions are closed and I5 above runs with no escape branch.
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 
@@ -1532,7 +683,8 @@ check("J1 · every rendered dollar figure a prospect can see carries the CAD mar
   // price beside an audit figure — the exact place a mismatch is noticed.
   const FILES = [
     "src/components/proposals/PublicProposal.tsx",
-    "src/app/a/[publicId]/page.tsx",
+    // src/app/a/[publicId]/page.tsx was scanned here until the teaser was
+    // deleted with the cold audit (2026-08-01).
     "src/app/(dashboard)/proposals/page.tsx",
     "src/app/(dashboard)/library/page.tsx",
     "src/app/(dashboard)/businesses/[id]/page.tsx",
@@ -1624,9 +776,10 @@ check("J2 · the scan is not vacuous — it CATCHES an unmarked figure", () => {
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
   console.log(
-    "\nThis suite is the Phase 4 acceptance test: the cold audit earns the right to ask questions and\n" +
-      "hands off. A failure here means a document is back to trying to close somebody, or is claiming\n" +
-      "something we cannot stand behind in front of the owner.\n"
+    "\nThis suite is the Phase 4 acceptance test on the SURVIVING surfaces: the public proposal\n" +
+      "carries the money law everywhere a prospect can see, and docs/final-verification.md says\n" +
+      "nothing the code has outgrown. A failure here means a prospect-facing page or the owner's\n" +
+      "own document is claiming something we cannot stand behind.\n"
   );
   process.exit(1);
 }

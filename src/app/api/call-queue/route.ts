@@ -1,8 +1,9 @@
 // Daily Call Queue API.
 //
 //  GET  — today's callable list. Reuses the existing Business model (= "Lead") and
-//         its enrichment (rating/reviews + latest COLD_AUDIT findings) for inline
-//         talking points. Filters/sorts/caps in JS (mirrors /api/assets/library).
+//         its enrichment (rating/reviews) plus the four observed pre-dial values
+//         for inline talking points. Filters/sorts/caps in JS (mirrors
+//         /api/assets/library).
 //
 //  POST — log one call disposition. ONE click → ONE transaction: append a CallLog
 //         attempt + advance the lead per the deterministic mapping in call-queue.ts.
@@ -21,26 +22,14 @@ import {
   type Disposition,
   type DispositionPatch,
 } from "@/lib/call-queue";
-import type { ColdAuditReport } from "@/types";
+// The audit peek this route used to compute off the latest COLD_AUDIT row was
+// replaced by the observed-facts row when the cold audit was deleted (owner
+// ruling, 2026-08-01). Computed HERE, server-side, off the snapshot columns the
+// row already carries — only the small ObservedFacts object ships; the multi-MB
+// snapshots never reach the client.
+import { observedFactsFor } from "@/lib/observed-facts";
 
 export const dynamic = "force-dynamic";
-
-// Extract a compact talking-point peek from the latest COLD_AUDIT content JSON.
-function auditPeek(content: unknown): {
-  topLeak: string | null;
-  headlineCost: string | null;
-  mobileScore: number | null;
-} {
-  const r = content as Partial<ColdAuditReport> | null | undefined;
-  if (!r || typeof r !== "object") {
-    return { topLeak: null, headlineCost: null, mobileScore: null };
-  }
-  return {
-    topLeak: r.findings?.[0]?.title ?? null,
-    headlineCost: r.headlineCost ?? null,
-    mobileScore: r.performance?.mobileScore ?? null,
-  };
-}
 
 // Which slice of the queue to return:
 //   today    — due now (the callable list): default.
@@ -92,12 +81,6 @@ export async function GET(req: Request) {
   const businesses = await prisma.business.findMany({
     where: { userId: session.user.id, deletedAt: null },
     include: {
-      generatedSystems: {
-        where: { type: "COLD_AUDIT", deletedAt: null },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { content: true },
-      },
       callLogs: {
         where: { deletedAt: null },
         orderBy: { calledAt: "desc" },
@@ -150,7 +133,6 @@ export async function GET(req: Request) {
   const leads = sorted
     .slice(0, QUEUE_LIMIT)
     .map((b) => {
-      const peek = auditPeek(b.generatedSystems[0]?.content);
       const lastCall = b.callLogs[0];
       return {
         id: b.id,
@@ -168,6 +150,9 @@ export async function GET(req: Request) {
           { status: b.status, nextActionAt: b.nextActionAt, followUpUntil: b.followUpUntil },
           now
         ),
+        // The four pre-dial values, computed after the QUEUE_LIMIT slice so at
+        // most one page of leads pays the (cached, pure-CPU) compute per request.
+        observedFacts: observedFactsFor(b),
         enrichment: {
           rating: b.rating,
           reviewCount: b.reviewCount,
@@ -175,7 +160,6 @@ export async function GET(req: Request) {
           painPoint: b.painPoint,
           outreachAngle: b.outreachAngle,
           ownerName: b.ownerName,
-          ...peek,
         },
         lastCall: lastCall
           ? {

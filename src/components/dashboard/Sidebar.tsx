@@ -13,7 +13,6 @@ import {
   Workflow,
   FileText,
   Library,
-  BookOpen,
   PhoneCall,
   CalendarDays,
   Settings,
@@ -24,9 +23,19 @@ import {
 import { Logo } from "@/components/Logo";
 
 // Neutral "clear" accent used across the sidebar in place of the old blue.
-const SB_BRIGHT = "oklch(0.95 0.004 270)"; // near-white, high clarity
-const SB_ON_BRIGHT = "oklch(0.20 0.004 270)"; // dark text on bright fills
-const SB_ACTIVE_BG = "rgba(255,255,255,0.07)";
+const SB_BRIGHT = "var(--text)"; // strongest ink — near-white in dark, near-black in light
+const SB_ON_BRIGHT = "var(--secondary-foreground)"; // ink for a --secondary bright fill
+
+// SIDEBAR OVERLAY LADDER. The sidebar canvas (--sidebar, #1f1e1d) sits BELOW the
+// card in the surface ladder, so the opaque card tokens (--surface-2 / -hi) are
+// too bright to use as its hover steps — and there are three distinct levels
+// here (resting-emphasised < hover < active) that a single token would collapse.
+// These stay proportional overlays, but of --text rather than literal white, so
+// they invert correctly with the theme instead of being white forever.
+const sbTint = (pct: number) => `color-mix(in oklab, var(--text) ${pct}%, transparent)`;
+const SB_EMPHASIS_BG = sbTint(2.5);
+const SB_HOVER_BG = sbTint(5);
+const SB_ACTIVE_BG = sbTint(7);
 
 type NavItem = {
   id: string;
@@ -56,7 +65,6 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     items: [
       { id: "call-queue", label: "Call Queue", icon: PhoneCall, href: "/call-queue" },
       { id: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
-      { id: "playbook", label: "Sales Playbook", icon: BookOpen, href: "/playbook" },
       { id: "crm", label: "CRM", icon: Workflow, href: "/crm", badgeKey: "pipeline" },
       { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", badgeKey: "proposals" },
     ],
@@ -205,7 +213,7 @@ export function Sidebar({
             transition: "background var(--t), color var(--t)",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+            (e.currentTarget as HTMLElement).style.background = SB_HOVER_BG;
             (e.currentTarget as HTMLElement).style.color = "var(--text)";
           }}
           onMouseLeave={(e) => {
@@ -235,7 +243,7 @@ export function Sidebar({
             style={{
               gap: 10,
               padding: "8px 10px",
-              background: wsOpen ? "rgba(255,255,255,0.05)" : "transparent",
+              background: wsOpen ? SB_HOVER_BG : "transparent",
               border: "1px solid transparent",
               borderRadius: 10,
               cursor: "pointer",
@@ -246,7 +254,7 @@ export function Sidebar({
             }}
             onMouseEnter={(e) => {
               if (!wsOpen)
-                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
+                (e.currentTarget as HTMLElement).style.background = SB_EMPHASIS_BG;
             }}
             onMouseLeave={(e) => {
               if (!wsOpen) (e.currentTarget as HTMLElement).style.background = "transparent";
@@ -298,7 +306,7 @@ export function Sidebar({
                 onClick={() => setWsOpen(false)}
                 style={menuItemStyle}
                 onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")
+                  ((e.currentTarget as HTMLElement).style.background = "var(--surface-2)")
                 }
                 onMouseLeave={(e) =>
                   ((e.currentTarget as HTMLElement).style.background = "transparent")
@@ -310,8 +318,8 @@ export function Sidebar({
                     width: 22,
                     height: 22,
                     borderRadius: 6,
-                    background: "oklch(0.50 0.10 60)",
-                    color: "white",
+                    background: "var(--accent-fill)",
+                    color: "var(--accent-fill-text)",
                     fontSize: 10,
                     fontWeight: 700,
                   }}
@@ -409,7 +417,7 @@ export function Sidebar({
                         background: active
                           ? SB_ACTIVE_BG
                           : emphasized
-                          ? "rgba(255,255,255,0.025)"
+                          ? SB_EMPHASIS_BG
                           : "transparent",
                         color: active || emphasized ? "var(--text)" : "var(--text-2)",
                         borderRadius: 9,
@@ -418,13 +426,13 @@ export function Sidebar({
                       }}
                       onMouseEnter={(e) => {
                         if (!active)
-                          (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                          (e.currentTarget as HTMLElement).style.background = SB_HOVER_BG;
                         (e.currentTarget as HTMLElement).style.color = "var(--text)";
                       }}
                       onMouseLeave={(e) => {
                         if (!active)
                           (e.currentTarget as HTMLElement).style.background = emphasized
-                            ? "rgba(255,255,255,0.025)"
+                            ? SB_EMPHASIS_BG
                             : "transparent";
                         (e.currentTarget as HTMLElement).style.color =
                           active || emphasized ? "var(--text)" : "var(--text-2)";
@@ -517,7 +525,7 @@ export function Sidebar({
             gap: 10,
             width: "100%",
             justifyContent: collapsed ? "center" : "flex-start",
-            background: userOpen ? "rgba(255,255,255,0.04)" : "transparent",
+            background: userOpen ? SB_HOVER_BG : "transparent",
             border: "none",
             borderRadius: 8,
             cursor: "pointer",
@@ -527,7 +535,7 @@ export function Sidebar({
           }}
           onMouseEnter={(e) => {
             if (!userOpen)
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
+              (e.currentTarget as HTMLElement).style.background = SB_EMPHASIS_BG;
           }}
           onMouseLeave={(e) => {
             if (!userOpen) (e.currentTarget as HTMLElement).style.background = "transparent";
@@ -539,11 +547,11 @@ export function Sidebar({
               width: 28,
               height: 28,
               borderRadius: 99,
-              background: "rgba(255,255,255,0.07)",
+              background: SB_ACTIVE_BG,
               color: SB_BRIGHT,
               fontSize: 11,
               fontWeight: 700,
-              border: "1px solid rgba(255,255,255,0.14)",
+              border: "1px solid var(--line)",
             }}
           >
             {initials}
@@ -590,9 +598,9 @@ export function Sidebar({
             <button
               className="flex items-center w-full text-left"
               onClick={() => signOut({ callbackUrl: "/" })}
-              style={{ ...menuItemStyle, color: "var(--danger, #f87171)" }}
+              style={{ ...menuItemStyle, color: "var(--danger)" }}
               onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.10)")
+                ((e.currentTarget as HTMLElement).style.background = "var(--danger-soft)")
               }
               onMouseLeave={(e) =>
                 ((e.currentTarget as HTMLElement).style.background = "transparent")
@@ -670,10 +678,10 @@ function Menu({ children, up }: { children: React.ReactNode; up?: boolean }) {
         left: 0,
         right: 0,
         zIndex: 50,
-        background: "var(--surface, #16181d)",
+        background: "var(--surface)",
         border: "1px solid var(--line)",
         borderRadius: 10,
-        boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
+        boxShadow: "var(--shadow-lg)",
         padding: 5,
         animation: "lg-menu-in 0.12s ease-out",
       }}

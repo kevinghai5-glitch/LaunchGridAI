@@ -11,8 +11,6 @@
 
 import type {
   AssetPack,
-  ColdAuditFinding,
-  ColdAuditReport,
   EvidenceGrade,
   GovernanceBoundary,
   LeakAnalysisItem,
@@ -26,37 +24,15 @@ import {
   flatAssertionLint,
   carriesProvenanceMarker,
   attributesToClient,
+  carriesStatCitation,
+  fabricationLint,
+  neverObservedReason,
   DISCLOSURE_MARKERS,
   ASSUMPTION_CAVEAT,
+  PERCENT_FIGURE,
+  type EvidenceBinding,
+  type FabricationHit,
 } from "../leak-narrative";
-// Whether a booking link exists at all is a matter of CONFIGURATION, not of
-// document quality, and the cold-audit CTA check has to know the difference —
-// see "Close · one booking CTA" below.
-import { BOOKING_URL } from "../constants";
-// ── THE PHASE 4 COLD-AUDIT LAWS LIVE IN THE RENDERER, AND ARE IMPORTED ────────
-// The frame, the six invisible leaks in the owner's own phone words, the section
-// labels and the scope sweep are all STAMPED CONSTANTS in cold-audit-html.ts.
-// They are imported here and never retyped, for the reason Phase 0.5 taught us
-// the hard way: the moment a validator carries its own copy of a sanctioned
-// sentence, the two copies drift and the gate starts failing documents that are
-// correct. One copy, in the file that prints it; this file only reads it back.
-//
-// `enforceColdAuditLaws` and `renderColdAuditHtml` are imported for the same
-// reason: this validator judges THE DOCUMENT A PROSPECT READS, and the only
-// honest way to know what that says is to build it the way every surface does.
-// (No import cycle: cold-audit-html.ts imports the narrative helpers and the
-// constants, and never this file.)
-import {
-  OUTSIDE_INSIDE_FRAME,
-  PIVOT_LEAK_PHRASES,
-  PIVOT_SECTION_LABEL,
-  SCAN_SECTION_LABEL,
-  countCallsToAction,
-  enforceColdAuditLaws,
-  outOfScopeHits,
-  renderColdAuditHtml,
-  scopeViolations,
-} from "./cold-audit-html";
 // THE ONE PIPELINE DEFINITION (E2). The six CRM stages we configure in the
 // client's GoHighLevel sub-account are DATA now, in the same file as the 14
 // workflows, so the validator checks a pack against the same list the deliverables
@@ -173,6 +149,18 @@ const LEADGEN_TERMS = [
   "buy traffic",
   "cold outreach",
   "cold email",
+  // Retargeting-pixel vocabulary (owner-approved, 2026-08-01). The third
+  // fabrication round shipped "Missing ad retargeting pixels" as a finding —
+  // retargeting is AD infrastructure, which is traffic work, and it slipped the
+  // conversion-only law because none of the terms above name it. `hits()` builds
+  // word-boundary regexes from these, so "retargeting" alone also catches
+  // "retargeting pixel(s)"; the ad-pixel pair needs both singular and plural
+  // because the boundary after "pixel" does not match inside "pixels".
+  "retargeting",
+  "retargeting pixel",
+  "retargeting pixels",
+  "ad pixel",
+  "ad pixels",
 ];
 
 // Tautology / filler that Law 7 bans.
@@ -580,6 +568,130 @@ const ROADMAP_SHAPE: {
 // on an already-shipped document, not the gate. Stricter here, kinder there.
 function gradeOfLeak(l: LeakAnalysisItem): EvidenceGrade {
   return l.evidenceGrade ?? "inferred";
+}
+
+/* ============================================================================
+ * THE FABRICATION GATE — read the binding off a saved artifact
+ * ==========================================================================*/
+//
+// A fabricated MEASUREMENT is strictly worse than a hype word, so it blocks
+// wherever a hype word blocks: generation, save and export, on both the paid pack
+// and the free cold audit. The rule itself lives in `fabricationLint`
+// (leak-narrative.ts) with the reasoning behind the detection strategy; this file
+// only decides WHERE each tier of failure is fatal, and says which line to edit.
+//
+// WHY THE BINDING IS READ STRUCTURALLY RATHER THAN OFF A TYPED FIELD.
+// `LeakAnalysisItem.binding` and `ColdAuditFinding.binding` are the right home for
+// it and the exact edits are in this session's handoff — src/types/index.ts has
+// another owner. Reading it structurally means this gate works on the day it is
+// written, on every artifact that already carries a binding, and gets stronger for
+// free when the field lands. It also has to tolerate a saved row from before the
+// field existed, which is the same problem, so there is one code path for both.
+//
+// THE TIERS ARE NOT EQUALLY FATAL, AND THAT IS THE ESCAPE HATCH SHIPPED WITH THE
+// GATE (feedback: never ship a block that can strand him at 11pm):
+//
+//   · unmeasurable → FATAL ALWAYS. Position, prominence, CTA quality. No field in
+//     the contract can license one, so whether a binding exists changes nothing
+//     about the verdict. This is the tier that catches the sentence that shipped,
+//     and it needs no plumbing anywhere else to do it.
+//   · internal → FATAL ALWAYS, for the same reason from the other direction: no
+//     scan reaches the inside of an operation, so a claim about what happens to an
+//     after-hours caller is licensed only by the client saying so in the sentence.
+//   · unbound / unscoped / number → FATAL when the artifact CARRIES a binding
+//     (then the claim is checked against the values it was actually written from),
+//     WARNING when it does not (an un-upgraded or legacy row: the right answer is
+//     "regenerate so the binding is stamped", not "block the document").
+//   · disputed → WARNING, always. The two contracts disagree about whether one
+//     field may be cited; that is a decision to make, not a defect to block on.
+
+/** Every string field of a saved leak a MODEL wrote.
+ *
+ *  Narrower than `leakProse` on purpose: `industryPattern` is excluded because it
+ *  is not model prose at all — it is `allowedStats.join(" ")`, stamped by
+ *  leak-narrative and already carrying its own citations. Linting our own fixed
+ *  wording produces noise about strings the model never touched. */
+function modelAuthoredLeakProse(l: LeakAnalysisItem): { where: string; text: string }[] {
+  const at = l.leakName ?? l.area;
+  return (
+    [
+      ["evidence", l.evidence],
+      ["explanation", l.explanation],
+      ["what it's costing", l.businessImpact],
+      ["recommended fix", l.recommendedFix],
+    ] as [string, string | undefined][]
+  )
+    .filter((e): e is [string, string] => Boolean(e[1]?.trim()))
+    .map(([field, text]) => ({ where: `${at} (${field})`, text }));
+}
+
+/** The evidence binding stamped on a saved leak or finding, or null.
+ *
+ *  Structural and defensive: it validates the shape it finds rather than trusting
+ *  it, because a binding is only worth reading if it really is one. A malformed
+ *  binding reads as ABSENT, which routes to the warning tier — the same place a
+ *  missing one goes. */
+function bindingOn(carrier: unknown): EvidenceBinding | null {
+  const raw = (carrier as { binding?: unknown } | null | undefined)?.binding;
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Partial<EvidenceBinding>;
+  if (typeof b.leakId !== "string" || !Array.isArray(b.values)) return null;
+  return {
+    leakId: b.leakId,
+    checkability: b.checkability === "INTERPRETIVE" ? "INTERPRETIVE" : "HARD",
+    neverObserved: typeof b.neverObserved === "string" ? b.neverObserved : null,
+    values: b.values.filter(
+      (v): v is EvidenceBinding["values"][number] =>
+        Boolean(v) && typeof v === "object" && typeof (v as { field?: unknown }).field === "string"
+    ),
+    disputedTopics: Array.isArray(b.disputedTopics) ? b.disputedTopics : [],
+    numbers: Array.isArray(b.numbers) ? b.numbers.filter((n) => typeof n === "number") : [],
+  };
+}
+
+/** One line of a failure message: where to go, and the sentence to edit. */
+function quoteHit(where: string, h: FabricationHit): string {
+  return `${where}: "${snip(h.sentence, 100)}" — ${h.why}`;
+}
+
+/** Run the lint over a set of labelled passages that share one binding. */
+function fabricationHits(
+  passages: { where: string; text: string }[],
+  binding: EvidenceBinding | null,
+  allowedStatNumbers?: number[]
+): { where: string; hit: FabricationHit }[] {
+  return passages.flatMap(({ where, text }) => {
+    const r = fabricationLint(text, binding, { allowedStatNumbers });
+    // `disputed` is appended here rather than inside `hits` because the lint keeps
+    // "must be fixed" and "must be decided" apart; the callers below sort them
+    // back out by `kind`.
+    return [...r.hits, ...r.disputed].map((hit) => ({ where, hit }));
+  });
+}
+
+/** A percentage stated with no source and no hedge (owner item 5).
+ *
+ *  The dollar rule (E3) has always been "say in the SAME SENTENCE where the number
+ *  came from". A percentage is the same kind of claim and had no rule at all,
+ *  which is how "85% of callers who reach voicemail never call back" shipped
+ *  asserted flat inside a finding whose own grade label said it was not measured
+ *  for this business. Three ways to be legitimate, and they are the ones the
+ *  existing machinery already emits: CITED (an inline source tag, the same one
+ *  `allowedStatPhrase` stamps), HEDGED (an ASSUMPTION_LABELS phrase — "typically",
+ *  "industry average", the ASSUMPTIONS caveat), or ABSENT. */
+function unlabelledPercentSentences(
+  passages: { where: string; text: string }[]
+): { where: string; sentence: string }[] {
+  const out: { where: string; sentence: string }[] = [];
+  for (const { where, text } of passages) {
+    for (const sentence of sentencesOf(text)) {
+      if (!PERCENT_FIGURE.test(sentence)) continue;
+      if (carriesStatCitation(sentence)) continue;
+      if (ASSUMPTION_LABELS.some((re) => re.test(sentence))) continue;
+      out.push({ where, sentence });
+    }
+  }
+  return out;
 }
 
 // ── the validator ─────────────────────────────────────────────────────────────
@@ -1064,6 +1176,161 @@ export function validatePack(
         `Every dollar figure across ${benchmarkBackedLeaks.length} assumption/benchmark-backed leak(s) is labelled in its own sentence.`
       );
   }
+
+  // ── E3b · label assumed % (owner item 5) ─────────────────────────────────────
+  // FATAL, at the same level as the dollar rule it extends. Scanned over the
+  // MODEL-AUTHORED fields only: the stamped `industryPattern` is
+  // `allowedStats.join(" ")` and carries its own citations, so linting it would
+  // report our own wording back to us.
+  const percentLeakProse = leaks.flatMap(modelAuthoredLeakProse);
+  const unlabelledPercent = unlabelledPercentSentences(percentLeakProse);
+  if (unlabelledPercent.length)
+    add(
+      "E3b · label assumed %",
+      "fail",
+      `${unlabelledPercent.length} sentence(s) state a percentage with no source and no hedge: ${unlabelledPercent
+        .slice(0, 3)
+        .map(({ where, sentence }) => `${where}: "${snip(sentence, 90)}"`)
+        .join(
+          " | "
+        )}. Every percentage we print is somebody else's measurement of an industry, not ours of this client — so it is CITED (keep the inline source tag the allowed stat already carries, e.g. "(CallRail)"), HEDGED ("typically", "industry average", "${ASSUMPTION_CAVEAT}"), or taken out. A grade that hedges beside a cost line that asserts is the pairing this rule exists to stop.`
+    );
+  else if (percentLeakProse.some(({ text }) => PERCENT_FIGURE.test(text)))
+    add(
+      "E3b · label assumed %",
+      "pass",
+      "Every percentage in the leak prose names its source or hedges itself, in the same sentence."
+    );
+
+  // ── Evidence binding · the grade certifies the SENTENCE ──────────────────────
+  // See "THE FABRICATION GATE" above for the tiers and why they differ.
+  const bindingFails: string[] = [];
+  const bindingWarns: string[] = [];
+  const bindingNotes: string[] = [];
+  let boundLeaks = 0;
+  // THE SCORECARD'S `evidence` FIELD IS SCANNED TOO, and it earns its place: its
+  // own type comment calls it "the specific real data behind the score", so it is
+  // model prose sitting under a number that reads as a measurement — the same
+  // laundering the grade label does on a finding, one section over. It belongs to
+  // no single leak, so it is judged against the union of every leak's binding.
+  const scorecardPassages = (intel?.scorecard?.metrics ?? [])
+    .map((m, i) => ({
+      where: `scorecard metric ${i + 1} (${m.name || "unnamed"}) evidence`,
+      text: m.evidence ?? "",
+    }))
+    .filter(({ text }) => Boolean(text.trim()));
+  const packUnion: EvidenceBinding | null = leaks.some((l) => bindingOn(l))
+    ? {
+        leakId: "(whole pack)",
+        checkability: "HARD",
+        neverObserved: null,
+        values: leaks.flatMap((l) => bindingOn(l)?.values ?? []),
+        disputedTopics: leaks.flatMap((l) => bindingOn(l)?.disputedTopics ?? []),
+        numbers: leaks.flatMap((l) => bindingOn(l)?.numbers ?? []),
+      }
+    : null;
+  for (const { where, hit } of fabricationHits(scorecardPassages, packUnion, allowedNumbers)) {
+    const line = quoteHit(where, hit);
+    if (hit.kind === "unmeasurable" || hit.kind === "internal") bindingFails.push(line);
+    else if (hit.kind === "disputed") bindingNotes.push(line);
+    else if (packUnion) bindingFails.push(line);
+    else bindingWarns.push(line);
+  }
+  for (const l of leaks) {
+    const binding = bindingOn(l);
+    if (binding) boundLeaks++;
+    for (const { where, hit } of fabricationHits(
+      modelAuthoredLeakProse(l),
+      binding,
+      allowedNumbers
+    )) {
+      const line = quoteHit(where, hit);
+      // `unmeasurable` and `internal` are fatal with or without a binding: no
+      // field in the contract can license a page position, and no scan reaches
+      // the inside of an operation, so the absence of a binding changes nothing.
+      if (hit.kind === "unmeasurable" || hit.kind === "internal") bindingFails.push(line);
+      else if (hit.kind === "disputed") bindingNotes.push(line);
+      else if (binding) bindingFails.push(line);
+      else bindingWarns.push(line);
+    }
+  }
+  if (bindingFails.length)
+    add(
+      "Evidence binding · every claim traces to a measured value",
+      "fail",
+      `${bindingFails.length} sentence(s) assert something about this business that no measured value stands behind: ${Array.from(
+        new Set(bindingFails)
+      )
+        .slice(0, 3)
+        .join(
+          " | "
+        )}. Rewrite each one to restate a value the finding is actually bound to and what it costs, or delete the claim. Do NOT add the field to the binding to silence this: the binding says what we measured, and a sentence is not evidence for itself.`
+    );
+  else if (leaks.length)
+    add(
+      "Evidence binding · every claim traces to a measured value",
+      "pass",
+      `No leak asserts an unmeasurable fact about their pages${
+        boundLeaks ? ` (${boundLeaks} of ${leaks.length} leak(s) carry an evidence binding)` : ""
+      }.`
+    );
+  if (bindingWarns.length)
+    add(
+      "Evidence binding · every claim traces to a measured value",
+      "warn",
+      `${bindingWarns.length} sentence(s) make a checkable claim about their site on a leak that carries NO evidence binding, so nothing can confirm the claim was written from a measurement: ${Array.from(
+        new Set(bindingWarns)
+      )
+        .slice(0, 3)
+        .join(
+          " | "
+        )}. Nothing is blocked — this pack predates the binding — but regenerate it so each finding carries the values it may reference, and this becomes an enforced check rather than a note.`
+    );
+  if (bindingNotes.length)
+    add(
+      "Evidence binding · every claim traces to a measured value",
+      "warn",
+      `${bindingNotes.length} sentence(s) rest on a field the two contracts disagree about: ${Array.from(
+        new Set(bindingNotes)
+      )
+        .slice(0, 2)
+        .join(" | ")}. Decide it once, in UNCITABLE_SCRAPE_FIELDS.`
+    );
+
+  // ── Evidence grade · an INTERPRETIVE leak is never "observed" ─────────────────
+  // FATAL, and INDEPENDENT of the taxonomy's own ceiling on purpose. `gradeOf`
+  // refuses the combination at detection from `Leak.checkability`; this refuses it
+  // on the SAVED ROW, from the leak's stamped name and from its binding. Neither
+  // guard can be switched off by editing the other, which is the property that
+  // matters for the one rule this whole fix is about: "observed" prints "Measured
+  // on your public pages" beside the sentence, and there is no measurement under an
+  // editorial judgment.
+  const interpretiveObserved: string[] = [];
+  for (const l of leaks) {
+    if (gradeOfLeak(l) !== "observed") continue;
+    const byName = l.leakName ? neverObservedReason(l.leakName) : null;
+    const byBinding = bindingOn(l)?.neverObserved ?? null;
+    const reason = byName ?? byBinding;
+    if (reason) interpretiveObserved.push(`${l.leakName ?? l.area}: ${reason}`);
+  }
+  if (interpretiveObserved.length)
+    add(
+      "Evidence grade · no interpretive measurement",
+      "fail",
+      `${interpretiveObserved.length} leak(s) are graded "observed" on a claim nobody measured: ${Array.from(
+        new Set(interpretiveObserved)
+      )
+        .slice(0, 2)
+        .join(
+          " | "
+        )}. Regenerate the pack — the grade is derived at detection and stamped, so a stored "observed" here means either the row predates the checkability ceiling or something wrote the grade by hand. Do not edit the grade in the JSON: fix why it was derived.`
+    );
+  else if (leaks.length)
+    add(
+      "Evidence grade · no interpretive measurement",
+      "pass",
+      "No leak claims a measurement for something that can only be judged."
+    );
 
   // ── Facts · dollar determinism ───────────────────────────────────────────────
   // The dollarImpact range is STAMPED from the deterministic math estimate, never
@@ -1578,713 +1845,18 @@ export function assertPackValid(
   } as PackAssertion;
 }
 
-// ── The PRE-SALE validator (Phase 1) ──────────────────────────────────────────
-// NEW ENTRY POINT — SAY IT PLAINLY: before this, the free cold audit had NO
-// validator. Everything above validates the paid pack; the document we send to a
-// stranger before they have paid us anything was checked only at generation time,
-// inside cold-audit.ts.
-//
-// NOTHING IS DISCLOSED BEFORE THE SALE. A cold audit is a scan and nothing else:
-// no intake form has been filled in, no kickoff call has happened, so there is
-// nothing the client could have told us. A finding that arrives here carrying the
-// grade "disclosed" is therefore not a wording problem — it is a leak in the
-// pipeline (post-sale intake data reaching a pre-sale surface), and it would show
-// a prospect a "you told us…" sentence about a conversation that never happened.
-//
-// THREE BELTS, DELIBERATELY, because this is the one boundary where being wrong
-// is unrecoverable — the document has already left the building:
-//   1. COMPILE TIME — PreSaleResearch declares `intake?: never`, so a pre-sale
-//      detection is structurally incapable of carrying intake (leak-detection.ts).
-//   2. GENERATION — a runtime assertion in the cold-audit pipeline.
-//   3. HERE — anything ALREADY STORED. Belts 1 and 2 protect documents generated
-//      from now on; a cold audit saved yesterday is only caught by reading it back
-//      and checking, which is what this does.
-//
-// WHY THIS IS NO LONGER A ONE-RULE VALIDATOR (Phase 4).
-// Phase 1 shipped this with a single rule and a comment saying that copying the
-// pack's law suite in here would only create two lists that eventually disagree.
-// That reasoning was right about the PACK's laws and it still holds — not one of
-// them has been copied below. What changed is that the cold audit acquired laws
-// OF ITS OWN, because its job changed. It is no longer the thing that closes the
-// deal; it is emailed before a 15-minute Zoom, gets two or three minutes of
-// airtime as proof we looked, and then hands off to the questions. Five rules
-// follow from that job and from nothing else:
-//
-//   · the outside/inside frame is on the page, before any finding;
-//   · the six invisible leaks are ASKED, in his own phone words, never asserted;
-//   · there is exactly ONE ask, and it books the call;
-//   · every dollar figure reads as an industry benchmark, labelled in-sentence;
-//   · nothing anywhere recommends ads, SEO, lead gen or a new website.
-//
-// Every one of those is checked against the constants the RENDERER stamps
-// (imported at the top of this file, never retyped), so the words the document
-// prints and the words the gate demands are the same string by construction.
-//
-// WHICH DOCUMENT EACH CHECK JUDGES — this is the part worth reading twice.
-// There are two documents at this point: the ROW IN THE DATABASE, and the
-// DOCUMENT A PROSPECT ACTUALLY READS, which is that row after
-// `enforceColdAuditLaws` has lifted out-of-scope sentences, hedged unmeasured
-// claims, stamped the six questions and repaired the close. Picking the wrong one
-// breaks the gate in one of two ways:
-//   · judge honesty on the REPAIRED copy only, and the checks go vacuous — the
-//     repair is the thing making them pass, so they can never fire;
-//   · judge it on the RAW row, and a perfectly good document gets blocked over a
-//     sentence no reader will ever see. At 11pm that is a gate that gets
-//     commented out, and then nothing is enforced at all.
-// So the split is:
-//   · FATAL is reserved for what SURVIVES the repair — what the prospect reads.
-//     Finding TITLES are the sharp end: the repair never touches them.
-//   · A row that merely NEEDED repairing earns ONE WARNING that says "regenerate
-//     this audit so the saved row matches the document", and blocks nothing.
-// The one exception is the disclosure grade, which is judged on the raw row: a
-// grade is not prose, no renderer repairs it, and it is the single fact that
-// cannot be allowed through.
-
-/** Same verdict shape as `assertPackValid`, deliberately: a route that already
- *  renders one verdict can render the other with no new code. */
-export type ValidationAssertion = PackAssertion;
-
-// ── pre-sale helpers ──────────────────────────────────────────────────────────
-
-/** The prose fields of one cold-audit finding — the pre-sale twin of leakProse().
- *  All three are model-authored and all three are printed, so all three are held
- *  to the same rules. `title` matters most: it is the only one the render-time
- *  repair leaves alone, which makes it the place a violation actually survives. */
-function findingProse(f: ColdAuditFinding): string[] {
-  return [f.title, f.problem, f.whyItCosts].filter((s): s is string => Boolean(s?.trim()));
-}
-
-/** Every model-authored passage in a cold audit, each tagged with a plain-English
- *  location so a failure message can say WHERE to go and fix it — "finding 2" is
- *  an instruction, "somewhere in the report" is a scavenger hunt. */
-function coldAuditProse(r: ColdAuditReport): { where: string; text: string }[] {
-  const out: { where: string; text: string }[] = [];
-  const push = (where: string, text: string | null | undefined) => {
-    if (text && text.trim()) out.push({ where, text });
-  };
-  push("the headline", r.headline);
-  push("the intro", r.intro);
-  push("the headline-cost block", r.headlineCost);
-  (r.findings ?? []).forEach((f, i) => {
-    const at = `finding ${i + 1}`;
-    push(`${at} (title)`, f.title);
-    push(`${at} (problem)`, f.problem);
-    push(`${at} (what it's costing)`, f.whyItCosts);
-  });
-  (r.deeperLeakQuestions ?? []).forEach((q, i) => push(`question ${i + 1}`, q));
-  push("the close", r.closingCta?.message);
-  push("the performance readout", r.performance?.readout);
-  return out;
-}
-
-/** The words a reader sees, with the markup taken out. Used ONLY to ask "is this
- *  sanctioned sentence on the page" — the CTA rule itself lives in agent C's
- *  `countCallsToAction`, and is called rather than reimplemented. */
-function visibleText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Dollar amounts written WITHOUT the currency marker in front of them.
- *
- *  The money law is "CAD $1,290" — the marker leads the figure, everywhere. The
- *  governed math frames already comply (they are built by `cad()`); this catches
- *  a bare "$1,290" typed by the model. Warning-level, because an unmarked figure
- *  is ambiguous rather than untrue, and a document is not worth blocking over a
- *  three-letter prefix at 11pm. */
-function unmarkedDollarFigures(text: string): string[] {
-  const out: string[] = [];
-  const re = /\$\s?\d[\d,]*(?:\.\d{1,2})?/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    // Five characters is enough to hold "CAD" plus the space(s) `cad()` emits.
-    if (!/CAD\s*$/.test(text.slice(Math.max(0, m.index - 5), m.index))) out.push(m[0]);
-  }
-  return out;
-}
+// ── (removed) The pre-sale cold-audit validator ───────────────────────────────
+// `validateColdAudit`, `assertColdAuditValid` and `assertStoredColdAuditSafe`
+// lived here until 2026-08-01, when the free cold audit was deleted by owner
+// ruling: no pre-sale generative surface exists any more, so there is no
+// pre-sale document left to validate. The PAID pack suite above is untouched —
+// every law, the evidence grades, the fabrication lint and the override
+// machinery below still police the four paid deliverables.
 
 /** Trim a quoted passage so a failure message stays readable in a log line. */
 function snip(s: string, n = 110): string {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n)}…` : t;
-}
-
-/** Validate a cold audit (the free, pre-sale document). PURE — returns checks,
- *  never throws, never decides; `assertColdAuditValid` states the verdict.
- *
- *  @param report   the stored/generated audit
- *  @param rendered the HTML deliverable, if the caller has already built it.
- *                  Optional purely to save the work: when it is omitted this
- *                  renders the document itself, so the frame / pivot / CTA rules
- *                  are checked at every entry point rather than only where
- *                  somebody remembered to pass the page in. Pass the output of
- *                  `renderColdAuditHtml` and nothing else — the link count is
- *                  read off it, and another surface's markup would be counted as
- *                  if it were this document's. */
-export function validateColdAudit(
-  report: ColdAuditReport,
-  rendered?: string
-): ValidationResult {
-  const checks: LawCheck[] = [];
-  const add = (law: string, level: CheckLevel, message: string) =>
-    checks.push({ id: checkId(law, message), law, level, message });
-
-  const findings = report.findings ?? [];
-  const disclosed = findings.filter((f) => f.evidenceGrade === "disclosed");
-
-  // Note the test is `=== "disclosed"`, not a defaulted grade: a MISSING grade on
-  // a pre-Phase-1 cold audit means nobody stamped one, which is the normal state
-  // of every audit written before this existed — not evidence of a disclosure.
-  // The default-to-inferred rule the pack validator applies is about how flatly a
-  // sentence may be WRITTEN; this check is about where a fact CAME FROM, and an
-  // absent field is not a claim that the client told us anything.
-  if (disclosed.length)
-    add(
-      "Evidence grade · nothing disclosed pre-sale",
-      "fail",
-      `${disclosed.length}/${findings.length} cold-audit finding(s) are graded "disclosed": ${disclosed
-        .map((f) => f.title)
-        .slice(0, 3)
-        .join(
-          ", "
-        )}. Nothing has been disclosed before the sale — no intake form, no kickoff call — so this is post-sale data on a pre-sale document, not a wording problem. Regenerate the audit from the scan alone.`
-    );
-  else
-    add(
-      "Evidence grade · nothing disclosed pre-sale",
-      "pass",
-      `All ${findings.length} finding(s) rest on the scan — nothing is presented as client-disclosed.`
-    );
-
-  // ── Build the document the prospect will actually read ──────────────────────
-  // `enforceColdAuditLaws` is what every surface runs before printing — the HTML
-  // deliverable, the plaintext copy button and the public teaser page all call it.
-  // So this is not "a repaired copy for the validator's convenience": it is the
-  // document, and judging anything else would be judging something nobody sends.
-  let shipped = report;
-  let renderFault = "";
-  try {
-    shipped = enforceColdAuditLaws(report);
-  } catch (err) {
-    renderFault = err instanceof Error ? err.message : String(err);
-  }
-
-  // The rendered page, for the three rules that are properties of the DOCUMENT
-  // rather than of the data: is the frame on it, are the six questions on it, and
-  // how many ways does it give the reader to respond. Rendered here when the
-  // caller has not already done it, so those rules are checked at EVERY entry
-  // point rather than only on the export path.
-  let html = rendered ?? "";
-  if (!rendered && !renderFault) {
-    try {
-      html = renderColdAuditHtml(report);
-    } catch (err) {
-      renderFault = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  if (renderFault) {
-    // A caller-supplied page is dropped too. `renderColdAuditHtml` runs the same
-    // enforcement that just threw, so whatever was passed in cannot have come
-    // from this report — checking against it would be checking the wrong page.
-    html = "";
-    add(
-      "Render · the document builds at all",
-      "fail",
-      `This audit cannot be turned into a document — the renderer threw "${snip(
-        renderFault
-      )}". The rules that read the page (the frame, the six questions, the calls to action) could not run at all, so a clean result below does NOT mean the rest is clean. Regenerate the audit for this business; if a regenerated one throws the same way, the stored JSON is malformed and the row should be replaced rather than patched.`
-    );
-  } else
-    add(
-      "Render · the document builds at all",
-      "pass",
-      "The audit renders, so the frame, the questions and the calls to action were checked against the page a prospect would actually receive."
-    );
-
-  const page = html ? visibleText(html) : "";
-  const shippedFindings = shipped.findings ?? [];
-  const shippedQuestions = shipped.deeperLeakQuestions ?? [];
-
-  // ── E2 · Evidence grade · nothing INFERRED is written declaratively ──────────
-  // FATAL, and the pre-sale half of the rule the paid pack has carried since
-  // Phase 1 (see "Evidence grade · no declarative inference" above). Both
-  // artifacts are now held to it, and both read a MISSING grade as "inferred":
-  // an unstamped finding is one whose provenance nobody recorded, and "nobody
-  // recorded it" must never be the reason a sentence gets to sound measured. A
-  // gate has to under-claim.
-  //
-  // NOT A CONTRADICTION OF THE DISCLOSURE CHECK ABOVE, which deliberately tests
-  // `=== "disclosed"` rather than a defaulted grade. Two different questions:
-  // that one asks where a fact CAME FROM (an absent field is not a claim that the
-  // client told us anything), this one asks how flatly it may be WRITTEN (an
-  // absent field is not permission to write it as fact). Do not "reconcile" them.
-  //
-  // Observed and disclosed findings are exempt by grade — hedging something we
-  // measured makes the whole document read as guesswork. A disclosed finding is
-  // not being let off: it is already fatal on the check above.
-  const inferredFindings = shippedFindings
-    .map((f, i) => ({ f, at: `finding ${i + 1}` }))
-    .filter(({ f }) => (f.evidenceGrade ?? "inferred") === "inferred");
-  if (inferredFindings.length) {
-    const declarative: string[] = [];
-    for (const { f, at } of inferredFindings) {
-      // Labelled per field, so the failure names the line to edit rather than
-      // making him search three fields of five findings for a quoted fragment.
-      const fields: [string, string][] = [
-        [`${at} (title)`, f.title],
-        [`${at} (problem)`, f.problem],
-        [`${at} (what it's costing)`, f.whyItCosts],
-      ];
-      for (const [where, text] of fields) {
-        if (!text?.trim()) continue;
-        const lint = flatAssertionLint(text, { grade: "inferred" });
-        if (!lint.ok) declarative.push(`${where}: "${snip(lint.hits[0], 80)}"`);
-      }
-    }
-    if (declarative.length)
-      add(
-        "Evidence grade · no declarative inference",
-        "fail",
-        `${declarative.length} passage(s) on a finding we never measured state an internal behaviour as flat fact: ${Array.from(
-          new Set(declarative)
-        )
-          .slice(0, 3)
-          .join(
-            " | "
-          )}. Anything listed as a TITLE is there because the render-time softener does not touch titles — rewrite it as a pattern rather than a verdict ("Nothing visible catches a call you can't take", not "Nobody calls them back"). Anything else means the softener was bypassed, so regenerate the audit. Do not stamp the finding "observed" to silence this: that grade says we measured it, and we did not.`
-      );
-    else
-      add(
-        "Evidence grade · no declarative inference",
-        "pass",
-        `All ${inferredFindings.length} unmeasured finding(s) read as a pattern, not as something we observed.`
-      );
-  }
-
-  // ── Frame · the outside is the smaller half, and the page says so ────────────
-  // FATAL. The frame is the honesty move the whole Phase 4 document rests on: a
-  // scan reads public pages, which is the smaller half of why a local business
-  // loses work, and the reader is told that BEFORE any finding lands. Without it
-  // the six questions later read as us moving the goalposts; with it they read as
-  // the obvious next step. It is rendered from a constant, so a failure here means
-  // a surface stopped printing that constant — not that a word got reworded.
-  if (page) {
-    const missing = [OUTSIDE_INSIDE_FRAME.lead, OUTSIDE_INSIDE_FRAME.body].filter(
-      (s) => !page.includes(s)
-    );
-    if (missing.length)
-      add(
-        "Frame · the outside is the smaller half",
-        "fail",
-        `The outside/inside frame is missing from the document (${missing.length} of its 2 sentences absent). Without it the six questions further down read as a bait-and-switch instead of the obvious next step. The frame is stamped as OUTSIDE_INSIDE_FRAME in src/lib/exporters/cold-audit-html.ts and printed near the top of the page — restore the block that prints it. Do not retype the sentences anywhere else; there is meant to be exactly one copy.`
-      );
-    else
-      add(
-        "Frame · the outside is the smaller half",
-        "pass",
-        "The document says the scan is the smaller half of the problem, before the first finding."
-      );
-
-    // The scan section's own heading is the other half of the same argument —
-    // what follows is what a SCAN can see. Warning rather than fatal: its absence
-    // costs the reader a signpost, not the truth.
-    if (!page.includes(SCAN_SECTION_LABEL))
-      add(
-        "Frame · the outside is the smaller half",
-        "warn",
-        `The findings are not introduced by their heading ("${SCAN_SECTION_LABEL}"). The frame promises a smaller half and this is the label that delivers it — restore SCAN_SECTION_LABEL above the findings.`
-      );
-  }
-
-  // ── Pivot · the invisible six are ASKED, never asserted ──────────────────────
-  // FATAL, and this is the highest-value string set in the document. The prospect
-  // reads these six phrases here and then HEARS THE SAME WORDS out of his mouth on
-  // the Zoom; that match is the entire effect, and it is why they are constants
-  // rather than something a model writes.
-  //
-  // Two halves, both mechanical:
-  //   (a) all six are ON the document — in the question list every surface prints
-  //       (deeperLeakQuestions) AND on the rendered page;
-  //   (b) none of the six appears inside a FINDING. We have measured none of them.
-  //       Asserting one on a document sent to someone we have never spoken to is
-  //       inventing a fact about the inside of their business.
-  const absentFromQuestions = PIVOT_LEAK_PHRASES.filter(
-    (p) => !shippedQuestions.some((q) => q.toLowerCase().includes(p))
-  );
-  const absentFromPage = page ? PIVOT_LEAK_PHRASES.filter((p) => !page.toLowerCase().includes(p)) : [];
-  const assertedAsFinding = shippedFindings.flatMap((f) =>
-    findingProse(f).flatMap((text) =>
-      PIVOT_LEAK_PHRASES.filter((p) => text.toLowerCase().includes(p)).map(
-        (p) => `"${p}" in "${snip(f.title, 50)}"`
-      )
-    )
-  );
-  if (absentFromQuestions.length || absentFromPage.length || assertedAsFinding.length) {
-    const parts: string[] = [];
-    if (absentFromQuestions.length)
-      parts.push(
-        `${absentFromQuestions.length} of the six are missing from the question list every surface prints (${absentFromQuestions
-          .map((p) => `"${p}"`)
-          .join(", ")})`
-      );
-    if (absentFromPage.length)
-      parts.push(
-        `${absentFromPage.length} are missing from the rendered page (${absentFromPage
-          .map((p) => `"${p}"`)
-          .join(", ")})`
-      );
-    if (assertedAsFinding.length)
-      parts.push(
-        `${assertedAsFinding.length} are stated as a FINDING rather than asked as a question (${Array.from(
-          new Set(assertedAsFinding)
-        )
-          .slice(0, 3)
-          .join(", ")})`
-      );
-    add(
-      "Pivot · the invisible six are asked, never asserted",
-      "fail",
-      `${parts.join(
-        "; "
-      )}. He says these six out loud on the Zoom and the prospect has to have read the same words here — that match is the whole point of the section. They are stamped as PIVOT_LEAK_PHRASES in src/lib/exporters/cold-audit-html.ts. If one is missing, restore the block that prints "${PIVOT_SECTION_LABEL}"; if one is stated as a finding, move it back into the question list, because we have measured none of them.`
-    );
-  } else
-    add(
-      "Pivot · the invisible six are asked, never asserted",
-      "pass",
-      "All six invisible leaks are on the document in his own words, and every one of them is a question."
-    );
-
-  // ── Close · one booking CTA, and no second way to respond ────────────────────
-  // FATAL. Two ways a close breaks the handoff, and both are counted rather than
-  // assumed: a SECOND link, or a second ASK in the prose ("just reply", "give me a
-  // call"). The second one is not a friendlier close — it is a way for the
-  // prospect not to book.
-  //
-  // WHY A MISSING BUTTON IS A WARNING AND NOT A FAILURE. Whether a link renders at
-  // all is decided by NEXT_PUBLIC_BOOKING_URL, not by the document: with no URL
-  // configured the renderer deliberately prints the close as plain text, because
-  // shipping a dead button to a prospect is worse than shipping none. Blocking on
-  // a config value would take out every audit in every environment where it isn't
-  // set — including the verification suite — over something no regeneration can
-  // fix. So an unconfigured booking URL is reported loudly, once, and blocks
-  // nothing; everything the DOCUMENT controls stays fatal.
-  if (html) {
-    const cta = countCallsToAction(html);
-    const closeText = shipped.closingCta?.message?.trim() ?? "";
-    const ctaFails: string[] = [];
-    if (cta.secondaryAsks.length) {
-      // countCallsToAction reads the whole visible page, so it finds a competing
-      // ask wherever it is — and it is usually NOT in the close, because the close
-      // is the one field the render-time repair replaces outright. Locating it
-      // here turns "somewhere on the page" into a field name.
-      const prose = coldAuditProse(shipped);
-      const located = cta.secondaryAsks.map((ask) => {
-        const home = prose.find(({ text }) => text.includes(ask.trim()));
-        return `${home ? home.where : "the page"}: "${snip(ask, 70)}"`;
-      });
-      ctaFails.push(
-        `${cta.secondaryAsks.length} other way(s) to respond appear on the page — ${located
-          .slice(0, 2)
-          .join(", ")}`
-      );
-    }
-    if (!closeText) ctaFails.push("the close has no message at all, so the button has no reason to be pressed");
-    if (BOOKING_URL) {
-      if (cta.links !== 1 || cta.bookingLinks !== 1)
-        ctaFails.push(
-          `the page carries ${cta.links} link(s), ${cta.bookingLinks} of them pointing at the booking URL — it must carry exactly one, and that one must book the call`
-        );
-    } else if (cta.links > 0) {
-      ctaFails.push(
-        `the page carries ${cta.links} link(s) even though no booking URL is configured — a link that is not the booking link is a way not to book`
-      );
-    }
-    if (ctaFails.length)
-      add(
-        "Close · one booking CTA",
-        "fail",
-        `${ctaFails.join(
-          "; "
-        )}. One ask, one link, one next step: this document's only job is to earn the 15-minute call, and a second way to answer is not a friendlier close — it is a way for the prospect not to book. Delete the alternative ask from the field named above (the sanctioned close is COLD_AUDIT_CTA_FALLBACK in src/lib/exporters/cold-audit-html.ts), and leave exactly one booking button on the page.`
-      );
-    else if (!BOOKING_URL)
-      add(
-        "Close · one booking CTA",
-        "warn",
-        `The document has no booking button, because NEXT_PUBLIC_BOOKING_URL is not configured in this environment. The close still reads correctly and nothing is blocked, but every audit sent from here asks the prospect to book the call and then gives them nowhere to do it. Set NEXT_PUBLIC_BOOKING_URL to the GoHighLevel booking page before sending one.`
-      );
-    else
-      add(
-        "Close · one booking CTA",
-        "pass",
-        "Exactly one call to action, it points at the booking page, and nothing else on the page offers another way to respond."
-      );
-  }
-
-  // ── Scope · no lead gen, ads, SEO or website rebuild, anywhere ───────────────
-  // FATAL. He sells conversion of demand that already exists, and he does not
-  // build websites — every site finding in this document is advisory. A single
-  // sentence recommending SEO or a redesign reframes the whole thing as a
-  // web-design pitch and costs him the call.
-  //
-  // The test is agent C's `outOfScopeHits`, called and never re-implemented. It is
-  // recommendation-shaped and negation-aware on purpose: "we do not rebuild
-  // websites" and "that is out of scope by design" are his positioning and must
-  // survive, while "you should invest in SEO" must not. A second, blunter word
-  // list in here would flag his best sentences — which is exactly the failure this
-  // whole file exists to avoid.
-  // `outOfScopeHits` (the RULE) applied over `coldAuditProse` (this file's field
-  // list, which is a superset of the one agent C's `scopeViolations` walks — it
-  // adds the performance readout, so "anywhere" means anywhere). The rule itself
-  // is never re-implemented here; only the field labels are ours, so a failure can
-  // say which line to open.
-  const strays = coldAuditProse(shipped).flatMap(({ where, text }) =>
-    outOfScopeHits(text).map((sentence) => ({ where, sentence }))
-  );
-  if (strays.length)
-    add(
-      "Scope · no lead gen, ads, SEO or website work",
-      "fail",
-      `${strays.length} sentence(s) recommend work we do not sell: ${strays
-        .slice(0, 3)
-        .map(({ where, sentence }) => `${where}: "${snip(sentence, 90)}"`)
-        .join(
-          " | "
-        )}. Anything listed as a TITLE is there because the render-time sweep strips out-of-scope sentences from the body but not from titles. Rewrite it so it describes what is happening rather than prescribing traffic or a rebuild, or regenerate the audit. Do not soften the rule: he sells conversion of demand that already exists, and a prospect who reads one of these sentences thinks he is being pitched a website.`
-    );
-  else
-    add(
-      "Scope · no lead gen, ads, SEO or website work",
-      "pass",
-      "Nothing in the document recommends ads, SEO, lead generation or a new website."
-    );
-
-  // ── Money · every figure is a labelled benchmark ─────────────────────────────
-  // FATAL. We have never seen this business's books. Every dollar figure on a cold
-  // audit is therefore an industry rate applied to an ASSUMED volume, and it has
-  // to say so beside the number — in the same sentence, not in a footnote nobody
-  // reads. The governed math frames already do ("assuming 20 enquiries a month —
-  // our assumption, not a number we measured"); this is what catches a figure the
-  // model typed itself.
-  //
-  // ASSUMPTION_LABELS is the SAME list the paid pack's dollar check uses, a few
-  // hundred lines above. One document may not have a looser idea of "labelled"
-  // than the other, so there is one list and both read it.
-  const dollarSentences = coldAuditProse(shipped).flatMap(({ where, text }) =>
-    sentencesOf(text)
-      .filter((s) => DOLLAR_FIGURE.test(s))
-      .map((s) => ({ where, sentence: s }))
-  );
-  const unlabelled = dollarSentences.filter(
-    ({ sentence }) => !ASSUMPTION_LABELS.some((re) => re.test(sentence))
-  );
-  // A figure credited to the CLIENT is its own, worse failure: pre-sale there is
-  // no client number to credit. It is separated out because the fix is different —
-  // you cannot label your way out of it, the sentence describes a conversation
-  // that never happened.
-  const clientCredited = dollarSentences.filter(({ sentence }) =>
-    CLIENT_SOURCED_LABELS.some((re) => re.test(sentence))
-  );
-  if (!dollarSentences.length)
-    add(
-      "Money · every figure is a labelled benchmark",
-      "pass",
-      "The document prints no dollar figure, so there is nothing to mislabel."
-    );
-  else if (unlabelled.length)
-    add(
-      "Money · every figure is a labelled benchmark",
-      "fail",
-      `${unlabelled.length} of ${dollarSentences.length} dollar sentence(s) print a figure without saying in the same sentence where it came from: ${unlabelled
-        .slice(0, 2)
-        .map(({ where, sentence }) => `${where}: "${snip(sentence, 90)}"`)
-        .join(
-          " | "
-        )}. A cold audit has never seen their books, so every figure on it is an industry benchmark over an assumed volume and must say so beside the number ("assuming 20 enquiries a month — ${ASSUMPTION_CAVEAT}"). Put the assumption in the same sentence as the number, or take the number out.`
-    );
-  else
-    add(
-      "Money · every figure is a labelled benchmark",
-      "pass",
-      `All ${dollarSentences.length} dollar sentence(s) name the assumption or benchmark behind the figure, in the same sentence.`
-    );
-
-  if (clientCredited.length)
-    add(
-      "Money · no figure is credited to the client",
-      "fail",
-      `${clientCredited.length} dollar sentence(s) credit the figure to the prospect ("based on the numbers you provided" or similar): ${clientCredited
-        .slice(0, 2)
-        .map(({ where, sentence }) => `${where}: "${snip(sentence, 90)}"`)
-        .join(
-          " | "
-        )}. Nobody has given us a number — there has been no intake form and no kickoff call — so this sentence describes a conversation that never happened, and the prospect knows it did not. This cannot be fixed by relabelling: regenerate the audit, and check why a REAL-mode math frame reached a pre-sale document.`
-    );
-  else if (dollarSentences.length)
-    add(
-      "Money · no figure is credited to the client",
-      "pass",
-      "No figure is presented as something the prospect told us."
-    );
-
-  // ── Money · the CAD marker leads the figure ──────────────────────────────────
-  // WARNING. The house rule is "CAD $1,290" — marker first, everywhere. `cad()`
-  // already complies, so a hit here is a figure the model typed. An unmarked
-  // figure is ambiguous rather than untrue, and this document is not worth
-  // blocking over three missing letters at 11pm — but he should know before he
-  // sends it, because a Canadian owner reading a bare "$" assumes US dollars.
-  const unmarked = coldAuditProse(shipped).flatMap(({ where, text }) =>
-    unmarkedDollarFigures(text).map((fig) => `${where}: "${fig}"`)
-  );
-  if (unmarked.length)
-    add(
-      "Money · the CAD marker leads the figure",
-      "warn",
-      `${unmarked.length} figure(s) are written without the currency marker in front: ${Array.from(
-        new Set(unmarked)
-      )
-        .slice(0, 3)
-        .join(
-          ", "
-        )}. Every figure we quote is Canadian and says so before the number — write "CAD $1,290", not "$1,290". Regenerate, or fix the wording before sending.`
-    );
-
-  // ── Stored row · matches the document it renders ─────────────────────────────
-  // WARNING, ALWAYS, AND DELIBERATELY NEVER FATAL. Everything above judges what a
-  // prospect reads. This one judges the ROW, and reports the gap between the two:
-  // repairs the render boundary had to make on the way out. The document that gets
-  // sent is already correct, so blocking would be blocking over a problem the
-  // reader will never encounter — but a row that needs repairing every time it is
-  // opened is a row that should be regenerated, and nobody would ever find that
-  // out without being told.
-  if (!renderFault) {
-    const repairs: string[] = [];
-    if (scopeViolations(report).length && !scopeViolations(shipped).length)
-      repairs.push(
-        `${scopeViolations(report).length} out-of-scope sentence(s) were lifted out at render`
-      );
-    if (PIVOT_LEAK_PHRASES.some((p) => !(report.deeperLeakQuestions ?? []).some((q) => q.toLowerCase().includes(p))))
-      repairs.push("the six invisible leaks were stamped in at render — the row predates them");
-    if ((report.closingCta?.message ?? "") !== (shipped.closingCta?.message ?? ""))
-      repairs.push("the close was replaced at render");
-    if ((report.headline ?? "") !== shipped.headline || (report.intro ?? "") !== shipped.intro)
-      repairs.push("the header was replaced at render");
-    if ((report.headlineCost ?? "") !== shipped.headlineCost)
-      // Two different repairs land on this branch — a missing/out-of-scope block
-      // gets swapped for the fallback, and a bare figure gets its benchmark label
-      // appended — so the wording covers both rather than guessing which.
-      repairs.push("the headline-cost block was replaced or relabelled at render");
-    const prosePatched = (report.findings ?? []).filter((f, i) => {
-      const after = shippedFindings[i];
-      return after && (f.problem !== after.problem || f.whyItCosts !== after.whyItCosts);
-    }).length;
-    if (prosePatched) repairs.push(`${prosePatched} finding(s) had claims softened at render`);
-    if (repairs.length)
-      add(
-        "Stored row · matches the document it renders",
-        "warn",
-        `The saved audit is not what gets sent — ${repairs.join(
-          "; "
-        )}. Nothing is blocked: the document a prospect receives is already correct. But the row is stale, and anything reading the JSON directly (an export, a copy-paste, a future surface) would get the unrepaired version. Regenerate this audit so the two agree.`
-      );
-    else
-      add(
-        "Stored row · matches the document it renders",
-        "pass",
-        "The saved row and the document it renders are the same thing — no repairs were needed on the way out."
-      );
-  }
-
-  const fails = checks.filter((c) => c.level === "fail").length;
-  const warns = checks.filter((c) => c.level === "warn").length;
-  return { checks, fails, warns, passed: fails === 0 };
-}
-
-/**
- * Enforcing wrapper around validateColdAudit — the pre-sale twin of
- * `assertPackValid`. Fatal = any check at level "fail"; like its twin it returns
- * the verdict rather than throwing, so a route can turn it into an
- * operator-facing message instead of a generic 500.
- *
- *   const verdict = assertColdAuditValid(report);
- *   if (!verdict.ok) return NextResponse.json({ error: verdict.report }, { status: 422 });
- *
- * @param rendered same optional page as `validateColdAudit` — pass it on the
- *                 export path, where it has already been built.
- */
-export function assertColdAuditValid(
-  report: ColdAuditReport,
-  rendered?: string
-): ValidationAssertion {
-  const result = validateColdAudit(report, rendered);
-  const fails = result.checks.filter((c) => c.level === "fail");
-  const warns = result.checks.filter((c) => c.level === "warn");
-  return {
-    ok: fails.length === 0,
-    fails,
-    warns,
-    report: formatValidation(result),
-  } as ValidationAssertion;
-}
-
-/** THE READ-PATH GATE. Run this wherever a STORED cold audit is loaded back out
- *  of the database and shown to anyone — including the public /a/<publicId>
- *  teaser a prospect opens.
- *
- *  WHY IT IS SCOPED, AND WHY THAT IS NOT A WEAKENING. An unscoped throw here
- *  would judge rows written before evidence grades existed — audits whose
- *  findings carry no grade at all — against a rule they predate, and take out
- *  pages that were fine. So the gate only engages once there is something to
- *  judge: if ANY finding carries a grade, the row was generated post-Phase-1 and
- *  is held to the full rule. If none do, it is a legacy row and we skip, silently
- *  and by design.
- *
- *  THE SCOPING STILL EARNS ITS KEEP AFTER PHASE 4, and the reason is worth
- *  writing down. The pre-sale suite now reads a MISSING evidence grade as
- *  "inferred", which is the right strictness for a gate — but an ungraded row is
- *  every audit written before grades existed, and holding those to the
- *  no-declarative-inference rule would fail a page that was fine on the day it
- *  was written. The Phase 4 reframe rules are still enforced on every audit at
- *  the generation and export boundaries, where a failure costs a regeneration
- *  instead of a dead link a prospect is holding.
- *
- *  The alternative was leaving assertColdAuditValid exported and uncalled, which
- *  is how a guarantee rots: it reads like enforcement, it passes review, and it
- *  has never once run. A scoped live gate is worth more than an unscoped dormant
- *  one.
- *
- *  Throws rather than filtering the offending finding out: a pre-sale document
- *  containing something the prospect supposedly disclosed is a breach of the
- *  Phase 1 guarantee, and quietly repairing it at render time would hide the bug
- *  from the only person who can fix it. */
-export function assertStoredColdAuditSafe(report: ColdAuditReport, at: string): void {
-  const graded = (report.findings ?? []).some((f) => f.evidenceGrade !== undefined);
-  if (!graded) return; // pre-Phase-1 row — nothing to judge, skip silently
-
-  const verdict = assertColdAuditValid(report);
-  if (verdict.ok) return;
-
-  // The FIRST failing check's message leads the error, because that message is the
-  // one written to be acted on. A bare list of law names tells the operator that
-  // something is wrong and nothing about what to do next, and this error surfaces
-  // on a page a prospect may be waiting on.
-  throw new Error(
-    `Stored cold audit (${at}) fails ${verdict.fails.length} governance check(s) on read: ` +
-      `${verdict.fails.map((f) => f.law).join(", ")}. This row carries evidence grades, so it ` +
-      `was generated after the Phase 1 rules landed and is held to them. Regenerate the audit ` +
-      `for this business — do not strip the grade to silence this.\n\nFirst failure — ` +
-      `${verdict.fails[0].law}: ${verdict.fails[0].message}\n\n${verdict.report}`
-  );
 }
 
 // ── The escape hatch (Phase 0.6) ──────────────────────────────────────────────

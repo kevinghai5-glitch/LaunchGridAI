@@ -1093,11 +1093,10 @@ export type AssetSection = "file1" | "file2" | "file3" | "file4" | "file5";
 // The four client-facing flagship deliverables.
 export type DeliverableId = "d1" | "d2" | "d3" | "d4";
 
-// ── Cold-Open Audit ───────────────────────────────────────────────────────────
-// The free, 1-page "here's what's quietly costing you customers" mini-report we
-// send BEFORE pitching the full 5-file pack. Grounded in real PageSpeed /
-// screenshot / scrape / reviews data. Ends in ONE soft, editable, reply-driving
-// CTA tied to the single highest-impact finding.
+// ── Evidence grades ───────────────────────────────────────────────────────────
+// PAID-PACK ENFORCEMENT — this vocabulary long outlived the cold audit it was
+// first written next to. The pack validator, the tier-aware softener and the
+// fabrication lint all key on it.
 
 /** Three grades of knowledge about a client, in descending order of how strongly
  *  a claim may be phrased. Measured beats told beats guessed.
@@ -1107,52 +1106,30 @@ export type DeliverableId = "d1" | "d2" | "d3" | "d4";
  *  voice cannot drift from what we actually know about it. */
 export type EvidenceGrade = "observed" | "disclosed" | "inferred";
 
-export interface ColdAuditFinding {
-  title: string; // short, specific, plain-English ("Your booking link is buried")
-  problem: string; // what's actually happening, grounded in observed data
-  whyItCosts: string; // the business/revenue consequence in their language
-  severity: "high" | "medium" | "low";
-  // Pre-sale, this can only ever be "observed" or "inferred" — nothing has been
-  // disclosed yet, and detectLeaks makes that structurally impossible for the
-  // cold-audit path (its pre-sale input variant cannot carry intake at all).
-  // A "disclosed" value reaching here is a bug, and the validator fails on it.
-  evidenceGrade?: EvidenceGrade;
-}
+// ── Cold-Open Audit — LEGACY ROWS ONLY ────────────────────────────────────────
+// The free pre-sale cold audit was DELETED by owner ruling (2026-08-01): the
+// generator, renderer, validator, routes and public teaser are all gone, and no
+// new COLD_AUDIT row can ever be written (every row was soft-deleted; the rows
+// and their content stay in the database forever, per the no-hard-delete law).
+// Its replacement is the observed-facts row (src/lib/observed-facts.ts) — four
+// measured numbers, no prose, nothing generated.
+//
+// This minimal shape survives for exactly one live reader:
+// /api/generate/proposal still READS the newest stored COLD_AUDIT row (it
+// resolves to null forever after the soft-delete — approved consequence) and
+// hands it to buildProposalDefaults, whose `audit` parameter needs a type.
+// Only the fields that read path touches are declared. Do not widen it, and do
+// not build anything new against it.
 
-export interface ColdAuditPerformance {
-  available: boolean;
-  mobileScore: number | null;
-  lcpSeconds: number | null;
-  clsValue: number | null;
-  // plain-English read of the numbers, never raw Lighthouse jargon
-  readout: string;
+export interface ColdAuditFinding {
+  title: string;
+  problem: string;
+  whyItCosts: string;
 }
 
 export interface ColdAuditReport {
-  businessName: string;
-  city: string;
-  industry: string;
-  websiteUrl: string;
-  // signed above-the-fold screenshot of their current site (best-effort)
-  screenshotUrl: string | null;
-  headline: string; // direct title naming the business (not "a quick note")
-  intro: string; // 1 sentence: acknowledge one real strength, then pivot to the bleed
-  // the quantified dollar gut-punch shown up top (Law 2)
-  headlineCost: string;
-  findings: ColdAuditFinding[]; // 3-5, ordered most→least impactful
-  // 2-3 pointed questions previewing the unmeasurable leaks (Law 3):
-  // response time, follow-up, no-shows, qualification
-  deeperLeakQuestions: string[];
-  performance?: ColdAuditPerformance;
-  // the close. a PIVOT to the paid engagement, never an offer of free help (Law 10).
-  // editable so the user tweaks the ask before sending.
-  closingCta: {
-    tiedToFinding: string; // which finding this references (the #1)
-    message: string; // the pivot-to-paid ask
-  };
-  agencyName: string; // footer attribution
-  generatedAt: string;
-  dataConfidence: DataConfidence;
+  headlineCost?: string;
+  findings?: ColdAuditFinding[];
 }
 
 // ── Proposal (client conversion offer) ────────────────────────────────────────

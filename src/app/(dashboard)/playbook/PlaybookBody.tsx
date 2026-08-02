@@ -100,7 +100,7 @@ export function PlaybookBody() {
                   gap: 12,
                   padding: "11px 12px",
                   borderRadius: 10,
-                  background: on ? "rgba(255,255,255,0.045)" : "transparent",
+                  background: on ? "var(--surface-hi)" : "transparent",
                   border: on ? "1px solid var(--line-strong)" : "1px solid transparent",
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -108,7 +108,8 @@ export function PlaybookBody() {
                   transition: "background var(--t)",
                 }}
                 onMouseEnter={(e) => {
-                  if (!on) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)";
+                  // one step below the selected state above, so the two stay distinct
+                  if (!on) (e.currentTarget as HTMLElement).style.background = "var(--surface-2)";
                 }}
                 onMouseLeave={(e) => {
                   if (!on) (e.currentTarget as HTMLElement).style.background = "transparent";
@@ -120,7 +121,7 @@ export function PlaybookBody() {
                     width: 30,
                     height: 30,
                     borderRadius: 8,
-                    background: on ? "var(--accent-soft)" : "rgba(255,255,255,0.03)",
+                    background: on ? "var(--accent-soft)" : "var(--surface-2)",
                     color: on ? "var(--accent)" : "var(--text-3)",
                     border: "1px solid var(--line)",
                   }}
@@ -248,7 +249,7 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
         padding: "5px 10px",
         fontSize: 11.5,
         fontWeight: 600,
-        background: "rgba(255,255,255,0.04)",
+        background: "var(--surface-2)",
         border: "1px solid var(--line-strong)",
         borderRadius: 7,
         color: done ? "var(--money)" : "var(--text-2)",
@@ -330,7 +331,7 @@ function Overview({ onJump }: { onJump: (s: SectionId) => void }) {
 
       <Surface
         padded={0}
-        style={{ padding: "20px 24px", background: "var(--accent-soft)", border: "1px solid oklch(0.55 0.18 248 / 0.25)" }}
+        style={{ padding: "20px 24px", background: "var(--accent-soft)", border: "1px solid color-mix(in oklab, var(--accent) 25%, transparent)" }}
       >
         <div className="flex items-center justify-between" style={{ gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -457,7 +458,7 @@ function Deliverables() {
                   borderRadius: 11,
                   background: "var(--accent-soft)",
                   color: "var(--accent)",
-                  border: "1px solid oklch(0.55 0.18 248 / 0.25)",
+                  border: "1px solid color-mix(in oklab, var(--accent) 25%, transparent)",
                 }}
               >
                 <Icon size={19} strokeWidth={1.75} />
@@ -490,7 +491,7 @@ function Deliverables() {
               style={{
                 padding: "14px 16px",
                 borderRadius: 10,
-                background: "rgba(255,255,255,0.025)",
+                background: "var(--surface-2)",
                 border: "1px solid var(--line)",
               }}
             >
@@ -589,7 +590,14 @@ function Economics() {
       </Block>
 
       {/* ROI calculator */}
-      <Surface padded={0} style={{ padding: "24px 26px", border: "1px solid oklch(0.55 0.16 158 / 0.25)" }}>
+      <Surface
+        padded={0}
+        style={{
+          padding: "24px 26px",
+          // money-toned frame: this panel is the revenue calculator
+          border: "1px solid color-mix(in oklab, var(--money) 25%, transparent)",
+        }}
+      >
         <div className="flex items-center" style={{ gap: 10, marginBottom: 6 }}>
           <TrendingUp size={16} strokeWidth={1.75} style={{ color: "var(--money)" }} />
           <h3 className="lg-display" style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
@@ -697,7 +705,7 @@ function ResultTile({ label, value, tone }: { label: string; value: string; tone
       style={{
         padding: "14px 14px",
         borderRadius: 10,
-        background: "rgba(255,255,255,0.025)",
+        background: "var(--surface-2)",
         border: "1px solid var(--line)",
       }}
     >
@@ -721,7 +729,7 @@ const FLOW: { emoji: string; label: string; sub: string; tool?: { label: string;
   {
     emoji: "💻",
     label: "Book a Zoom meeting to pitch the assets",
-    sub: "Get them on a screen-share. On the call you show the free cold audit, then the prospect's proposal — the assets do the selling.",
+    sub: "Get them on a screen-share. On the call you show the four measured numbers for their business, then the prospect's proposal — real measurements do the selling, and a number can't be argued with.",
     tool: { label: "Open Studio", href: "/studio" },
   },
   {
@@ -746,10 +754,10 @@ const MEETING: {
     n: 1,
     time: "0–15 min",
     title: "Diagnose",
-    tag: "The Cold Audit",
+    tag: "The Observed Numbers",
     objective: "Make the hidden gaps visible and painful.",
     execution:
-      "Share your screen and walk through your pre-identified findings. Lean heavily on the negative business consequences of these broken systems — wasted time, lost revenue, operational bottlenecks.",
+      "Share your screen and walk the four measured values — mobile speed, reviews against the local average, booking link, click-to-call. Facts only, no judgment calls: every number on screen was measured, so nothing can be argued with. Lean on the business consequence of each one — the call that rang out, the quote that went quiet.",
     kicker: {
       label: "The goal",
       body: "Get them to verbally agree that these gaps exist and need to be fixed.",
@@ -820,7 +828,7 @@ function Process() {
                   width: 42,
                   height: 42,
                   borderRadius: 12,
-                  background: "rgba(255,255,255,0.04)",
+                  background: "var(--surface-2)",
                   border: "1px solid var(--line-strong)",
                   fontSize: 20,
                   lineHeight: 1,
@@ -881,7 +889,7 @@ function Process() {
                     width: 38,
                     height: 38,
                     borderRadius: 10,
-                    background: "rgba(255,255,255,0.03)",
+                    background: "var(--surface-2)",
                     border: "1px solid var(--line-strong)",
                     fontSize: 16,
                     fontWeight: 600,
@@ -1065,7 +1073,8 @@ function Scripts() {
               margin: "12px 0 0",
               padding: "16px 18px",
               borderRadius: 10,
-              background: "rgba(0,0,0,0.22)",
+              // recessed well for the script text — the canvas step below the card
+              background: "var(--bg-deep)",
               border: "1px solid var(--line)",
               fontSize: 13,
               lineHeight: 1.65,
@@ -1144,7 +1153,14 @@ function Discovery() {
           </Block>
         ))}
       </div>
-      <Surface padded={0} style={{ padding: "18px 22px", background: "var(--accent-soft)", border: "1px solid oklch(0.55 0.18 248 / 0.22)" }}>
+      <Surface
+        padded={0}
+        style={{
+          padding: "18px 22px",
+          background: "var(--accent-soft)",
+          border: "1px solid color-mix(in oklab, var(--accent) 22%, transparent)",
+        }}
+      >
         <div className="flex items-start" style={{ gap: 12 }}>
           <Quote size={18} strokeWidth={1.75} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} />
           <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
@@ -1224,7 +1240,7 @@ function Objections() {
                 borderRadius: 8,
                 background: "var(--warn-soft)",
                 color: "var(--warn)",
-                border: "1px solid oklch(0.55 0.14 75 / 0.3)",
+                border: "1px solid color-mix(in oklab, var(--warn) 30%, transparent)",
               }}
             >
               <ShieldCheck size={15} strokeWidth={1.75} />
@@ -1242,7 +1258,7 @@ function Objections() {
             style={{
               padding: "14px 16px",
               borderRadius: 10,
-              background: "rgba(255,255,255,0.025)",
+              background: "var(--surface-2)",
               border: "1px solid var(--line)",
             }}
           >

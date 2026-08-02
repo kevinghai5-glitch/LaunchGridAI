@@ -68,7 +68,7 @@ function toneColor(tone: string): string {
     case "accent":
       return "var(--accent)";
     case "danger":
-      return "var(--danger, #f87171)";
+      return "var(--danger)";
     case "muted":
       return "var(--text-4)";
     default:
@@ -329,7 +329,7 @@ export default function CrmPage() {
           >
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ background: "rgba(255,255,255,0.02)", textAlign: "left" }}>
+                <tr style={{ background: "var(--surface-2)", textAlign: "left" }}>
                   <Th>Lead</Th>
                   <Th>Stage</Th>
                   <Th>Next action</Th>
@@ -533,6 +533,10 @@ function CrmLeadModal({
         position: "fixed",
         inset: 0,
         zIndex: 100,
+        // DELIBERATE LITERAL: a modal scrim dims whatever is behind it and is
+        // black in light and dark alike (shadcn's own DialogOverlay is bg-black/80).
+        // Routing it through a theme token would make it lighten the page in the
+        // light theme, which is the opposite of what a scrim is for.
         background: "rgba(0,0,0,0.6)",
         backdropFilter: "blur(3px)",
         display: "grid",
@@ -566,6 +570,8 @@ function CrmLeadModal({
             width: 30,
             height: 30,
             borderRadius: 8,
+            // DELIBERATE LITERAL: this close button floats over the modal's hero
+            // artwork, so it needs a dark scrim behind the glyph regardless of theme.
             background: "rgba(0,0,0,0.4)",
             border: "1px solid var(--line)",
             color: "var(--text-2)",
@@ -669,7 +675,7 @@ function CrmLeadModal({
                     fontSize: 12,
                     padding: "4px 10px",
                     borderRadius: 999,
-                    background: "rgba(255,255,255,0.04)",
+                    background: "var(--surface-2)",
                     border: "1px solid var(--line)",
                     color: "var(--text-2)",
                   }}
@@ -841,7 +847,7 @@ function InlineText({
           transition: "background var(--t), border-color var(--t)",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+          e.currentTarget.style.background = "var(--surface-2)";
           e.currentTarget.style.borderColor = "var(--line)";
         }}
         onMouseLeave={(e) => {
@@ -876,7 +882,7 @@ function InlineText({
       style={{
         font: "inherit",
         color: "var(--text)",
-        background: "var(--bg-deep, #0b0d12)",
+        background: "var(--bg-deep)",
         border: "1px solid var(--accent)",
         borderRadius: 6,
         padding: "3px 7px",
@@ -909,7 +915,7 @@ function ViewTab({
         fontSize: 12.5,
         fontWeight: 600,
         color: active ? "var(--text)" : "var(--text-3)",
-        background: active ? "rgba(255,255,255,0.06)" : "transparent",
+        background: active ? "var(--surface-hi)" : "transparent",
         border: `1px solid ${active ? "var(--line-strong)" : "transparent"}`,
         borderRadius: 8,
         cursor: "pointer",

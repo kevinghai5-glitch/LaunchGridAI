@@ -77,18 +77,28 @@ export const LgButton = React.forwardRef<HTMLButtonElement, LgButtonProps>(
       variant === "primary"
         ? {
             background: "var(--accent-grad)",
-            color: "#fff",
+            color: "var(--accent-fill-text)",
             border: "1px solid transparent",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.25), 0 1px 2px rgba(0,0,0,0.3), 0 8px 20px -8px rgba(18,60,150,0.55)",
+            // The coloured drop glow was rgba(18,60,150,0.55) — a BLUE bloom
+            // left over from the pre-terracotta palette, which would have sat
+            // under every primary button in the app. Now derived from --accent,
+            // so it tracks the brand instead of contradicting it. The inset
+            // top highlight and the black grounding shadow are lighting, not
+            // brand colour, so they follow --text / the --shadow tokens.
+            boxShadow: [
+              "inset 0 1px 0 color-mix(in oklab, var(--text) 25%, transparent)",
+              "var(--shadow-sm)",
+              "0 8px 20px -8px color-mix(in oklab, var(--accent) 55%, transparent)",
+            ].join(", "),
           }
         : variant === "secondary"
         ? {
             background:
-              "linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
+              "linear-gradient(180deg, color-mix(in oklab, var(--text) 7%, transparent) 0%, color-mix(in oklab, var(--text) 3%, transparent) 100%)",
             color: "var(--text)",
             border: "1px solid var(--line-strong)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), var(--shadow-sm)",
+            boxShadow:
+              "inset 0 1px 0 color-mix(in oklab, var(--text) 6%, transparent), var(--shadow-sm)",
           }
         : variant === "ghost"
         ? {

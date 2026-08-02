@@ -26,10 +26,12 @@ export function Surface({
 type Tone = "neutral" | "accent" | "money" | "warn" | "danger";
 const PILL_TONE: Record<Tone, { c: string; bg: string; b: string }> = {
   neutral: { c: "var(--text-2)", bg: "var(--surface-hi)", b: "transparent" },
-  accent: { c: "#fff", bg: "var(--accent-grad)", b: "transparent" },
-  money: { c: "oklch(0.80 0.11 158)", bg: "var(--money-soft)", b: "transparent" },
-  warn: { c: "oklch(0.82 0.11 75)", bg: "var(--warn-soft)", b: "transparent" },
-  danger: { c: "oklch(0.78 0.14 25)", bg: "var(--danger-soft)", b: "transparent" },
+  // white on the gradient's deep end (#b05730) is 4.94:1 — passes AA. Same
+  // treatment as .lg-grad / .lg-pill-active in globals.css.
+  accent: { c: "var(--accent-fill-text)", bg: "var(--accent-grad)", b: "transparent" },
+  money: { c: "var(--money)", bg: "var(--money-soft)", b: "transparent" },
+  warn: { c: "var(--warn)", bg: "var(--warn-soft)", b: "transparent" },
+  danger: { c: "var(--danger)", bg: "var(--danger-soft)", b: "transparent" },
 };
 
 export function Pill({
@@ -148,7 +150,10 @@ export function Stars({ rating, size = 12 }: { rating: number; size?: number }) 
   return (
     <span
       className="inline-flex items-center"
-      style={{ gap: 4, color: "oklch(0.82 0.14 75)" }}
+      // Review-star gold. The palette supplies exactly one gold (--warn), and
+      // the pre-theme code already used the same value here and on warnings, so
+      // pointing both at --warn merges nothing that was distinct before.
+      style={{ gap: 4, color: "var(--warn)" }}
     >
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
         <path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z" />

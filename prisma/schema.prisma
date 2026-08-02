@@ -25,6 +25,11 @@ model User {
   stripeCurrentPeriodEnd DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+  // When the operator last opened the notifications dropdown. The bell's unread
+  // badge counts real events (proposal opened/won, leads due) NEWER than this —
+  // no notifications table, no fabricated feed: events are derived live from the
+  // rows that already record them, and this timestamp is the only state.
+  notificationsSeenAt    DateTime?
 
   accounts          Account[]
   sessions          Session[]

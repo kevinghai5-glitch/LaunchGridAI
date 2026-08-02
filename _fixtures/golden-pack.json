@@ -735,7 +735,7 @@
           "name": "Lead Qualification & On-Page Conversion",
           "score": 58,
           "rubric": "Measures how much the intake path learns about a job before a human touches it, against a form that captures job type, urgency and service area.",
-          "evidence": "The contact form asks for a name, an email, a phone number and a free-text message, and nothing else. The homepage does carry a clear call to action above the fold and a click-to-call number.",
+          "evidence": "On the pages we scanned, the contact form asks for a name, an email, a phone number and a free-text message, and nothing else. The phone number is a real tap-to-call link in the HTML, so the call route works — what is missing is anything that sorts the job before somebody reads it.",
           "diagnosis": "Enquiries arrive undifferentiated, so priority is decided by whoever reads the inbox next rather than by the value or urgency of the job.",
           "whyItMatters": "A furnace replacement and a filter question deserve very different response times, and today they get the same one.",
           "cause": "The form was built to be short rather than to sort, and nothing scores what comes through it.",
@@ -807,8 +807,8 @@
         "recommendedFix": "We deploy an after-hours auto-response on both the phone line and the form, plus a booking link that stays open around the clock, so an enquiry at 11pm is acknowledged, qualified and holding a slot before your first coffee.",
         "owner": "us",
         "allowedStats": [
-          "28–43% of inbound calls to local service businesses arrive outside business hours. (NextPhone/AgentZap/RevSquared)",
-          "85% of callers who reach voicemail never call back. (CallRail Benchmark Report)"
+          "28–43% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared).",
+          "85% of callers who reach voicemail never call back (CallRail Benchmark Report)."
         ],
         "mathFrame": "≈ CAD $652–CAD $1,305/mo — 28% of inbound calls to local service businesses arrive outside business hours (NextPhone/AgentZap/RevSquared — the conservative end of a 28–43% range), applied to the same missed-call chain above. This is the after-hours share of the missed-call figure above, not additional to it. Estimated.",
         "intakeConfirmed": true,
@@ -830,10 +830,10 @@
         "recommendedFix": "We put an instant auto-reply behind every form submission and route the enquiry into LeadGate for qualification inside the first minute, so whoever is on the phones receives a scored, ready-to-call lead instead of a raw message.",
         "owner": "us",
         "allowedStats": [
-          "Leads contacted within 5 minutes are ~21x more likely to qualify than at 30 minutes, and ~100x more likely to be reached at all. (MIT/InsideSales)",
-          "The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)",
-          "Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). (Optifai)",
-          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+          "Leads contacted within 5 minutes are ~21x more likely to qualify than at 30 minutes, and ~100x more likely to be reached at all (MIT/InsideSales).",
+          "The average business takes ~42–47 hours to respond to a new lead (HBR/Drift).",
+          "Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x) (Optifai).",
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less (HubSpot State of Inbound)."
         ],
         "mathFrame": "Close rate with a <5 minute response: 32%, vs 12% when response takes 24+ hours (~2.6x). The leads answered in minutes are the ones that close; every hour of silence moves them toward whoever replied first.",
         "intakeConfirmed": true,
@@ -862,13 +862,13 @@
         "recommendedFix": "We put a missed-call text-back on the line so a caller who does not reach a person receives a message within seconds, and route their reply into the same qualification flow as a form fill.",
         "owner": "us",
         "allowedStats": [
-          "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9%. (CallRail)",
-          "85% of callers who reach voicemail never call back. (CallRail Benchmark Report)",
-          "78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next. (CallRail consumer survey)",
-          "Phone calls to home-services businesses convert ~10–15x more than web leads. (BIA/Kelsey)"
+          "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9% (CallRail).",
+          "85% of callers who reach voicemail never call back (CallRail Benchmark Report).",
+          "78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next (CallRail consumer survey).",
+          "Phone calls to home-services businesses convert ~10–15x more than web leads (BIA/Kelsey)."
         ],
         "mathFrame": "≈ CAD $2,329–CAD $4,659/mo — based on the numbers you provided: 90 enquiries/mo × a 14% home-services missed-call rate (CallRail) × the 85% of missed callers who never call back (CallRail) × a 30% close rate on the ones you'd win back (our assumption, not a number we measured) × your CAD $1,450 average customer value, with the low end set at half the high end (our assumption, not a number we measured). Estimated.",
-        "industryPattern": "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9%. (CallRail) 85% of callers who reach voicemail never call back. (CallRail Benchmark Report) 78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next. (CallRail consumer survey) Phone calls to home-services businesses convert ~10–15x more than web leads. (BIA/Kelsey)",
+        "industryPattern": "Missed-call rates by industry: Healthcare 32%, Legal 28%, Home Services 14%, Real Estate 9% (CallRail). 85% of callers who reach voicemail never call back (CallRail Benchmark Report). 78% of customers have abandoned a business after an unanswered call; 82% say they'll call a competitor next (CallRail consumer survey). Phone calls to home-services businesses convert ~10–15x more than web leads (BIA/Kelsey).",
         "kickoffLine": "We verify this together at kickoff — if you already have this covered, it comes off the list.",
         "quantifiable": true
       },
@@ -886,7 +886,7 @@
         "recommendedFix": "We build the booking page inside your GoHighLevel sub-account, wire it to real technician availability, and put it behind every call-to-action on the site so a visitor can take a slot without speaking to anyone.",
         "owner": "us",
         "allowedStats": [
-          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less (HubSpot State of Inbound)."
         ],
         "intakeConfirmed": true,
         "quantifiable": true
@@ -921,10 +921,10 @@
         "owner": "us",
         "allowedStats": [
           "Most leads need several touches before they buy, and most businesses stop after one or two.",
-          "The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)"
+          "The average business takes ~42–47 hours to respond to a new lead (HBR/Drift)."
         ],
         "mathFrame": "Most leads need several touches before they buy, and most businesses stop after one or two.",
-        "industryPattern": "Most leads need several touches before they buy, and most businesses stop after one or two. The average business takes ~42–47 hours to respond to a new lead. (HBR/Drift)",
+        "industryPattern": "Most leads need several touches before they buy, and most businesses stop after one or two. The average business takes ~42–47 hours to respond to a new lead (HBR/Drift).",
         "kickoffLine": "We verify this together at kickoff — if you already have this covered, it comes off the list.",
         "quantifiable": true
       },
@@ -958,7 +958,7 @@
         "recommendedFix": "We install a webchat widget that hands the conversation straight to SMS, so a question asked on the site continues in the visitor's text messages and lands in the same pipeline as a phone call.",
         "owner": "us",
         "allowedStats": [
-          "40.5% of consumers say they'd switch to a competitor that offers text messaging. (Podium Business Messaging Trends)"
+          "40.5% of consumers say they'd switch to a competitor that offers text messaging (Podium Business Messaging Trends)."
         ],
         "quantifiable": true
       },
@@ -992,9 +992,9 @@
         "recommendedFix": "We connect the Facebook page inbox into the same conversation view as calls, texts and form fills, so a direct message is answered on the same clock as everything else.",
         "owner": "us",
         "allowedStats": [
-          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)"
+          "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less (HubSpot State of Inbound)."
         ],
-        "industryPattern": "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less. (HubSpot State of Inbound)",
+        "industryPattern": "82% of consumers expect an 'immediate' response; 60% define immediate as 10 minutes or less (HubSpot State of Inbound).",
         "kickoffLine": "We verify this together at kickoff — if you already have this covered, it comes off the list.",
         "quantifiable": true
       },
@@ -1473,11 +1473,11 @@
         "Never publish a review, a name or a photo that did not come from a real customer, however good the placeholder reads.",
         "Any response time promised on the page has to match what the automation actually does, or the page becomes a liability."
       ],
-      "summary": "The page does the honest things well: the headline says what you do and where, the phone number is tappable, and there is a clear request-a-quote button above the fold. What it does not do is give a visitor any way to act outside the hours your office is open, or any reason to choose you over the two companies with more reviews. Measured on mobile the page scores 67 with a largest contentful paint of 3.4 seconds, and 89 at 1.6 seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.",
+      "summary": "The page does the honest things well: the headline says what you do and where, and the phone number is a real tap-to-call link in the HTML rather than typed-out digits. What it does not do is give a visitor any way to act outside the hours your office is open, or any reason to choose you over the two companies with more reviews. Measured on mobile the page scores 67 with a largest contentful paint of 3.4 seconds, and 89 at 1.6 seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.",
       "notes": [
         {
           "area": "Buttons",
-          "whatWeSaw": "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. There is no third option anywhere on the page, and both routes need the office to be open.",
+          "whatWeSaw": "The two routes into the business we can find in the page HTML are a request-a-quote link to the contact form and a tap-to-call link to the main line. We found no third option on any page we scanned, and both of those routes need the office to be open.",
           "recommendation": "Point the existing buttons at the booking page and keep one visible at every scroll position. This is the cheapest change on the list and the one with the most behind it.",
           "priority": "critical"
         },

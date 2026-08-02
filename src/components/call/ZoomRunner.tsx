@@ -18,10 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
-import { ColdAuditView } from "@/components/businesses/ColdAuditView";
+import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
 import { PublicProposal } from "@/components/proposals/PublicProposal";
 import { STATUS_META, type LeadStatus, type ZoomOutcome } from "@/lib/call-queue";
-import type { ColdAuditReport, ProposalContent } from "@/types";
+// Type-only: the server page computes the four values and ships the small object.
+import type { ObservedFacts } from "@/lib/observed-facts";
+import type { ProposalContent } from "@/types";
 
 interface RunnerBusiness {
   name: string;
@@ -35,7 +37,10 @@ interface RunnerBusiness {
 interface ZoomRunnerProps {
   businessId: string;
   business: RunnerBusiness;
-  audit: ColdAuditReport | null;
+  /** The four measured pre-dial values — the Diagnose beat. Replaced the cold
+   *  audit (owner ruling, 2026-08-01): same slot on the call, numbers instead of
+   *  prose, because a number cannot hallucinate. */
+  observedFacts: ObservedFacts | null;
   proposal: ProposalContent;
 }
 
@@ -68,7 +73,7 @@ function toneColor(tone: "success" | "accent" | "danger" | "muted"): string {
   return "var(--text-3)";
 }
 
-export function ZoomRunner({ businessId, business, audit, proposal }: ZoomRunnerProps) {
+export function ZoomRunner({ businessId, business, observedFacts, proposal }: ZoomRunnerProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<PhaseId>("diagnose");
   const [submitting, setSubmitting] = useState<ZoomOutcome | null>(null);
@@ -195,7 +200,7 @@ export function ZoomRunner({ businessId, business, audit, proposal }: ZoomRunner
         </div>
 
         {/* Phase body */}
-        {phase === "diagnose" && <DiagnosePhase businessId={businessId} audit={audit} />}
+        {phase === "diagnose" && <DiagnosePhase facts={observedFacts} />}
         {phase === "pivot" && <PivotPhase proposal={proposal} />}
         {phase === "proposal" && <ProposalPhase business={business} proposal={proposal} />}
 
@@ -298,24 +303,20 @@ export function ZoomRunner({ businessId, business, audit, proposal }: ZoomRunner
   );
 }
 
-// ── Phase 1: Diagnose — present the audit (the same artifact they'll receive) ────
-function DiagnosePhase({ businessId, audit }: { businessId: string; audit: ColdAuditReport | null }) {
-  if (!audit) {
-    return (
-      <div className="panel" style={{ padding: 28, borderRadius: 14, textAlign: "center" }}>
-        <Stethoscope size={22} strokeWidth={1.8} style={{ color: "var(--text-4)", margin: "0 auto 10px" }} />
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>No audit generated yet</div>
-        <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 6, maxWidth: 440, marginInline: "auto" }}>
-          Generate the cold audit from the lead&apos;s page first — it&apos;s the visual you diagnose from
-          in the first ten minutes. You can still run Pivot and Proposal without it.
-        </p>
-      </div>
-    );
-  }
+// ── Phase 1: Diagnose — the four measured numbers, read out loud ──────────────
+// Same beat the cold audit used to fill, numbers instead of prose (the audit was
+// deleted by owner ruling, 2026-08-01: the money math happens live on the Zoom
+// in a separate calculator, and four measured values on a screen prove we looked
+// better than a generated document — a number cannot hallucinate). "—" means "we
+// could not see", which is a different fact from "nothing is wrong", and the row
+// keeps them different on screen.
+function DiagnosePhase({ facts }: { facts: ObservedFacts | null }) {
   return (
     <div className="panel" style={{ padding: 20, borderRadius: 14 }}>
-      <ScriptCue text="Share your screen. Walk the ONE leak that hurts most — make them feel the cost before you say a word about the fix." />
-      <ColdAuditView report={audit} businessId={businessId} />
+      <ScriptCue text="Share your screen. Read the measured numbers out loud — worth-fixing first — then pivot: the outside is the smaller half, and the interesting leaks are the ones a scan can't see." />
+      <div style={{ marginTop: 12 }}>
+        <ObservedFactsRow facts={facts} framed={false} />
+      </div>
     </div>
   );
 }

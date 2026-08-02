@@ -9,8 +9,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateProposalSchema } from "@/lib/validations";
 import { buildProposalDefaults } from "@/lib/proposal-defaults";
-import { runColdAuditPipeline } from "@/lib/cold-audit-pipeline";
-import { persistColdAudit } from "@/lib/cold-audit-store";
 import type { AssetPack, ColdAuditReport } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -53,33 +51,7 @@ export async function POST(req: NextRequest) {
     const pack = (packRow?.content as unknown as AssetPack) ?? null;
     const audit = (auditRow?.content as unknown as ColdAuditReport) ?? null;
 
-    let proposalData = buildProposalDefaults(business, { pack, audit });
-
-    // If the stored audit data couldn't dollarize the leak (no audit on file, or
-    // an older/weak pack with no per-leak figures), run a fresh grounded
-    // cold-audit on the fly so the proposal shows real diagnosed numbers instead
-    // of conservative placeholders. Persist it so it's reusable next time, and
-    // rebuild from the fresh audit alone so its figures take precedence. If the
-    // pipeline fails (missing keys, nothing to read), keep the placeholders.
-    if (!proposalData.roi.recovered && business.website) {
-      try {
-        const fresh = await runColdAuditPipeline(business);
-        const rebuilt = buildProposalDefaults(business, { audit: fresh });
-        if (rebuilt.roi.recovered) {
-          // Goes through persistColdAudit, not a bare create(): this path used to
-          // mint a fresh publicId and leave the previous audit row live, which is
-          // exactly the stale-share-link bug F3 removed from /api/generate/cold-audit.
-          await persistColdAudit({
-            businessId: business.id,
-            userId: session.user.id,
-            report: fresh,
-          });
-          proposalData = rebuilt;
-        }
-      } catch (auditError) {
-        console.error("Inline cold-audit for proposal failed:", auditError);
-      }
-    }
+    const proposalData = buildProposalDefaults(business, { pack, audit });
 
     return NextResponse.json({ proposalData });
   } catch (error) {

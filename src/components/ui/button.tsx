@@ -13,14 +13,19 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
         outline:
-          "border border-white/10 bg-transparent shadow-sm hover:bg-white/[0.05] hover:text-accent-foreground",
+          "border border-lg-line bg-transparent shadow-sm hover:bg-lg-surface-hover hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-        ghost: "hover:bg-white/[0.05] hover:text-accent-foreground",
+        ghost: "hover:bg-lg-surface-hover hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         blue: "lg-grad shadow hover:brightness-110",
+        // `blue`/`blue-outline` are legacy NAMES from the pre-terracotta palette
+        // — `blue` already resolved to the accent gradient. This variant was the
+        // last live blue in the dashboard chrome: a blue outline sitting next to
+        // accent-gradient buttons. Now the accent outline. Names left alone on
+        // purpose; renaming a variant would touch call sites another workflow owns.
         "blue-outline":
-          "border border-blue-500/50 text-blue-400 hover:bg-blue-500/10 hover:border-blue-400",
+          "border border-[color-mix(in_oklab,var(--accent)_55%,transparent)] text-lg-accent hover:bg-lg-accent-soft hover:border-lg-accent",
       },
       size: {
         default: "h-9 px-4 py-2",

@@ -44,7 +44,7 @@ export function MotivationPopup() {
         background: "var(--surface)",
         border: "1px solid var(--line-strong)",
         borderRadius: "var(--radius)",
-        boxShadow: "0 18px 48px -12px rgba(0,0,0,0.55)",
+        boxShadow: "var(--shadow-xl)",
         animation: leaving
           ? "lg-motiv-out-tr 0.26s ease forwards"
           : "lg-motiv-in-tr 0.34s cubic-bezier(0.16,1,0.3,1)",

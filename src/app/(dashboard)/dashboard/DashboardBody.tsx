@@ -165,7 +165,7 @@ export function DashboardBody({
             marginBottom: 40,
             borderRadius: 14,
             background: "var(--accent-soft)",
-            border: "1px solid oklch(0.55 0.18 248 / 0.22)",
+            border: "1px solid color-mix(in oklab, var(--accent) 22%, transparent)",
           }}
         >
           <div
@@ -174,8 +174,8 @@ export function DashboardBody({
               width: 44,
               height: 44,
               borderRadius: 11,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid oklch(0.55 0.18 248 / 0.3)",
+              background: "var(--surface-2)",
+              border: "1px solid color-mix(in oklab, var(--accent) 30%, transparent)",
               color: "var(--accent)",
             }}
           >
@@ -226,7 +226,7 @@ export function DashboardBody({
                         width: 28,
                         height: 28,
                         borderRadius: 99,
-                        background: "rgba(255,255,255,0.03)",
+                        background: "var(--surface-2)",
                         color: TONE_C[a.tone],
                       }}
                     >
@@ -266,7 +266,7 @@ export function DashboardBody({
                     width: 40,
                     height: 40,
                     borderRadius: 10,
-                    background: "rgba(255,255,255,0.03)",
+                    background: "var(--surface-2)",
                     border: "1px solid var(--line)",
                   }}
                 >

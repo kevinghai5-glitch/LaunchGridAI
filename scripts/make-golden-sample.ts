@@ -774,8 +774,16 @@ const AXIS_PROSE: Record<string, AxisProse> = {
   lead_qualification: {
     rubric:
       "Measures how much the intake path learns about a job before a human touches it, against a form that captures job type, urgency and service area.",
+    // SCRUBBED. This sentence used to end: "The homepage does carry a clear call
+    // to action above the fold and a click-to-call number." Both halves of that
+    // are the bug this round is about — "clear" is an editorial verdict on their
+    // copy and "above the fold" is a position on a page we never render — and the
+    // fabrication lint is now fatal on either, at any grade, in any deliverable
+    // (leak-narrative.ts NEVER_LICENSABLE_TOPICS). What is left says what we
+    // actually read: the form's own fields, and the `tel:` fingerprint, scoped to
+    // the pages we scanned.
     evidence:
-      "The contact form asks for a name, an email, a phone number and a free-text message, and nothing else. The homepage does carry a clear call to action above the fold and a click-to-call number.",
+      "On the pages we scanned, the contact form asks for a name, an email, a phone number and a free-text message, and nothing else. The phone number is a real tap-to-call link in the HTML, so the call route works — what is missing is anything that sorts the job before somebody reads it.",
     diagnosis:
       "Enquiries arrive undifferentiated, so priority is decided by whoever reads the inbox next rather than by the value or urgency of the job.",
     whyItMatters:
@@ -1420,13 +1428,21 @@ const surfaces: AssetPack["surfaces"] = stampSurfaceDestinations({
     where: "",
     scopeNote: "",
     standingRules: [],
+    // THE ADVISORY SURFACE IS THE HONEST HOME FOR A JUDGMENT ABOUT A PAGE — AND IT
+    // IS STILL NOT A HOME FOR A POSITION CLAIM. docs/detector-checkability.md §2.7
+    // forbids "above the fold", "buried" and "no clear call to action" outright, in
+    // ANY deliverable, because we render no page and measure no position. The
+    // advisory surface is exempt from being read as a MEASUREMENT, not from being
+    // true. So these strings now describe what the fingerprints found (a `tel:`
+    // link, two routes in the HTML, the form's own fields) and keep the judgment in
+    // the RECOMMENDATION, where it is advice somebody can take or leave.
     summary:
-      "The page does the honest things well: the headline says what you do and where, the phone number is tappable, and there is a clear request-a-quote button above the fold. What it does not do is give a visitor any way to act outside the hours your office is open, or any reason to choose you over the two companies with more reviews. Measured on mobile the page scores 67 with a largest contentful paint of 3.4 seconds, and 89 at 1.6 seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.",
+      "The page does the honest things well: the headline says what you do and where, and the phone number is a real tap-to-call link in the HTML rather than typed-out digits. What it does not do is give a visitor any way to act outside the hours your office is open, or any reason to choose you over the two companies with more reviews. Measured on mobile the page scores 67 with a largest contentful paint of 3.4 seconds, and 89 at 1.6 seconds on desktop — real numbers, worth knowing, and context rather than a recommendation. The conversion read is that the page is quick enough that nothing on this list is being caused by load time.",
     notes: [
       {
         area: "Buttons",
         whatWeSaw:
-          "The two calls to action above the fold are a request-a-quote link to the contact form and a tap-to-call link to the main line. There is no third option anywhere on the page, and both routes need the office to be open.",
+          "The two routes into the business we can find in the page HTML are a request-a-quote link to the contact form and a tap-to-call link to the main line. We found no third option on any page we scanned, and both of those routes need the office to be open.",
         recommendation:
           "Point the existing buttons at the booking page and keep one visible at every scroll position. This is the cheapest change on the list and the one with the most behind it.",
         priority: "critical",

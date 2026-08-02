@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateBusinessSchema } from "@/lib/validations";
+import { observedFactsFor } from "@/lib/observed-facts";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,20 @@ export async function GET(
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ business });
+    // Observed facts are computed HERE, server-side, from the snapshot columns —
+    // and those columns are then withheld from the payload. The research/PSI
+    // snapshots are multi-MB JSON no client code reads (verified: nothing under
+    // src/ touches business.psiSnapshot / business.researchSnapshot from a
+    // fetch payload); shipping them was pure weight. The small ObservedFacts
+    // object is what the pre-dial row renders.
+    const observedFacts = observedFactsFor(business);
+    const {
+      psiSnapshot: _omitPsiSnapshot,
+      researchSnapshot: _omitResearchSnapshot,
+      ...clientSafe
+    } = business;
+
+    return NextResponse.json({ business: { ...clientSafe, observedFacts } });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to fetch business" }, { status: 500 });
@@ -85,7 +99,21 @@ export async function PATCH(
       where: { id: params.id, userId: session.user.id, deletedAt: null },
     });
 
-    return NextResponse.json({ business: updated });
+    // Same blob discipline as GET: the snapshot columns are server-side inputs,
+    // not payload. Every consumer of this PATCH merges single fields ("MERGE,
+    // don't replace" — see businesses/[id]/page.tsx) or ignores the body, and an
+    // intake chip click was downloading megabytes of stored scrape JSON for
+    // nothing. observedFacts stays a GET concern — no PATCH consumer reads it.
+    if (!updated) {
+      return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    }
+    const {
+      psiSnapshot: _omitPsiSnapshot,
+      researchSnapshot: _omitResearchSnapshot,
+      ...clientSafe
+    } = updated;
+
+    return NextResponse.json({ business: clientSafe });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to update business" }, { status: 500 });
