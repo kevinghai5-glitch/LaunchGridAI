@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- The browser-tab icon. Next.js serves app/icon.svg as the favicon
+       automatically, with no link tag and no config. This is the sidebar's Logo
+       tile (components/Logo.tsx) as a standalone asset, in the Claude theme's
+       own accent gradient: the exact three stops of the "lgx accent grad" token
+       in globals.css's dark block, hardcoded here because a favicon is
+       rasterized outside the page and cannot read CSS variables. If the theme's
+       accent gradient changes, change these stops with it; Logo.tsx follows the
+       token automatically. NOTE: never write a CSS custom-property name (double
+       hyphen prefix) inside this comment. XML comments must not contain two
+       consecutive hyphens, and an invalid SVG silently keeps the OLD favicon on
+       screen, because the browser cannot parse the new one. That exact failure
+       already shipped once. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e89478"/>
+      <stop offset="0.46" stop-color="#d97757"/>
+      <stop offset="1" stop-color="#b05730"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#g)"/>
+  <path d="M6 16 L12 16 L12 8 L18 8 L18 24 L24 24 L24 16"
+        fill="none" stroke="#ffffff" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

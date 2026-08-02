@@ -25,8 +25,13 @@ export function Logo({ className, iconOnly = false, textOnly = false, size = "md
             width: icon,
             height: icon,
             borderRadius: 7,
+            // The theme's own accent gradient, by token — so the brand tile, the
+            // buttons and the favicon read as one mark. The literal fallback is
+            // the dark block's stops, for any surface where the token is absent.
+            // (The favicon at src/app/icon.svg hardcodes the same three stops;
+            // change them together.)
             background:
-              "linear-gradient(140deg, oklch(0.62 0.20 252) 0%, oklch(0.45 0.18 248) 100%)",
+              "var(--lgx-accent-grad, linear-gradient(140deg, #e89478 0%, #d97757 46%, #b05730 100%))",
             boxShadow:
               "inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.3), 0 6px 20px -6px var(--accent-glow)",
           }}
