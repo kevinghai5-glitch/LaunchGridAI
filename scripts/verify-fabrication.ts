@@ -1599,12 +1599,12 @@ function runOfflineProof(): void {
     const goldenPath = "_fixtures/golden-pack.json";
     if (existsSync(resolve(REPO, goldenPath))) {
       const pack = JSON.parse(read(goldenPath)) as AssetPack;
-      for (const id of ["d1", "d2", "d3", "d4"] as const)
+      for (const id of ["diagnosis", "build-plan", "asset-pack"] as const)
         fresh.push({ where: `golden ${id} (re-rendered)`, html: renderDeliverableHtml(pack, id) });
     }
     for (const d of fixtureClientDirs()) {
       const pack = JSON.parse(read(`_fixtures/clients/${d}/pack.json`)) as AssetPack;
-      fresh.push({ where: `${d} d1 (re-rendered)`, html: renderDeliverableHtml(pack, "d1") });
+      fresh.push({ where: `${d} diagnosis (re-rendered)`, html: renderDeliverableHtml(pack, "diagnosis") });
     }
     assert(fresh.length >= 5, `only ${fresh.length} documents re-rendered — this check is not covering the deliverables`);
     const bad: string[] = [];

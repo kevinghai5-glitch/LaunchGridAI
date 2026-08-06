@@ -2832,7 +2832,7 @@ function writeClient(built: BuiltClient): void {
       // the half the stale rule never looked at (that a confirmed leak carries
       // the confirmed framing and does NOT re-ask a question the client already
       // answered).
-      const failures = kickoffRuleCorrected(pack, renderDeliverableHtml(pack, "d1"));
+      const failures = kickoffRuleCorrected(pack, renderDeliverableHtml(pack, "diagnosis"));
       console.log(`\n  KNOWN-STALE GATE OVERRIDDEN — ${v}`);
       console.log(`    ${STALE_KICKOFF_EXPLANATION}`);
       console.log(`    Corrected rule run in its place: ${failures.length ? "FAILED" : "passed"}.`);

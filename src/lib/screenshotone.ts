@@ -71,10 +71,18 @@ export const MAX_EMBEDDED_SCREENSHOT_BYTES = 1_500_000;
  *  The host allowlist is the point of the `signedUrl` parameter being narrow:
  *  this function can only ever fetch from ScreenshotOne, so it cannot be handed
  *  an arbitrary URL and used as a general-purpose fetcher on our server. */
-export async function fetchScreenshotAsDataUri(
+/** Fetch the RAW BYTES of one of our signed shots, or null.
+ *
+ *  The shared core behind both "store it as our own file" (screenshot-store.ts)
+ *  and the legacy data-URI path. Same guarantees either way: the host allowlist
+ *  means this can only ever fetch from ScreenshotOne (never a general-purpose
+ *  server-side fetcher), the size cap refuses a pathological page before it can
+ *  balloon memory, and every failure path returns null — the screenshot is a
+ *  nicety and is never the reason a document fails to generate. */
+export async function fetchScreenshotBytes(
   signedUrl: string | null | undefined,
   opts: { timeoutMs?: number; maxBytes?: number } = {}
-): Promise<string | null> {
+): Promise<{ bytes: Buffer; contentType: string } | null> {
   const raw = signedUrl?.trim();
   if (!raw) return null;
   let parsed: URL;
@@ -99,12 +107,25 @@ export async function fetchScreenshotAsDataUri(
     if (Number.isFinite(declared) && declared > maxBytes) return null;
     const bytes = Buffer.from(await res.arrayBuffer());
     if (!bytes.length || bytes.length > maxBytes) return null;
-    return `data:${type};base64,${bytes.toString("base64")}`;
+    return { bytes, contentType: type };
   } catch {
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Legacy data-URI path, kept for callers that want an inline copy. The
+ *  client-facing deliverable no longer uses this (it stores files and serves our
+ *  own copy — see screenshot-store.ts) because ~8 base64 images bloat every
+ *  document by close to a megabyte. */
+export async function fetchScreenshotAsDataUri(
+  signedUrl: string | null | undefined,
+  opts: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<string | null> {
+  const got = await fetchScreenshotBytes(signedUrl, opts);
+  if (!got) return null;
+  return `data:${got.contentType};base64,${got.bytes.toString("base64")}`;
 }
 
 export type Viewport = "desktop" | "mobile";

@@ -7,7 +7,11 @@
 // how much they NEED the service → take the top N → batch-write a call angle →
 // caller persists them as SUGGESTED leads for approve/decline triage.
 
-import { searchBusinesses, type PlaceResult } from "@/lib/google-places";
+import {
+  searchBusinesses,
+  hydratePhotoUrls,
+  type PlaceResult,
+} from "@/lib/google-places";
 import { openai, DEFAULT_MODEL } from "@/lib/openai";
 import { opportunityScore, NA_METROS, DAILY_BATCH_SIZE } from "@/lib/crm";
 import { orderMetrosByCallTime } from "@/lib/call-timing";
@@ -32,6 +36,42 @@ export interface ProspectAngle {
   outreachAngle: string;
 }
 
+// What a sourcing run actually managed to do. The counts exist so the caller can
+// tell the operator the TRUTH when a batch comes back short — see the comment on
+// metrosOpen below. A short batch is a fact about the hour, not a failure.
+export interface ProspectBatch {
+  prospects: ScoredProspect[];
+  /** What the operator asked for. */
+  requested: number;
+  /** Metros in a live calling window at generation time. */
+  metrosOpen: number;
+  /** How many of those we actually had to search before we had enough. */
+  metrosSearched: number;
+  /** False = off-hours everywhere; the metro list is a soonest-to-open fallback. */
+  anyCallable: boolean;
+}
+
+// How many metros are searched concurrently. The metro loop used to be strictly
+// sequential, which was fine at 30 (it exited after ~3 metros) but is the whole
+// wall-clock at 77+, where every open metro gets visited. Waves keep the
+// peak-window-first ORDER intact — a wave only starts once the previous one is
+// merged — while cutting the round-trips by ~4x.
+const METRO_WAVE = 4;
+
+// Per-metro search depth. Google Places Text Search pages at 20 and hard-caps at
+// 60, and each page is a separate billed request — so depth costs the same per
+// RESULT whether it comes from one deep metro or three shallow ones. The floor
+// keeps small batches spread across cities (better lead mix, and a wider pool to
+// direction-check review gaps against); the ceiling is the API's.
+const MIN_PER_METRO = 20;
+const MAX_PER_METRO = 60;
+
+// Raw results to search for per prospect wanted. Scoring keeps the top `count`,
+// and the dedup set removes everything this operator has already seen — which
+// grows every single day — so the multiplier is headroom, not waste: the wave
+// loop exits as soon as it has enough.
+const OVERSAMPLE = 2.5;
+
 // Pull real prospects for a niche across the metro rotation, dedup, score, rank.
 //  - excludePlaceIds: Places already saved/declined for this operator (skip them).
 //  - count: how many to return (defaults to a full daily batch).
@@ -41,7 +81,7 @@ export async function gatherProspects(
   excludePlaceIds: Set<string>,
   count: number = DAILY_BATCH_SIZE,
   metroOffset = 0
-): Promise<ScoredProspect[]> {
+): Promise<ProspectBatch> {
   const seen = new Set<string>(excludePlaceIds);
   const collected: { place: PlaceResult; metro: string }[] = [];
   // Per-metro review benchmark: EVERY same-niche business Places returned for a
@@ -54,29 +94,56 @@ export async function gatherProspects(
   // (peak windows first). This is what makes a 9am-ET generation skip California
   // (6am there) and a 6pm-ET generation surface the West Coast (still afternoon).
   // Falls back to the soonest-to-open metros when nothing is callable (late night).
-  const orderedMetros = orderMetrosByCallTime(NA_METROS, new Date(), metroOffset).metros;
-  for (let i = 0; i < orderedMetros.length && collected.length < count * 2; i++) {
-    const metro = orderedMetros[i];
-    let batch: PlaceResult[] = [];
-    try {
-      batch = await searchBusinesses(niche, metro, 20);
-    } catch {
-      // One metro failing (rate limit etc.) shouldn't sink the whole run.
-      continue;
-    }
-    const pool = metroPools.get(metro) ?? [];
-    for (const p of batch) {
-      if (p.name && p.userRatingsTotal > 0) {
-        pool.push({ name: p.name, reviews: p.userRatingsTotal });
+  //
+  // NOTE FOR ANY FUTURE EDIT: when a large batch comes back short, the fix is
+  // NEVER to widen this list. Padding a 77-lead run with metros that are closed
+  // hands the operator businesses he cannot legally or usefully dial for hours,
+  // which is worse than a short list. Return short and say so.
+  const ordering = orderMetrosByCallTime(NA_METROS, new Date(), metroOffset);
+  const orderedMetros = ordering.metros;
+
+  const target = Math.ceil(count * OVERSAMPLE);
+  const perMetro = Math.min(
+    MAX_PER_METRO,
+    Math.max(
+      MIN_PER_METRO,
+      Math.ceil(target / Math.max(1, orderedMetros.length))
+    )
+  );
+
+  let metrosSearched = 0;
+  for (let i = 0; i < orderedMetros.length && collected.length < target; i += METRO_WAVE) {
+    const wave = orderedMetros.slice(i, i + METRO_WAVE);
+    const batches = await Promise.all(
+      wave.map((metro) =>
+        // One metro failing (rate limit etc.) shouldn't sink the whole run.
+        // Photos are NOT resolved here: Place Photo is billed per place and most
+        // of these rows are about to lose the scoring cut. The survivors get
+        // hydrated once, below.
+        searchBusinesses(niche, metro, perMetro, { resolvePhotos: false }).catch(
+          () => [] as PlaceResult[]
+        )
+      )
+    );
+    metrosSearched += wave.length;
+
+    // Merge in wave order so the result stays deterministic regardless of which
+    // request happened to return first.
+    wave.forEach((metro, w) => {
+      const pool = metroPools.get(metro) ?? [];
+      for (const p of batches[w]) {
+        if (p.name && p.userRatingsTotal > 0) {
+          pool.push({ name: p.name, reviews: p.userRatingsTotal });
+        }
+        if (!p.placeId || seen.has(p.placeId)) continue;
+        seen.add(p.placeId);
+        collected.push({ place: p, metro });
       }
-      if (!p.placeId || seen.has(p.placeId)) continue;
-      seen.add(p.placeId);
-      collected.push({ place: p, metro });
-    }
-    metroPools.set(metro, pool);
+      metroPools.set(metro, pool);
+    });
   }
 
-  return collected
+  const ranked = collected
     .map(({ place, metro }) => {
       const signals: FindingSignals = {
         name: place.name,
@@ -95,6 +162,18 @@ export async function gatherProspects(
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, count);
+
+  // Photos LAST, on the survivors only — one billed Place Photo call per row the
+  // operator will actually see, instead of one per row we searched.
+  const prospects = await hydratePhotoUrls(ranked);
+
+  return {
+    prospects,
+    requested: count,
+    metrosOpen: ordering.anyCallable ? orderedMetros.length : 0,
+    metrosSearched,
+    anyCallable: ordering.anyCallable,
+  };
 }
 
 // Per-type instruction the LLM writes copy FOR. The finding TYPE is already
@@ -121,6 +200,34 @@ function findingBrief(p: ScoredProspect, niche: string): string {
 // fires ~9 calls at once), so we split into parallel chunks that each emit ~1/4
 // the tokens and finish in a fraction of the wall-time.
 const ANGLE_CHUNK_SIZE = 8;
+
+// ── Token accounting ─────────────────────────────────────────────────────────
+// Prospecting's ONE LLM cost (the angle writer) was previously un-instrumented —
+// its spend could only be estimated. This mirrors asset-generation.ts's
+// PackTokenUsage exactly so the two costs read the same way. Reset at the top of
+// writeAngles, incremented at the single issue point (writeAnglesChunk), logged
+// on completion.
+export interface ProspectingTokenUsage {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+let tokenUsage: ProspectingTokenUsage = {
+  calls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+};
+
+export function resetProspectingTokenUsage(): void {
+  tokenUsage = { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+}
+
+export function readProspectingTokenUsage(): ProspectingTokenUsage {
+  return { ...tokenUsage };
+}
 
 // Write angles for ONE chunk of prospects. Returns a map keyed by the prospect's
 // GLOBAL index (offset + local) so results merge back index-aligned. Never
@@ -158,6 +265,15 @@ Return ONLY valid JSON: { "items": [ { "n": 1, "painPoint": "...", "outreachAngl
       response_format: { type: "json_object" },
       temperature: 0.6,
     });
+    // Count tokens at the single point a request is actually issued, so the
+    // parallel chunks accumulate correctly (JS is single-threaded; each += runs
+    // to completion between awaits).
+    const u = res.usage;
+    tokenUsage.calls += 1;
+    tokenUsage.promptTokens += u?.prompt_tokens ?? 0;
+    tokenUsage.completionTokens += u?.completion_tokens ?? 0;
+    tokenUsage.totalTokens += u?.total_tokens ?? 0;
+
     const content = res.choices[0]?.message?.content;
     if (content) {
       const parsed = JSON.parse(content) as {
@@ -190,6 +306,9 @@ export async function writeAngles(
 ): Promise<ProspectAngle[]> {
   if (prospects.length === 0) return [];
 
+  // Fresh count per generation, mirroring generateAssetPack's resetTokenUsage().
+  resetProspectingTokenUsage();
+
   const chunks: Promise<Map<number, ProspectAngle>>[] = [];
   for (let offset = 0; offset < prospects.length; offset += ANGLE_CHUNK_SIZE) {
     chunks.push(
@@ -199,6 +318,14 @@ export async function writeAngles(
   const maps = await Promise.all(chunks);
   const byIndex = new Map<number, ProspectAngle>();
   for (const m of maps) for (const [k, v] of Array.from(m)) byIndex.set(k, v);
+
+  // Same completion log shape as the asset pack, so prospecting spend is now
+  // MEASURED rather than estimated (item 5). usage.total_tokens front and centre.
+  const t = readProspectingTokenUsage();
+  console.log(
+    `[prospecting] writeAngles: ${prospects.length} prospects · ${t.calls} LLM call(s) · ` +
+      `${t.totalTokens} total tokens (prompt ${t.promptTokens}, completion ${t.completionTokens})`
+  );
 
   // The output gate (Defect C): every row must be verifiable + direction-checked
   // + defensible, or it falls back to the deterministic template. This is the

@@ -736,7 +736,7 @@ const FLOW: { emoji: string; label: string; sub: string; tool?: { label: string;
     emoji: "💰",
     label: "Close",
     sub: "Sell the OUTCOME — more booked, paying customers — never the system or the files.",
-    tool: { label: "Open Proposals", href: "/proposals" },
+    tool: { label: "Open Library", href: "/library" },
   },
 ];
 

@@ -10,6 +10,10 @@ export interface PlaceResult {
   category: string;
   description: string;
   photoUrl: string;
+  // The UNRESOLVED Places photo resource name, kept so a caller that deferred
+  // photo hydration can resolve it later (see hydratePhotoUrls). Empty when the
+  // place has no photo, or when photoUrl was already resolved inline.
+  photoName: string;
   location: {
     lat: number;
     lng: number;
@@ -89,10 +93,17 @@ async function resolvePhotoUrl(
 // and a maximum of 60 total across 3 pages (hard API cap). Walk the
 // nextPageToken chain until we hit the cap, the requested max, or run out of
 // pages, then hydrate each place (incl. a key-free photo URL).
+//
+// resolvePhotos=false skips the per-place Place Photo call and returns the raw
+// photo resource name instead. That call is BILLED PER PLACE, and the daily
+// prospector discards ~75% of what it searches during scoring — so paying for a
+// photo before the row survives selection is money spent on rows nobody sees.
+// Callers that render results immediately (the Studio search) leave it true.
 async function runTextSearch(
   query: string,
   apiKey: string,
-  maxResults: number
+  maxResults: number,
+  resolvePhotos = true
 ): Promise<PlaceResult[]> {
   const collected: PlacesApiPlace[] = [];
   let pageToken: string | undefined;
@@ -135,10 +146,9 @@ async function runTextSearch(
 
   return Promise.all(
     places.map(async (place: PlacesApiPlace) => {
-      const firstPhoto = place.photos?.[0]?.name;
-      const photoUrl = firstPhoto
-        ? await resolvePhotoUrl(firstPhoto, apiKey)
-        : "";
+      const firstPhoto = place.photos?.[0]?.name ?? "";
+      const photoUrl =
+        firstPhoto && resolvePhotos ? await resolvePhotoUrl(firstPhoto, apiKey) : "";
 
       return {
         placeId: place.id ?? "",
@@ -152,6 +162,9 @@ async function runTextSearch(
         category: place.primaryTypeDisplayName?.text ?? "",
         description: place.editorialSummary?.text ?? "",
         photoUrl,
+        // Carried only when hydration was deferred — once photoUrl is resolved
+        // the name has no further use.
+        photoName: resolvePhotos ? "" : firstPhoto,
         location: {
           lat: place.location?.latitude ?? 0,
           lng: place.location?.longitude ?? 0,
@@ -164,13 +177,42 @@ async function runTextSearch(
 export async function searchBusinesses(
   industry: string,
   city: string,
-  maxResults = 60
+  maxResults = 60,
+  opts?: { resolvePhotos?: boolean }
 ): Promise<PlaceResult[]> {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
     throw new Error("GOOGLE_PLACES_API_KEY not configured");
   }
-  return runTextSearch(`${industry} in ${city}`, apiKey, maxResults);
+  return runTextSearch(
+    `${industry} in ${city}`,
+    apiKey,
+    maxResults,
+    opts?.resolvePhotos ?? true
+  );
+}
+
+// Resolve photos for an ALREADY-SELECTED subset of results — the other half of
+// searchBusinesses({ resolvePhotos: false }). Place Photo is billed per call, so
+// the prospector searches wide with hydration off and calls this on only the
+// rows that survived scoring. Best-effort per row: a photo that fails to resolve
+// leaves photoUrl empty, exactly as inline hydration does.
+// Generic over the row type so callers that have ENRICHED a PlaceResult (the
+// prospector attaches score/metro/finding) get their own type back rather than a
+// widened PlaceResult, which would silently drop those fields at the type level.
+export async function hydratePhotoUrls<T extends PlaceResult>(
+  places: T[]
+): Promise<T[]> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) return places;
+
+  return Promise.all(
+    places.map(async (p) => {
+      if (p.photoUrl || !p.photoName) return { ...p, photoName: "" };
+      const photoUrl = await resolvePhotoUrl(p.photoName, apiKey);
+      return { ...p, photoUrl, photoName: "" };
+    })
+  );
 }
 
 // Search for a specific business by name. City is optional but, when given,

@@ -249,8 +249,39 @@ export const NA_METROS: string[] = [
   "Las Vegas, NV",
 ];
 
-// How many prospects a daily batch targets.
+// Default batch size — the number pre-filled in the Opportunities count box.
+// The operator types over it; a run is whatever he asks for, within the bounds
+// below.
 export const DAILY_BATCH_SIZE = 30;
+
+// Bounds on an operator-chosen batch. The ceiling is not arbitrary: Google
+// Places Text Search returns at most 60 results per query (3 pages, hard API
+// cap), gatherProspects searches ~2x the target to leave room for scoring, and
+// during a tight calling window only ~8 of the 20 metros are open — so ~480 raw
+// results is the real ceiling at the worst hour, and that erodes further as the
+// dedup set grows. 150 stays inside that even on a bad afternoon; asking for
+// more would quietly return short rather than fail, which is worse.
+export const MIN_BATCH_SIZE = 1;
+export const MAX_BATCH_SIZE = 150;
+
+// Clamp an operator-supplied batch size to the bounds above. Non-numeric,
+// missing, or fractional input falls back to the default rather than erroring —
+// a typo in the count box should never cost a generation.
+export function clampBatchSize(value: unknown): number {
+  // ABSENT is not the same as ZERO. Number("") and Number(null) are both 0,
+  // which would clamp up to MIN_BATCH_SIZE — so clearing the count box to retype
+  // it, then hitting Generate, would have sourced exactly ONE lead. Absent has
+  // to mean "use the default" before any coercion happens.
+  if (value === null || value === undefined) return DAILY_BATCH_SIZE;
+  if (typeof value === "string" && value.trim() === "") return DAILY_BATCH_SIZE;
+
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DAILY_BATCH_SIZE;
+  const floored = Math.floor(n);
+  if (floored < MIN_BATCH_SIZE) return MIN_BATCH_SIZE;
+  if (floored > MAX_BATCH_SIZE) return MAX_BATCH_SIZE;
+  return floored;
+}
 
 // How long a declined lead stays suppressed before it can resurface (days).
 export const DECLINE_COOLDOWN_DAYS = 90;

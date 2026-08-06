@@ -1,18 +1,24 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
   Network,
   FileText,
-  CalendarRange,
   Download,
   RefreshCw,
   Loader2,
   ExternalLink,
 } from "lucide-react";
-import { DELIVERABLES, renderDeliverableHtml } from "@/lib/exporters/deliverables";
+import {
+  DELIVERABLES,
+  renderDeliverableHtml,
+  deliverableContext,
+  emptyDeliverableContext,
+  type DeliverableContext,
+} from "@/lib/exporters/deliverables";
+import { readComputed } from "@/lib/client-offer";
 import {
   PackGateDialog,
   PackOverrideMarker,
@@ -29,10 +35,9 @@ import type {
 } from "@/types";
 
 const TAB_ICONS: Record<DeliverableId, typeof Activity> = {
-  d1: Activity,
-  d2: Network,
-  d3: FileText,
-  d4: CalendarRange,
+  "diagnosis": Activity,
+  "build-plan": Network,
+  "asset-pack": FileText,
 };
 
 const TABS = DELIVERABLES.map((d) => ({
@@ -41,13 +46,16 @@ const TABS = DELIVERABLES.map((d) => ({
   subtitle: d.subtitle,
   file: d.filename,
   icon: TAB_ICONS[d.id],
+  // Shown on the tab. The Asset Pack is not in the client bundle and the
+  // operator needs to see that on the tab, not discover it from a ZIP listing.
+  internal: d.audience === "internal",
 }));
 
 export function AssetPackView({
   pack: initialPack,
   businessId,
   onUpdate,
-  initialTab = "d1",
+  initialTab = "diagnosis",
   governance: hostOverride,
 }: {
   pack: AssetPack;
@@ -85,10 +93,46 @@ export function AssetPackView({
   // that case; the guard below shows the upgrade notice instead.
   const usable = Boolean(pack?.meta && pack.file1);
 
+  // ── THE LIVE CONTEXT ──────────────────────────────────────────────────────
+  // The two client documents are NOT rendered from the pack alone. The Diagnosis
+  // reads the frozen assessment and the Build Plan reads the build decisions and
+  // the kickoff date — all three live on the business row, not in the pack, and
+  // deliberately so: a copy baked in at generation would keep showing the old
+  // total after the calculator was corrected.
+  //
+  // Until it arrives the preview renders with an EMPTY context, which is the
+  // honest default (no assessment, kickoff unbooked, everything installed) rather
+  // than a guess that would flicker into something different a moment later.
+  const [ctx, setCtx] = useState<DeliverableContext>(() => emptyDeliverableContext());
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/leak-assessment/${businessId}`, { cache: "no-store" });
+        if (!res.ok || !alive) return;
+        const data = await res.json();
+        if (!alive) return;
+        setCtx(
+          deliverableContext({
+            assessment: readComputed(data.computed),
+            workflowToggles: data.business?.workflowToggles ?? null,
+            kickoffAt: data.business?.kickoffAt ? new Date(data.business.kickoffAt) : null,
+          })
+        );
+      } catch {
+        // Leave the empty context in place. A preview that renders "no assessment
+        // on file" is honest; one that invents figures because a fetch failed is not.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [businessId]);
+
   // The actual client-facing deliverable, rendered exactly as exported.
   const docHtml = useMemo(
-    () => (usable ? renderDeliverableHtml(pack, tab) : ""),
-    [pack, tab, usable]
+    () => (usable ? renderDeliverableHtml(pack, tab, ctx) : ""),
+    [pack, tab, usable, ctx]
   );
 
   if (!usable) {

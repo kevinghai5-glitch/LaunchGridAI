@@ -16,7 +16,8 @@
 // documents). The routes compute server-side and ship only the small
 // ObservedFacts object; this file renders it and builds copy from it.
 
-import { Copy, Mail } from "lucide-react";
+import { useState } from "react";
+import { Copy, Mail, Gauge } from "lucide-react";
 import { toast } from "sonner";
 import { BOOKING_URL } from "@/lib/constants";
 import type { ObservedFacts, ObservedVerdict } from "@/lib/observed-facts";
@@ -216,6 +217,12 @@ export interface ObservedFactsRowProps {
   facts: ObservedFacts | null | undefined;
   /** Frame it as its own panel (default) or render bare inside a host's card. */
   framed?: boolean;
+  /** Enables the manual "Fetch measured values" button. Optional: a host that
+   *  cannot supply an id simply renders the row read-only rather than showing a
+   *  button that cannot work. */
+  businessId?: string;
+  /** Called with the freshly measured row so the host can update in place. */
+  onMeasured?: (facts: ObservedFacts) => void;
 }
 
 /**
@@ -223,8 +230,46 @@ export interface ObservedFactsRowProps {
  * the row the operator reads before he dials, and the honest "—" when nothing
  * has been scanned (which is a different statement from "nothing is wrong").
  */
-export function ObservedFactsRow({ facts, framed = true }: ObservedFactsRowProps) {
-  const f = facts ?? ALL_UNKNOWN;
+export function ObservedFactsRow({
+  facts,
+  framed = true,
+  businessId,
+  onMeasured,
+}: ObservedFactsRowProps) {
+  const [measuring, setMeasuring] = useState(false);
+  const [local, setLocal] = useState<ObservedFacts | null>(null);
+  // Local wins only until the host re-feeds; a prop change means the server
+  // spoke more recently than this component did.
+  const f = local ?? facts ?? ALL_UNKNOWN;
+
+  // TWO CALLS, and the button says so — a control that spends money should be
+  // honest about spending it. One mobile-only PageSpeed run plus one plain page
+  // fetch; no Firecrawl, no desktop PSI, no DataForSEO (see measure-facts.ts).
+  const runMeasure = async () => {
+    if (!businessId || measuring) return;
+    setMeasuring(true);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}/measure`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The real reason, not "something went wrong" — usually "no website on
+        // record", which is a thing he can actually fix.
+        toast.error(data.error || "Couldn't measure this business");
+        return;
+      }
+      // The row keeps whatever it had if the response is malformed — never blank
+      // a row that was showing real values.
+      if (data.observedFacts) {
+        setLocal(data.observedFacts as ObservedFacts);
+        onMeasured?.(data.observedFacts as ObservedFacts);
+      }
+      toast.success("Measured — mobile speed and link checks updated");
+    } catch {
+      toast.error("Couldn't measure this business");
+    } finally {
+      setMeasuring(false);
+    }
+  };
 
   const line = buildObservedLine(f);
   const email = buildObservedEmail(f, BOOKING_URL);
@@ -316,6 +361,18 @@ export function ObservedFactsRow({ facts, framed = true }: ObservedFactsRowProps
           <Mail size={12} strokeWidth={2} />
           Copy email
         </button>
+        {businessId && (
+          <button
+            type="button"
+            disabled={measuring}
+            title="Measures this business now: one mobile PageSpeed run + one page fetch. No full research scan."
+            style={actionStyle(!measuring)}
+            onClick={runMeasure}
+          >
+            <Gauge size={12} strokeWidth={2} />
+            {measuring ? "Measuring…" : "Fetch measured values"}
+          </button>
+        )}
         {/* Provenance, said out loud: a stale row must be stale on its face. */}
         {scannedLabel && (
           <span style={{ fontSize: 10.5, color: "var(--text-subtle)", marginLeft: "auto" }}>

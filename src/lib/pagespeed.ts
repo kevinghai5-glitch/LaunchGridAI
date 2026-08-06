@@ -45,7 +45,10 @@ interface PsiAudit {
   details?: { overallSavingsMs?: number };
 }
 
-async function runOne(url: string, strategy: PsiStrategy): Promise<PsiResult | null> {
+/** ONE PageSpeed run. Exported so the manual pre-call measure can request
+ *  MOBILE ONLY — the row shows mobile, and the desktop half of the snapshot
+ *  pair is pure cost for that use. The full snapshot path still runs both. */
+export async function runOne(url: string, strategy: PsiStrategy): Promise<PsiResult | null> {
   const apiKey = process.env.PAGESPEED_API_KEY;
   if (!apiKey) return null;
 

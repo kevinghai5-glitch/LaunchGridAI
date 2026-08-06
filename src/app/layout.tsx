@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 // THE ROOT LAYOUT IS SHARED WITH TWO CLIENT-FACING ROUTES.
 //
 //   /a/[publicId]   the cold-audit teaser a prospect opens from the pre-call email
-//   /p/[publicId]   the public proposal
+//   /p/[publicId]   the client offer, assembled from the saved calculator
 //
 // Both are cream/serif brand documents. So the dark dashboard theme is NOT
 // applied here — <html> carries no theme marker at all. It is applied in

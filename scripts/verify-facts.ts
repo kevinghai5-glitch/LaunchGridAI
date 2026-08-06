@@ -50,6 +50,7 @@ import {
   MOBILE_SCORE_WORTH_FIXING_BELOW,
   REVIEW_COUNT_WORTH_FIXING_FRACTION,
   computeObservedFacts,
+  observedFactsFor,
   unknownObservedFacts,
   type ObservedFacts,
   type ObservedFactsHost,
@@ -59,6 +60,7 @@ import {
   buildObservedEmail,
   buildObservedLine,
 } from "@/components/businesses/ObservedFactsRow";
+import { measureFacts } from "@/lib/measure-facts";
 import type { PsiBundle } from "@/lib/pagespeed";
 import type { ResearchBundle } from "@/lib/research-snapshot";
 
@@ -70,6 +72,18 @@ let failed = 0;
 function check(name: string, fn: () => void): void {
   try {
     fn();
+    passed += 1;
+    console.log(`  PASS ✓  ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.log(`  FAIL ✗  ${name}`);
+    console.log(`          ${(err as Error).message}`);
+  }
+}
+
+async function acheck(name: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
     passed += 1;
     console.log(`  PASS ✓  ${name}`);
   } catch (err) {
@@ -267,8 +281,13 @@ check("A1 · SOURCE — neither file imports or calls anything LLM-shaped, and t
     { name: 'the openai client (module or wrapper)', re: /from\s+["'](openai|@\/lib\/openai)["']/, files: [LIB, ROW] },
     { name: "an LLM completion call", re: /chat\.completions|completions\.create|responses\.create|\banthropic\b/i, files: [LIB, ROW] },
     { name: "a generation route or generator lib", re: /["'][^"']*\/generate\/[^"']*["']|@\/lib\/asset-generation/, files: [LIB, ROW] },
-    // The lib documents itself as pure CPU over stored snapshots. Hold it to that.
-    { name: "a network call", re: /\bfetch\s*\(/, files: [LIB, ROW] },
+    // The lib documents itself as pure CPU over stored snapshots. Hold it to
+    // that — ABSOLUTELY. The ROW is deliberately not on this list any more: the
+    // manual "Fetch measured values" button gives the component exactly one
+    // fetch, and A1b below pins that it is exactly one and points only at the
+    // measure endpoint. Narrowing the rule rather than dropping it: the row may
+    // ask the server to measure, and may still never fetch anything else.
+    { name: "a network call", re: /\bfetch\s*\(/, files: [LIB] },
     { name: "a database read", re: /\bprisma\b/i, files: [LIB] },
   ];
   for (const f of FORBIDDEN) {
@@ -394,6 +413,23 @@ check("A5 · RUNTIME — the median is quoted from ≥5 competitors or NOT AT AL
   const padded = withCompetitors([0, 0, 1, 1, 8]);
   show("5 competitors but only 3 with reviews → localAvg", padded.localAvg ?? "(null)");
   assert.equal(padded.localAvg, null, "zero-review competitors padded the sample past the floor");
+});
+
+check("A1b · SOURCE — the row's ONLY network call is the measure button, and there is exactly one", () => {
+  // The button is the single sanctioned reason this component talks to a server.
+  // Anything else — a fetch to re-read facts, to look something up mid-render —
+  // would put live data behind a surface whose contract is "what the server
+  // already computed", and is the door this check keeps shut.
+  const src = codeOnly(ROW);
+  const fetches = src.match(/\bfetch\s*\(/g) ?? [];
+  const targets = src.match(/fetch\(\s*`([^`]+)`/g) ?? [];
+  show("fetch() call sites", fetches.length);
+  show("targets           ", targets.length ? targets : "(none)");
+  assert.equal(fetches.length, 1, `the row makes ${fetches.length} network calls — exactly one (the measure button) is sanctioned`);
+  assert(
+    /\/api\/businesses\/\$\{[^}]+\}\/measure/.test(src),
+    "the row's one fetch does not target /api/businesses/[id]/measure"
+  );
 });
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -556,12 +592,93 @@ check("D4 · RUNTIME — nothing measured → the empty string, and the one-line
 
 /* ────────────────────────────────────────────────────────────────────────── */
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) {
-  console.log(
-    "\nThis suite pins the cold audit's replacement: a threshold-pure row of measured values.\n" +
-      "A failure here means the row started composing, inferring or fetching — which is the\n" +
-      "exact behaviour the deletion ruling exists to keep out of pre-sale.\n"
+/* ──────────────────────────────────────────────────────────────────────────
+ * F · THE MANUAL MEASURE — two calls, and never more
+ * ────────────────────────────────────────────────────────────────────── */
+section("F · THE MANUAL MEASURE — cost constraint, tri-state, and cache-key freshness");
+
+check("F1 · SOURCE — the measure makes TWO calls: mobile PSI + a plain page fetch, nothing else", () => {
+  // The owner's cost constraint, verbatim: "one mobile-only PageSpeed call plus
+  // one plain homepage GET via the existing unbilled fetchWebsitePage. Not
+  // Firecrawl, not desktop PSI, not DataForSEO." Mechanical, not a promise —
+  // widening it fails here rather than quietly costing money per click.
+  const src = read("src/lib/measure-facts.ts")
+    .split("\n")
+    .filter((l) => {
+      const t = l.trim();
+      return !(t.startsWith("//") || t.startsWith("*") || t.startsWith("/*"));
+    })
+    .join("\n");
+  for (const banned of ["firecrawl", "Firecrawl", "dataforseo", "DataForSeo", "runDataForSeo", '"desktop"']) {
+    show(`free of ${banned}`, !src.includes(banned));
+    assert(!src.includes(banned), `measure-facts.ts references ${banned} — the measure must stay two calls`);
+  }
+  show("requests mobile", src.includes('"mobile"'));
+  assert(src.includes('"mobile"'), "the measure no longer requests a mobile PageSpeed run");
+  assert(src.includes("fetchWebsitePage"), "the measure no longer uses the unbilled page fetch");
+});
+
+
+check("F3 · RUNTIME — a measured 'unknown' never overwrites a known snapshot value", () => {
+  // Fresher-wins is about better information; "could not see" is the absence of
+  // information, so it must not delete a finding a real scan proved.
+  const base = computeObservedFacts(host({}));
+  const withBlindMeasure = computeObservedFacts(
+    host({
+      measuredFacts: { mobile: null, bookingLink: "unknown", clickToCall: "unknown" },
+      measuredFactsAt: new Date("2099-01-01T00:00:00.000Z"),
+    })
   );
-  process.exit(1);
-}
+  show("snapshot booking   ", base.bookingLink.state);
+  show("after blind measure", withBlindMeasure.bookingLink.state);
+  if (base.bookingLink.state !== "unknown") {
+    assert.equal(
+      withBlindMeasure.bookingLink.state,
+      base.bookingLink.state,
+      "a blind measure erased a known booking-link finding"
+    );
+  }
+});
+
+check("F4 · RUNTIME — the memo key busts on measuredFactsAt (the silent-staleness bug)", () => {
+  // Without measuredFactsAt in the key, clicking the button changes the data and
+  // NOT the screen, until the server restarts. The nastiest possible shape: it
+  // works, then appears not to.
+  const a = observedFactsFor(host({ id: "memo-probe" }));
+  const b = observedFactsFor(
+    host({
+      id: "memo-probe",
+      measuredFacts: { mobile: { score: 42, loadSeconds: 5.5 }, bookingLink: "found", clickToCall: "found" },
+      measuredFactsAt: new Date("2099-06-01T00:00:00.000Z"),
+    })
+  );
+  show("before measure", a.mobileSpeed.score ?? "—");
+  show("after measure ", b.mobileSpeed.score ?? "—");
+  assert.equal(b.mobileSpeed.score, 42, "the cache served a pre-measure row after a measure — measuredFactsAt is not in the key");
+  assert.equal(b.bookingLink.state, "found", "the measured booking value did not reach the row");
+});
+
+// F2 is the one RUNTIME check here that awaits (it calls the real measure), and
+// tsx compiles this file to CJS where top-level await is unavailable — so the
+// async check and the summary share one main(). Everything above already ran.
+void (async () => {
+  await acheck("F2 · RUNTIME — an unreachable site is UNKNOWN, never 'none'", async () => {
+  // The distinction the whole model rests on: no URL means we could not look,
+  // which is not the same statement as "they do not have one".
+  const none = await measureFacts(null);
+  show("no website", JSON.stringify(none));
+  assert.equal(none.bookingLink, "unknown", "a missing website reported booking as 'none'");
+  assert.equal(none.clickToCall, "unknown", "a missing website reported click-to-call as 'none'");
+  assert.equal(none.mobile, null, "a missing website produced a mobile measurement");
+});
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) {
+    console.log(
+      "\nThis suite pins the cold audit's replacement: a threshold-pure row of measured values.\n" +
+        "A failure here means the row started composing, inferring or fetching — which is the\n" +
+        "exact behaviour the deletion ruling exists to keep out of pre-sale.\n"
+    );
+    process.exit(1);
+  }
+})();

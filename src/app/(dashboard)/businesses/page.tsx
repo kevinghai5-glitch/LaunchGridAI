@@ -19,10 +19,10 @@ import {
   Search,
   Check,
   Loader2,
-  PhoneCall,
   Shuffle,
   SlidersHorizontal,
   UserRound,
+  Hash,
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
@@ -36,6 +36,10 @@ import {
   NICHE_CATEGORIES,
   sampleNiches,
   DELIVERABLE_STATUSES,
+  DAILY_BATCH_SIZE,
+  MIN_BATCH_SIZE,
+  MAX_BATCH_SIZE,
+  clampBatchSize,
 } from "@/lib/crm";
 import type { BusinessResult, SavedBusiness } from "@/types";
 
@@ -61,6 +65,9 @@ interface Suggestion {
 
 type TopMode = "daily" | "search";
 
+// Where the operator's chosen batch size is remembered between sessions.
+const BATCH_COUNT_KEY = "lgx.batchCount";
+
 export default function BusinessesPage() {
   const router = useRouter();
   const [topMode, setTopMode] = useState<TopMode>("daily");
@@ -70,8 +77,40 @@ export default function BusinessesPage() {
   const [generating, setGenerating] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeNiche, setActiveNiche] = useState<string | null>(null);
-  const [loadingDaily, setLoadingDaily] = useState(true);
+  // Never true: the daily list has nothing to load on mount any more. Kept as a
+  // constant so DailyView's loading branch stays intact for generation, which
+  // uses `generating` instead.
+  const loadingDaily = false;
   const [triaging, setTriaging] = useState(false);
+  // How many soft-deleted, never-worked prospects are sitting recoverable. Drives
+  // ── THE HARD GATE ─────────────────────────────────────────────────────────
+  //
+  // Prospects render ONLY when this is true, and the single place it is ever set
+  // to true is a successful generate() — the Generate button. Not page load, not
+  // a niche click, not a restore, not any future handler someone adds.
+  //
+  // This is deliberately a render-level lock rather than a promise that no other
+  // code path calls setSuggestions. Two separate paths had already broken that
+  // promise: a niche click un-deleted every cleared lead for that niche and drew
+  // them, and page load drew the most recent live batch. Both looked exactly
+  // like a generation nobody asked for, at a count nobody typed. A rule that can
+  // be broken by adding a line somewhere else is not a rule.
+  const [generatedThisSession, setGeneratedThisSession] = useState(false);
+
+  // How many prospects the next generation targets. Held as a STRING so the box
+  // can be empty mid-edit (clearing it to type "77" must not snap to 1); it's
+  // clamped to a real number only at generate time.
+  //
+  // Seeded with the default so SSR and the first client render agree, then
+  // replaced from localStorage after mount — the operator's batch size is
+  // stable day to day, and retyping it every morning is friction for nothing.
+  const [batchCount, setBatchCount] = useState<string>(String(DAILY_BATCH_SIZE));
+  useEffect(() => {
+    const saved = window.localStorage.getItem(BATCH_COUNT_KEY);
+    if (saved && Number.isFinite(Number(saved))) {
+      setBatchCount(String(clampBatchSize(Number(saved))));
+    }
+  }, []);
 
   // ── search state (legacy discovery) ──────────────────────────────────────
   const [mode, setMode] = useState<"industry" | "name">("industry");
@@ -87,32 +126,19 @@ export default function BusinessesPage() {
   const [sort, setSort] = useState<"score" | "rating">("score");
   const [detail, setDetail] = useState<BusinessResult | null>(null);
 
+  // Only the Saved-businesses list loads on mount. The daily prospect list does
+  // NOT — opening this page must never put a business on screen.
   useEffect(() => {
-    loadDaily();
     loadSaved();
   }, []);
 
-  const loadDaily = async () => {
-    // The daily API is the single source of truth: it only returns un-triaged
-    // SUGGESTED leads that aren't soft-deleted, so this view always mirrors the DB
-    // (and therefore the CRM's New Leads column). Clearing soft-deletes the rows,
-    // which empties both surfaces — no client-side hide flag.
-    setLoadingDaily(true);
-    try {
-      const res = await fetch("/api/opportunities/daily", { cache: "no-store" });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          niche: string | null;
-          leads: Suggestion[];
-        };
-        setSuggestions(data.leads ?? []);
-        setActiveNiche(data.niche);
-        if (data.niche) setNiche(data.niche);
-      }
-    } finally {
-      setLoadingDaily(false);
-    }
-  };
+  // There is no loadDaily. There is no resumeBatch. There is no restore.
+  //
+  // Every one of those read un-triaged leads out of the database and drew them
+  // on this screen without a generation, which is exactly the behaviour that had
+  // to stop. Un-triaged leads from an earlier run still exist — they are in the
+  // CRM's New Leads column, which is where a backlog belongs. This page shows
+  // what you just generated, and nothing else.
 
   const loadSaved = async () => {
     setLoadingSaved(true);
@@ -145,20 +171,31 @@ export default function BusinessesPage() {
       toast.error("Pick a niche first");
       return;
     }
+    // Clamp here too, not just server-side: an empty or nonsense box should
+    // generate the default rather than error, and the box should visibly settle
+    // on the number that was actually used.
+    const count = clampBatchSize(batchCount);
+    setBatchCount(String(count));
+    window.localStorage.setItem(BATCH_COUNT_KEY, String(count));
+
     setGenerating(true);
     try {
       const res = await fetch("/api/opportunities/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche: target }),
+        body: JSON.stringify({ niche: target, count }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Generation failed");
         return;
       }
+      // data.leads is THIS RUN's prospects only — the route no longer returns the
+      // niche's whole un-triaged backlog, so asking for 77 shows 77.
       setSuggestions(data.leads ?? []);
       setActiveNiche(target);
+      // The one and only place the gate opens.
+      setGeneratedThisSession(true);
       router.refresh(); // refresh the sidebar Opportunities badge count
       if ((data.leads ?? []).length === 0) {
         toast.info(data.message || "No fresh prospects found. Try another niche.");
@@ -167,6 +204,15 @@ export default function BusinessesPage() {
         if (data.outsideCallingHours) {
           toast.info(
             "It's outside calling hours across every region right now — these are the soonest-to-open metros. Generate during business hours and the list follows the good local windows."
+          );
+        } else if (typeof data.sourced === "number" && data.sourced < count) {
+          // A short batch is the calling-window gate working, not a failure —
+          // so name the reason instead of letting "I asked for 77 and got 61"
+          // read as a bug. Padding with closed metros would be the actual bug.
+          toast.info(
+            `Sourced ${data.sourced} of ${count} — only ${data.metrosOpen} metro${
+              data.metrosOpen === 1 ? " is" : "s are"
+            } in a calling window right now, and everywhere else is closed. Generate again in a couple of hours to reach the rest.`
           );
         }
       }
@@ -177,43 +223,28 @@ export default function BusinessesPage() {
     }
   };
 
-  // ── daily: load a niche's persisted batch (clicking a niche chip) ─────────
-  // Prospects you generate stay saved until you approve them into the Call Queue,
-  // so re-picking a niche resurfaces whatever you already sourced for it — INCLUDING
-  // any you Cleared. Clicking the niche first un-clears (restores) that niche's
-  // soft-deleted, never-worked leads, then loads them, so a Clear during testing is
-  // always fully reversible just by re-selecting the niche.
-  const selectNiche = async (n: string) => {
-    setNiche(n);
-    setLoadingDaily(true);
-    try {
-      // Restore this niche's cleared leads first (no-op if none are cleared).
-      await fetch(`/api/opportunities/daily?niche=${encodeURIComponent(n)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restore" }),
-      }).catch(() => null);
-
-      const res = await fetch(`/api/opportunities/daily?niche=${encodeURIComponent(n)}`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { leads: Suggestion[] };
-        const leads = data.leads ?? [];
-        setSuggestions(leads);
-        setActiveNiche(leads.length ? n : null);
-      }
-      router.refresh(); // keep the sidebar Opportunities badge in sync
-    } finally {
-      setLoadingDaily(false);
-    }
+  // ── daily: pick the niche the NEXT generation will use ────────────────────
+  //
+  // Selection only. Sets a string. That is the entire function, permanently.
+  //
+  // It used to PATCH action:"restore" — un-deleting every soft-deleted lead for
+  // that niche — then refetch and render them. Clicking a niche you had once
+  // tested and Cleared therefore filled the screen with 30 businesses, with no
+  // generation and no reference to the count box.
+  //
+  // Nothing may be added to this function. Picking what to generate is not a
+  // write, not a fetch, and not a reason for anything to appear.
+  //
+  // Clicking the CHIP THAT IS ALREADY SELECTED deselects it — the chip is its
+  // own reset, so there's no separate button for it.
+  const selectNiche = (n: string) => {
+    setNiche((prev) => (prev === n ? "" : n));
   };
 
   // ── daily: clear the un-triaged New Leads everywhere ──────────────────────
-  // Removes ALL still-SUGGESTED prospects from the DB so the CRM's New Leads
-  // column empties too — not just this view. Non-destructive in spirit: only raw
-  // un-triaged rows (no call history / deals) are touched, and re-generating any
-  // niche brings a fresh batch back.
+  // Hides ALL still-SUGGESTED prospects so the CRM's New Leads column empties
+  // too — not just this view. Non-destructive: the rows are SOFT-deleted, never
+  // removed, and only raw un-triaged ones (no call history / deals) are touched.
   const clearBatch = async () => {
     setSuggestions([]);
     setActiveNiche(null);
@@ -224,7 +255,7 @@ export default function BusinessesPage() {
       router.refresh(); // clear the sidebar Opportunities badge count
       toast.success(
         data?.cleared
-          ? `Cleared ${data.cleared} lead${data.cleared === 1 ? "" : "s"} — re-pick the niche to bring them back`
+          ? `Cleared ${data.cleared} lead${data.cleared === 1 ? "" : "s"}`
           : "Cleared from view"
       );
     } catch {
@@ -423,7 +454,9 @@ export default function BusinessesPage() {
         title="Opportunities"
         subtitle={
           topMode === "daily"
-            ? activeNiche
+            ? // Behind the same gate as the list — a count in the top bar is a
+              // business appearing on screen too.
+              generatedThisSession && activeNiche
               ? `${suggestions.length} ${activeNiche} prospects to triage`
               : "Pick a niche · generate today's prospects"
             : "Live from Google Places"
@@ -445,15 +478,23 @@ export default function BusinessesPage() {
             niche={niche}
             setNiche={setNiche}
             selectNiche={selectNiche}
+            batchCount={batchCount}
+            setBatchCount={setBatchCount}
             generate={generate}
             generating={generating}
             loading={loadingDaily}
-            suggestions={suggestions}
-            activeNiche={activeNiche}
+            /* THE GATE. Prospects reach the screen through this prop and no
+               other. Until a generation has succeeded in this page session it
+               hands down an empty array no matter what `suggestions` holds — so
+               even if some future code path fills that state, nothing renders.
+               Two different paths previously drew leads here without a
+               generation; this makes a third impossible rather than merely
+               unlikely. */
+            suggestions={generatedThisSession ? suggestions : []}
+            activeNiche={generatedThisSession ? activeNiche : null}
             triage={triage}
             triaging={triaging}
             clearBatch={clearBatch}
-            goQueue={() => router.push("/call-queue")}
           />
         ) : (
           <>
@@ -633,6 +674,8 @@ function DailyView({
   niche,
   setNiche,
   selectNiche,
+  batchCount,
+  setBatchCount,
   generate,
   generating,
   loading,
@@ -641,11 +684,12 @@ function DailyView({
   triage,
   triaging,
   clearBatch,
-  goQueue,
 }: {
   niche: string;
   setNiche: (v: string) => void;
   selectNiche: (n: string) => void;
+  batchCount: string;
+  setBatchCount: (v: string) => void;
   generate: (n?: string) => void;
   generating: boolean;
   loading: boolean;
@@ -654,7 +698,6 @@ function DailyView({
   triage: (action: "approve" | "decline", ids?: string[], all?: boolean) => void;
   triaging: boolean;
   clearBatch: () => void;
-  goQueue: () => void;
 }) {
   // Spreadsheet-style multi-select for the triage table.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -704,6 +747,10 @@ function DailyView({
   const activeCategoryLabel =
     category === "all" ? "All types" : NICHE_CATEGORIES.find((c) => c.id === category)?.label ?? "All types";
 
+  // The count pill brightens once it's off the default, matching how the Filter
+  // pill signals an active narrowing — so a 77-lead run is visible at a glance.
+  const isDefaultCount = clampBatchSize(batchCount) === DAILY_BATCH_SIZE;
+
   // Drop any selected ids that have left the batch (triaged/cleared).
   useEffect(() => {
     setSelected((prev) => {
@@ -741,6 +788,7 @@ function DailyView({
         </div>
       </div>
 
+
       {/* Niche picker */}
       <div
         className="rise"
@@ -768,6 +816,67 @@ function DailyView({
             Recommended niches
           </div>
           <div className="flex items-center" style={{ gap: 8, position: "relative", zIndex: 60 }}>
+            {/* How many prospects the next generation targets. Kept as a string
+                so the field can sit empty while retyping; clamped on blur. */}
+            <div
+              className="flex items-center"
+              title={`How many prospects to generate (${MIN_BATCH_SIZE}–${MAX_BATCH_SIZE})`}
+              style={{
+                gap: 6,
+                padding: "5px 10px",
+                borderRadius: 999,
+                background: isDefaultCount ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+                border: `1px solid ${isDefaultCount ? "var(--line)" : "var(--line-strong)"}`,
+                color: isDefaultCount ? "var(--text-3)" : "var(--text)",
+                transition: "color var(--t), background var(--t), border-color var(--t)",
+                opacity: generating ? 0.55 : 1,
+              }}
+            >
+              <Hash size={12} strokeWidth={1.9} />
+              <input
+                value={batchCount}
+                onChange={(e) =>
+                  // Digits only, max 3 — the ceiling is two digits short of 1000,
+                  // so a stray keystroke can never submit a four-figure batch.
+                  setBatchCount(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))
+                }
+                onBlur={() => setBatchCount(String(clampBatchSize(batchCount)))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                    generate();
+                    return;
+                  }
+                  // Arrow keys nudge the count the way a native number input
+                  // would, without the spinner chrome that would break the pill.
+                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const step = (e.shiftKey ? 10 : 1) * (e.key === "ArrowUp" ? 1 : -1);
+                    setBatchCount(String(clampBatchSize(clampBatchSize(batchCount) + step)));
+                  }
+                }}
+                disabled={generating}
+                inputMode="numeric"
+                aria-label="Number of prospects to generate"
+                className="lg-mono"
+                style={{
+                  width: 30,
+                  padding: 0,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: "inherit",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  textAlign: "center",
+                  fontFamily: "inherit",
+                }}
+              />
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-4)" }}>
+                leads
+              </span>
+            </div>
+
             {/* Filter by business type (trades, boutique, medical, …) */}
             <div style={{ position: "relative" }}>
               <div
@@ -988,7 +1097,7 @@ function DailyView({
             />
           </div>
           <LgButton variant="primary" size="md" onClick={() => generate()} disabled={generating || !niche.trim()}>
-            {generating ? "Generating…" : "Generate 30"}
+            {generating ? "Generating…" : `Generate ${clampBatchSize(batchCount)}`}
           </LgButton>
         </div>
       </div>
@@ -1098,7 +1207,13 @@ function DailyView({
         </>
       )}
 
-      {/* Empty / cleared state */}
+      {/* Empty state. ONE state, always the same one.
+          There used to be a second branch here — a green tick reading "Batch
+          triaged · Approved prospects are in your Call Queue" — shown whenever
+          the list emptied while a niche was active. Declining every lead emptied
+          the list too, so declining a batch congratulated you on approvals that
+          never happened and offered a button to a queue nothing had been added
+          to. An empty list means one thing: generate. */}
       {!generating && !loading && suggestions.length === 0 && (
         <div
           className="rise"
@@ -1109,28 +1224,19 @@ function DailyView({
             borderRadius: 14,
           }}
         >
-          {activeNiche ? (
-            <>
-              <Check size={26} strokeWidth={1.6} style={{ color: "var(--money)", margin: "0 auto 12px" }} />
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>Batch triaged</div>
-              <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 6, marginBottom: 16 }}>
-                Approved prospects are in your Call Queue. Generate another niche when you&apos;re ready.
-              </div>
-              <LgButton variant="primary" size="md" onClick={goQueue}>
-                <PhoneCall size={14} strokeWidth={1.8} /> Go to Call Queue
-              </LgButton>
-            </>
-          ) : (
-            <>
-              <Sparkles size={26} strokeWidth={1.6} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
-                Pick a niche to generate today&apos;s 30
-              </div>
-              <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 6 }}>
-                Choose a recommended niche above (or type your own), then hit Generate.
-              </div>
-            </>
-          )}
+          <Sparkles size={26} strokeWidth={1.6} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+          {/* The batch size is the operator's now, so this can't name a fixed
+              30 — it reads back whatever is in the count box. */}
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+            {niche.trim()
+              ? `Ready to generate ${clampBatchSize(batchCount)} ${niche.trim()}`
+              : "Nothing generated yet"}
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 6 }}>
+            {niche.trim()
+              ? "Set how many you want in the count box, then hit Generate."
+              : "Choose a recommended niche above (or type your own), set how many you want, then hit Generate."}
+          </div>
         </div>
       )}
 

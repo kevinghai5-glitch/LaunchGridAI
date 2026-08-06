@@ -9,6 +9,7 @@ import { buildBusinessFacts } from "@/lib/business-facts";
 import { resolvePsiSnapshot } from "@/lib/psi-snapshot";
 import { resolveResearchSnapshot } from "@/lib/research-snapshot";
 import { buildScreenshotBundle } from "@/lib/screenshotone";
+import { materializeScreenshotBundle } from "@/lib/screenshot-store";
 import {
   generateAssetPack,
   generateOneSection,
@@ -74,11 +75,26 @@ export async function POST(req: NextRequest) {
 
     const business = await prisma.business.findFirst({
       where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
+      include: { leakAssessment: { select: { monthlyEnquiries: true, avgJobValue: true } } },
     });
 
     if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
+
+    // ── THE TWO NUMBERS COME FROM THE ASSESSMENT, AND ONLY FROM THERE ─────────
+    // They used to live on Business.monthlyLeadVolume / avgClientValueCad, with
+    // the intake screen mirroring every save onto those columns so this path kept
+    // working mid-rebuild. That mirror is gone: two writable homes for one fact is
+    // how the calculator and a document come to quote different numbers for the
+    // same client.
+    //
+    // The columns still EXIST (renaming or dropping a live column is destructive
+    // and this codebase does not do that) — nothing reads or writes them any more.
+    // Verified before cutting over: zero non-deleted businesses carried a value in
+    // either column, so no client's numbers were stranded by this change.
+    const enquiries = business.leakAssessment?.monthlyEnquiries ?? null;
+    const jobValue = business.leakAssessment?.avgJobValue ?? null;
 
     // ── Enrichment: ground the pack in the live site, real reviews, and local
     // competitors plus the premium signals (Firecrawl, PageSpeed, DataForSEO,
@@ -106,13 +122,22 @@ export async function POST(req: NextRequest) {
       ownerName: business.ownerName,
     });
 
-    const screenshots = buildScreenshotBundle({
-      target: { url: business.website, label: `${business.name} (Target)` },
-      competitors: competitors.map((c) => ({
-        url: c.website ?? null,
-        label: `Competitor: ${c.name}`,
-      })),
-    });
+    // Build the signed bundle, then IMMEDIATELY materialize it into our own
+    // stored files — fetch each shot once here, on our server, and rewrite the
+    // URLs to /api/assets/screenshot/<id>. Nothing downstream (the LLM prompt
+    // passthrough, the exporter) ever sees a signed ScreenshotOne URL, so no
+    // access key can reach the delivered document and ScreenshotOne is billed
+    // once per image rather than once per client open.
+    const screenshots = await materializeScreenshotBundle(
+      buildScreenshotBundle({
+        target: { url: business.website, label: `${business.name} (Target)` },
+        competitors: competitors.map((c) => ({
+          url: c.website ?? null,
+          label: `Competitor: ${c.name}`,
+        })),
+      }),
+      { userId: session.user.id, businessId: business.id }
+    );
 
     // Prefer the richer Firecrawl markdown when we have it, else fall back to
     // the native scrape (still useful for legacy / Firecrawl-disabled runs).
@@ -156,8 +181,8 @@ export async function POST(req: NextRequest) {
     // provided flips this business out of the pure pre-intake path. Booleans drive
     // confirmed-vs-benchmark leak framing; `true` suppresses the matching leak.
     const hasAnyIntake =
-      business.avgClientValueCad != null ||
-      business.monthlyLeadVolume != null ||
+      jobValue != null ||
+      enquiries != null ||
       business.hasCrm != null ||
       business.hasFollowUpSequence != null ||
       business.hasReminderSystem != null ||
@@ -179,10 +204,10 @@ export async function POST(req: NextRequest) {
       business.gbpManagement != null ||
       business.buildPriorities != null;
     // ── F4 · ONE CAPTURED NUMBER, ONE SLOT ────────────────────────────────────
-    // Business.monthlyLeadVolume is the ONLY volume we ever capture, and it means
-    // INBOUND ENQUIRIES PER MONTH — that is the column comment, the form label
-    // ("Monthly inquiries") and the hint ("inbound leads / mo"). It used to be
-    // written into BOTH intake volume slots, which silently invented two more
+    // LeakAssessment.monthlyEnquiries is the ONLY volume we ever capture, and it
+    // means INBOUND ENQUIRIES PER MONTH — that is the calculator's own question
+    // ("enquiries a month") and the intake screen's confirmation of it. It used to
+    // be written into BOTH intake volume slots, which silently invented two more
     // real-world quantities nobody was ever asked for. The two slots are consumed
     // by two different math templates in leak-narrative.ts, and they are NOT
     // interchangeable:
@@ -206,14 +231,14 @@ export async function POST(req: NextRequest) {
     //     unaffected: that leak carries statIds, so it stays quantified by its
     //     cited stats rather than by an invented figure.
     //
-    // The DB column keeps its old name (renaming a live column is destructive);
-    // the two intake slots have been renamed to what they actually hold, so the
-    // mapping below now reads as plainly as it behaves.
+    // The two intake slots are named for what they actually hold, so the mapping
+    // below reads as plainly as it behaves.
     const clientIntake = hasAnyIntake
       ? {
-          avgJobValueCad: business.avgClientValueCad ?? undefined,
-          // Business.monthlyLeadVolume MEANS inbound enquiries — see above.
-          monthlyEnquiries: business.monthlyLeadVolume ?? undefined,
+          avgJobValueCad: jobValue ?? undefined,
+          // The assessment's monthlyEnquiries IS inbound enquiries — same meaning
+          // the old column carried, now with one writer instead of two.
+          monthlyEnquiries: enquiries ?? undefined,
           // monthlyBookedAppointments is DELIBERATELY OMITTED — we never ask for a
           // booking count. Do not "fix" this by aliasing the enquiry count in;
           // that aliasing is the bug this comment exists to prevent.

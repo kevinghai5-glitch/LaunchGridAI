@@ -16,6 +16,7 @@ import type {
   DeliverableFraming,
 } from "@/types";
 import { AGENCY_NAME } from "../brand";
+import { carriesScreenshotCredential } from "../screenshotone";
 
 // Part B: the one line that replaces every site-speed / redesign recommendation.
 // Measured performance data may still be shown as context, but the engagement
@@ -914,8 +915,16 @@ export function renderTechnicalUx(tux: TechnicalUxSection | undefined): string {
 
 export function renderVisuals(viz: VisualIntelligence | undefined): string {
   if (!viz || !viz.available || !viz.shots?.length) return "";
+  // Independent credential gate. Screenshots SHOULD already be our own stored
+  // copies (screenshot-store.ts materializes them at generation), but this is the
+  // last boundary before bytes become client-facing HTML, so it refuses to emit
+  // any <img> whose src still carries a ScreenshotOne credential \u2014 even if a
+  // future change forgets to materialize. A dropped image is a cosmetic loss; a
+  // leaked access key is a rotated secret.
+  const safeShots = viz.shots.filter((s) => !carriesScreenshotCredential(s.imageUrl));
+  if (!safeShots.length) return "";
   const groups = new Map<string, { desktop?: typeof viz.shots[number]; mobile?: typeof viz.shots[number] }>();
-  for (const s of viz.shots) {
+  for (const s of safeShots) {
     const base = s.label.replace(/\s+\u2014\s+(desktop|mobile)$/i, "").trim();
     const g = groups.get(base) ?? {};
     if (s.viewport === "desktop") g.desktop = s;

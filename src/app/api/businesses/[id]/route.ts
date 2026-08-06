@@ -24,11 +24,6 @@ export async function GET(
           where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
         },
-        proposals: {
-          where: { deletedAt: null },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, title: true, status: true, monthlyPrice: true, createdAt: true },
-        },
         callLogs: {
           where: { deletedAt: null },
           orderBy: { calledAt: "desc" },
@@ -51,6 +46,7 @@ export async function GET(
     const {
       psiSnapshot: _omitPsiSnapshot,
       researchSnapshot: _omitResearchSnapshot,
+      measuredFacts: _omitMeasuredFacts,
       ...clientSafe
     } = business;
 
@@ -110,6 +106,7 @@ export async function PATCH(
     const {
       psiSnapshot: _omitPsiSnapshot,
       researchSnapshot: _omitResearchSnapshot,
+      measuredFacts: _omitMeasuredFacts,
       ...clientSafe
     } = updated;
 

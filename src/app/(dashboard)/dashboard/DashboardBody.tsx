@@ -16,7 +16,7 @@ interface BusinessRow {
 }
 
 interface ActivityRow {
-  kind: "signed" | "generated" | "proposal" | "saved";
+  kind: "signed" | "generated" | "saved";
   tone: "money" | "accent" | "neutral";
   actor: string;
   what: string;
@@ -44,7 +44,6 @@ interface Props {
   pipelineMRR: number;
   wonCount: number;
   businessCount: number;
-  proposalCount: number;
   stageCounts: Record<string, number>;
   sparkMRR: number[];
   sparkPipe: number[];
@@ -57,7 +56,6 @@ interface Props {
 const KIND_ICON: Record<ActivityRow["kind"], typeof Eye> = {
   signed: Check,
   generated: Sparkles,
-  proposal: FileText,
   saved: Radar,
 };
 

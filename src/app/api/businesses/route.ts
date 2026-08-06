@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
               OR: [
                 { status: { in: DELIVERABLE_STATUSES } },
                 { generatedSystems: { some: { type: { in: ["ASSETS", "COLD_AUDIT"] }, deletedAt: null } } },
-                { proposals: { some: { deletedAt: null } } },
+                { leakAssessment: { isNot: null } },
               ],
             }
           : {}),

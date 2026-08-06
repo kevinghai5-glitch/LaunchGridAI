@@ -27,9 +27,6 @@ export const dynamic = "force-dynamic";
 const FEED_LIMIT = 20;
 
 type NotificationKind =
-  | "proposal-opened"
-  | "proposal-won"
-  | "proposal-lost"
   | "lead-due";
 
 interface FeedEvent {
@@ -42,12 +39,6 @@ interface FeedEvent {
 
 // How each proposal status reads as a feed line. Keyed by the real status
 // vocabulary (see PROPOSAL_STATUSES in src/lib/constants.ts).
-const PROPOSAL_EVENT: Record<string, { kind: NotificationKind; line: string }> = {
-  VIEWED: { kind: "proposal-opened", line: "opened your proposal" },
-  ACCEPTED: { kind: "proposal-won", line: "accepted your proposal" },
-  REJECTED: { kind: "proposal-lost", line: "declined your proposal" },
-};
-
 // Loose lookup for the status badge label — a status this build doesn't know
 // falls back to the raw string rather than crashing the feed.
 const STATUS_LABEL = STATUS_META as Record<string, { label: string } | undefined>;
@@ -62,28 +53,10 @@ export async function GET() {
     const userId = session.user.id;
     const now = new Date();
 
-    const [user, proposalRows, dueLeads] = await Promise.all([
+    const [user, dueLeads] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { notificationsSeenAt: true },
-      }),
-      prisma.proposal.findMany({
-        where: {
-          userId,
-          deletedAt: null,
-          status: { in: Object.keys(PROPOSAL_EVENT) },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: FEED_LIMIT,
-        // Flat fields only — a Proposal row drags Json section blobs behind it,
-        // and none of that belongs in a dropdown payload.
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          updatedAt: true,
-          business: { select: { name: true } },
-        },
       }),
       prisma.business.findMany({
         where: {
@@ -108,18 +81,6 @@ export async function GET() {
     ]);
 
     const events: FeedEvent[] = [];
-
-    for (const p of proposalRows) {
-      const def = PROPOSAL_EVENT[p.status];
-      if (!def) continue; // unreachable given the where-clause; skip, never lie
-      events.push({
-        kind: def.kind,
-        title: `${p.business.name} ${def.line}`,
-        meta: p.title,
-        at: p.updatedAt,
-        href: `/proposals/new?id=${p.id}`,
-      });
-    }
 
     for (const b of dueLeads) {
       if (!b.nextActionAt) continue; // guaranteed by the lte filter; keeps TS honest

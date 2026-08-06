@@ -307,11 +307,11 @@ const BOTH_VOLUMES: ClientIntake = {
 const RETIRED_SLOTS = ["monthlyCallVolume", "monthlyLeadVolume"] as const;
 
 /** The three modules that make up the leak math layer. Neither retired name may
- *  appear in ANY of them. `monthlyLeadVolume` deliberately survives OUTSIDE this
- *  layer as the Prisma `Business.monthlyLeadVolume` column (renaming a shipped
- *  column would orphan every saved row), and it crosses into the intake contract
- *  in exactly one place — an explicit `monthlyEnquiries: business.monthlyLeadVolume`
- *  mapping in the generation route, asserted below. */
+ *  appear in ANY of them. `monthlyLeadVolume` survives ONLY as a dormant Prisma
+ *  column (dropping a shipped column is destructive and this codebase does not do
+ *  that). Since Phase 3 nothing reads or writes it: the two numbers live on
+ *  LeakAssessment, which is the single source, and the crossing into the intake
+ *  contract is asserted below against THAT source. */
 const LEAK_MATH_MODULES = [
   "src/lib/leak-taxonomy.ts",
   "src/lib/leak-narrative.ts",
@@ -733,10 +733,7 @@ async function main(): Promise<void> {
   });
 
   check("B5 · no retired slot survives anywhere in src/ as an INTAKE field", () => {
-    // monthlyCallVolume must be gone outright. monthlyLeadVolume stays alive as
-    // the Prisma Business column (renaming a shipped column orphans saved rows),
-    // so what is asserted about it is narrower and exact: it must never be read or
-    // written as a field of `intake`.
+    // monthlyCallVolume must be gone outright.
     const callVolume = grepSrc("monthlyCallVolume", files);
     show("monthlyCallVolume anywhere in src/", callVolume.length ? callVolume : "none");
     assert.equal(callVolume.length, 0, `monthlyCallVolume is back at ${callVolume.join(", ")}`);
@@ -744,15 +741,38 @@ async function main(): Promise<void> {
     for (const needle of ["intake.monthlyLeadVolume", "intake?.monthlyLeadVolume"]) {
       const hits = grepSrc(needle, files);
       show(`${needle}`, hits.length ? hits : "none");
-      assert.equal(hits.length, 0, `${needle} is back at ${hits.join(", ")} — the DB column is being used as an intake slot again`);
+      assert.equal(hits.length, 0, `${needle} is back at ${hits.join(", ")} — the dormant column is an intake slot again`);
+    }
+
+    // ── ONE WRITABLE HOME FOR THE TWO NUMBERS (Phase 3) ──────────────────────
+    // The legacy Business columns are now DORMANT: the intake screen used to
+    // mirror every save onto them so the generation path (which read them) kept
+    // working mid-rebuild. Both halves of that arrangement are gone. Asserted in
+    // both directions, because either half surviving alone is a silent bug —
+    // a live writer with no reader strands data, a live reader with no writer
+    // drops every client back to the ~20-enquiry benchmark.
+    for (const col of ["monthlyLeadVolume", "avgClientValueCad"]) {
+      const writes = grepSrc(`${col}: inputs.`, files).concat(grepSrc(`${col}: assessment`, files));
+      show(`writes to Business.${col}`, writes.length ? writes : "none");
+      assert.equal(writes.length, 0, `Business.${col} is being written again at ${writes.join(", ")} — the assessment is the one home`);
+      const reads = grepSrc(`business.${col}`, files);
+      show(`reads of Business.${col}`, reads.length ? reads : "none");
+      assert.equal(reads.length, 0, `Business.${col} is read again at ${reads.join(", ")} — read the assessment instead`);
     }
 
     // The one sanctioned crossing point, asserted positively so a silent removal
     // of the mapping (which would drop every client's real enquiry volume back to
-    // the ~20 benchmark) shows up here.
-    const bridge = grepSrc("monthlyEnquiries: business.monthlyLeadVolume", files);
-    show("DB column → intake slot mapping", bridge.length ? bridge : "MISSING");
-    assert.equal(bridge.length, 1, "the Business.monthlyLeadVolume → intake.monthlyEnquiries mapping is missing or duplicated");
+    // the ~20 benchmark) shows up here. Now sourced from the assessment.
+    const bridge = grepSrc("monthlyEnquiries: enquiries", files);
+    show("assessment → intake slot mapping", bridge.length ? bridge : "MISSING");
+    assert.equal(bridge.length, 1, "the LeakAssessment → intake.monthlyEnquiries mapping is missing or duplicated");
+
+    // And the enquiry count must STILL never reach the booking slot — the exact
+    // aliasing this section was written to stop. It survives the change of source.
+    const aliased = grepSrc("monthlyBookedAppointments: enquiries", files)
+      .concat(grepSrc("monthlyBookedAppointments: business.", files));
+    show("enquiry count aliased into the booking slot", aliased.length ? aliased : "none");
+    assert.equal(aliased.length, 0, `the enquiry count is being printed back as a booking count at ${aliased.join(", ")}`);
   });
 
   /* ──────────────────────────────────────────────────────────────────────────

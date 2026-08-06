@@ -19,7 +19,6 @@ export const dynamic = "force-dynamic";
 
 const RECENT_LIMIT = 5;
 const BUSINESS_LIMIT = 8;
-const PROPOSAL_LIMIT = 4;
 
 // The flat shape every business hit ships with — id/name/city/status, nothing
 // else. city + status render in the palette so two same-named rows can be told
@@ -55,12 +54,10 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({
         businesses: recent.map((b) => ({ ...b, href: `/businesses/${b.id}` })),
-        proposals: [],
       });
     }
 
-    const [businesses, proposals] = await Promise.all([
-      prisma.business.findMany({
+    const businesses = await prisma.business.findMany({
         where: {
           userId: session.user.id,
           deletedAt: null,
@@ -73,37 +70,10 @@ export async function GET(req: NextRequest) {
         orderBy: [...RECENCY_ORDER],
         take: BUSINESS_LIMIT,
         select: BUSINESS_SELECT,
-      }),
-      prisma.proposal.findMany({
-        where: {
-          userId: session.user.id,
-          deletedAt: null,
-          OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { business: { name: { contains: q, mode: "insensitive" } } },
-          ],
-        },
-        orderBy: { updatedAt: "desc" },
-        take: PROPOSAL_LIMIT,
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          business: { select: { name: true } },
-        },
-      }),
-    ]);
+    });
 
     return NextResponse.json({
       businesses: businesses.map((b) => ({ ...b, href: `/businesses/${b.id}` })),
-      proposals: proposals.map((p) => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        businessName: p.business.name,
-        // Same destination the Proposals list's own open/edit action uses.
-        href: `/proposals/new?id=${p.id}`,
-      })),
     });
   } catch (error) {
     console.error(error);

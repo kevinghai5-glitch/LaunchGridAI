@@ -18,7 +18,6 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/businesses/:path*",
-    "/proposals/:path*",
     "/deals/:path*",
   ],
 };

@@ -1091,7 +1091,10 @@ export interface AssetPack {
 export type AssetSection = "file1" | "file2" | "file3" | "file4" | "file5";
 
 // The four client-facing flagship deliverables.
-export type DeliverableId = "d1" | "d2" | "d3" | "d4";
+// The three documents. Renamed from d1..d4 when four became two plus one
+// internal (2026-08-06) — the ids are what a deep link and a tab carry, so they
+// say what the document IS rather than what position it used to occupy.
+export type DeliverableId = "diagnosis" | "build-plan" | "asset-pack";
 
 // ── Evidence grades ───────────────────────────────────────────────────────────
 // PAID-PACK ENFORCEMENT — this vocabulary long outlived the cold audit it was
@@ -1106,113 +1109,24 @@ export type DeliverableId = "d1" | "d2" | "d3" | "d4";
  *  voice cannot drift from what we actually know about it. */
 export type EvidenceGrade = "observed" | "disclosed" | "inferred";
 
-// ── Cold-Open Audit — LEGACY ROWS ONLY ────────────────────────────────────────
-// The free pre-sale cold audit was DELETED by owner ruling (2026-08-01): the
-// generator, renderer, validator, routes and public teaser are all gone, and no
-// new COLD_AUDIT row can ever be written (every row was soft-deleted; the rows
-// and their content stay in the database forever, per the no-hard-delete law).
-// Its replacement is the observed-facts row (src/lib/observed-facts.ts) — four
-// measured numbers, no prose, nothing generated.
+// ── Cold-Open Audit and the generated Proposal — BOTH DELETED ────────────────
+// The free cold audit went by owner ruling (2026-08-01) and the generated
+// proposal followed it (2026-08-06). Twelve interfaces lived here to type them:
+// ColdAuditFinding/Report and ProposalLeak/Problem/Component/Roi/Scope/Phase/
+// Testimonial/Proof/Faq/Content plus FullProposal.
 //
-// This minimal shape survives for exactly one live reader:
-// /api/generate/proposal still READS the newest stored COLD_AUDIT row (it
-// resolves to null forever after the soft-delete — approved consequence) and
-// hands it to buildProposalDefaults, whose `audit` parameter needs a type.
-// Only the fields that read path touches are declared. Do not widen it, and do
-// not build anything new against it.
-
-export interface ColdAuditFinding {
-  title: string;
-  problem: string;
-  whyItCosts: string;
-}
-
-export interface ColdAuditReport {
-  headlineCost?: string;
-  findings?: ColdAuditFinding[];
-}
-
-// ── Proposal (client conversion offer) ────────────────────────────────────────
-// The proposal sells ONE bespoke, two-part engagement: a one-time done-for-you
-// setup plus a monthly retainer that runs LeadGate continuously. It is framed
-// entirely around CONVERSION — turning the leads the business already pays for
-// into booked, paying customers — never lead generation, ads, SEO, or traffic.
-// Content is grounded in the business's stored audit (diagnosed leaks + dollar
-// cost) when one exists, else a clearly-labelled conservative assumption.
-
-// One diagnosed conversion leak restated for the buyer, with its dollar cost.
-export interface ProposalLeak {
-  title: string; // plain-English leak name ("Slow response to new leads")
-  monthlyCost: string; // dollarized, e.g. "$2,400–$3,800 / mo" (Law 5)
-  detail: string; // what's leaking and why it costs them, tied to the diagnosis
-}
-
-export interface ProposalProblem {
-  summary: string; // restates the diagnosed situation in the owner's language
-  basis: string; // "From your audit" or a labelled conservative assumption
-  leaks: ProposalLeak[];
-}
-
-// One component we deploy, tied to the specific leak it closes (done-for-you).
-export interface ProposalComponent {
-  name: string; // "LeadGate qualification engine"
-  addresses: string; // the leak this component closes
-  detail: string; // what we build / deploy / manage (DFY framing, Law 3)
-  isRetainer: boolean; // true for LeadGate — the continuously-running engine
-}
-
-export interface ProposalRoi {
-  summary: string; // cost vs. dollar value of recovered conversions (conservative)
-  recovered: string; // dollarized recovered-conversion estimate, e.g. "$3,000–$5,000 / mo"
-  points: string[]; // supporting, conservative ROI bullets
-}
-
-export interface ProposalScope {
-  included: string[]; // what the engagement covers (conversion + the GHL build)
-  // Absolute exclusions, never carve-outs: no ads or media, no lead generation,
-  // traffic, or SEO, and no website work — site findings stay advisory.
-  excluded: string[];
-}
-
-export interface ProposalPhase {
-  label: string; // "Week 1–2 — Build & deploy"
-  detail: string;
-}
-
-export interface ProposalTestimonial {
-  quote: string;
-  attribution: string;
-}
-
-export interface ProposalProof {
-  note: string; // honest framing; never fabricated proof
-  testimonials: ProposalTestimonial[]; // operator fills these in — empty by default
-}
-
-export interface ProposalFaq {
-  q: string;
-  a: string;
-}
-
-// The full editable/renderable proposal content (shared by builder + public view).
-export interface ProposalContent {
-  title: string;
-  agencyName: string; // "Prepared by {{agency_name}}"
-  setupFee: number; // one-time, CAD (6500) — four deliverables + the GHL build
-  monthlyPrice: number; // LeadGate retainer, CAD/mo (1000) — management + monthly report
-  packageOverview: string; // the solution thesis — what we deploy and why
-  problem: ProposalProblem;
-  deliverables: ProposalComponent[]; // what we deploy, each tied to a leak
-  roi: ProposalRoi;
-  scope: ProposalScope;
-  timeline: ProposalPhase[];
-  proof: ProposalProof;
-  nextSteps: string; // the CTA / how to move forward
-  faq: ProposalFaq[];
-  emailMessage: string; // accompanying send-to-client message
-}
-
-export type ProposalData = ProposalContent;
+// They are gone because their last reader went with the route. The cold-audit
+// shape was kept alive for ONE stated consumer — /api/generate/proposal, which
+// read the newest COLD_AUDIT row and handed it to buildProposalDefaults. That
+// route and that function are both deleted, so the type had nothing left to
+// describe. Every remaining mention of ColdAuditFinding in the repo is prose in
+// a comment, not code.
+//
+// The rows themselves are untouched in the database, soft-deleted, per the
+// no-hard-delete law. What replaced them: the observed-facts row
+// (src/lib/observed-facts.ts) for the audit, and ClientOffer
+// (src/lib/client-offer.ts) for the proposal — assembled from the saved
+// calculator, never generated.
 
 export interface BusinessSuggestions {
   painPoint: string;
@@ -1220,33 +1134,6 @@ export interface BusinessSuggestions {
   suggestedOffer: string;
 }
 
-export interface FullProposal {
-  id: string;
-  userId: string;
-  businessId: string;
-  title: string;
-  agencyName: string | null;
-  setupFee: number;
-  monthlyPrice: number;
-  packageOverview: string;
-  problem: ProposalProblem | null;
-  deliverables: ProposalComponent[];
-  roi: ProposalRoi | null;
-  scope: ProposalScope | null;
-  timeline: ProposalPhase[] | null;
-  proof: ProposalProof | null;
-  faq: ProposalFaq[] | null;
-  nextSteps: string | null;
-  emailMessage: string | null;
-  // Legacy / unused-but-persisted columns kept for back-compat.
-  benefits: string[];
-  publicId: string;
-  status: string;
-  systemsIncluded: string[];
-  createdAt: string;
-  updatedAt: string;
-  business: SavedBusiness;
-}
 
 export interface Deal {
   id: string;
@@ -1259,5 +1146,8 @@ export interface Deal {
   createdAt: string;
   updatedAt: string;
   business: SavedBusiness;
-  proposal: FullProposal | null;
+  // `proposalId` stays: the Deal.proposalId COLUMN and its rows are untouched in
+  // the database (nothing here is ever hard-deleted). What is gone is the joined
+  // object — /api/deals no longer includes it, because no screen rendered it and
+  // every row it could resolve to is retired.
 }

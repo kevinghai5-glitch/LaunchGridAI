@@ -803,14 +803,71 @@ function reserveTokens(estimate: number): Promise<void> {
   return task;
 }
 
-async function rawGenerateJson<T>(prompt: string): Promise<T> {
+/** Per-part completion ceiling. A part that blows past its ceiling is a runaway
+ *  generation, and an unbounded call bills for every token of it.
+ *
+ *  RESTORED 2026-08-06 after being lost to a `git checkout` during the Phase 5
+ *  roadmap deletion. Reconstructed from the compiled bundle in .next, which was
+ *  built from the working tree before the revert, so the numbers are the ones
+ *  that were actually running — not re-guessed.
+ *
+ *  `roadmap` is deliberately absent: that generation is retired (Phase 5). */
+const PART_MAX_TOKENS: Record<string, number> = {
+  file1: 8192,
+  file2: 6144,
+  file3: 6144,
+  file4: 6144,
+  file5: 6144,
+  intelligence: 12288,
+  infrastructure: 10240,
+  supportingAssets: 10240,
+  conversionSurfaces: 10240,
+  workflowCopy: 12288,
+};
+
+/** Token spend for one generation run. Read after generateAssetPack to log what
+ *  a pack actually cost. */
+export const GENERATION_USAGE = {
+  calls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+};
+
+export interface GenerateOptions {
+  /** Which part is being generated — picks the ceiling and names the part in a
+   *  truncation error. */
+  label?: string;
+}
+
+async function rawGenerateJson<T>(prompt: string, opts?: GenerateOptions): Promise<T> {
+  const maxTokens = (opts?.label && PART_MAX_TOKENS[opts.label]) || 8192;
   await reserveTokens(estimateTokens(prompt));
   const response = await openai.chat.completions.create({
     model: ASSET_MODEL,
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" },
     temperature: 0.7,
+    max_tokens: maxTokens,
   });
+
+  const usage = response.usage;
+  GENERATION_USAGE.calls += 1;
+  GENERATION_USAGE.promptTokens += usage?.prompt_tokens ?? 0;
+  GENERATION_USAGE.completionTokens += usage?.completion_tokens ?? 0;
+  GENERATION_USAGE.totalTokens += usage?.total_tokens ?? 0;
+
+  // A ceiling hit means the JSON is CUT OFF mid-structure, so JSON.parse would
+  // throw something unhelpful a few lines down. Fail here, naming the part and
+  // the number to raise, rather than reporting a parse error.
+  if (response.choices[0]?.finish_reason === "length") {
+    throw new Error(
+      `Generation truncated: "${opts?.label ?? "asset"}" hit its ${maxTokens}-token ceiling. ` +
+        `Legitimate output should fit well under this — raise PART_MAX_TOKENS["${opts?.label ?? "default"}"] ` +
+        `in asset-generation.ts only if this part genuinely grew.`
+    );
+  }
+
   const content = response.choices[0].message.content;
   if (!content) throw new Error("No content from AI");
   return JSON.parse(content) as T;
@@ -907,9 +964,10 @@ function flatAssertionNote(hits: string[]): string {
 // regeneration mechanism is a third thing that can silently stop running.
 async function generateJson<T>(
   prompt: string,
-  assertions?: (v: T) => AssertionScope[]
+  assertions?: (v: T) => AssertionScope[],
+  opts?: GenerateOptions
 ): Promise<T> {
-  const out = await rawGenerateJson<T>(prompt);
+  const out = await rawGenerateJson<T>(prompt, opts);
   const firstScopes = assertions ? assertions(out) : [];
   const firstVoice = voiceLint(collectStringValues(out).join("\n")).hits;
   const firstFlat = flatAssertionHits(firstScopes);
@@ -929,7 +987,7 @@ Rewrite it in plain, direct language WITHOUT any of them (and without other mark
 ${voiceNote}${flatAssertionNote(firstFlat)}${disclosureAttributionNote(
     firstUnattributed
   )} Return the same JSON shape.`;
-  const retry = await rawGenerateJson<T>(corrective);
+  const retry = await rawGenerateJson<T>(corrective, opts);
   const retryScopes = assertions ? assertions(retry) : [];
   const retryHits =
     voiceLint(collectStringValues(retry).join("\n")).hits.length +
@@ -1093,7 +1151,7 @@ SCOPE — WE DO NOT BUILD WEBSITES. Do not describe a page structure, a deployme
 
 NEVER INVENT PROOF. Do not write a testimonial, a customer name, a quote or a result that is not in the data above. Where proof would strengthen a section and none exists, write a labelled placeholder — "[Insert verified customer review]" — and move on. A recognisable fake name in a client's own document is the single fastest way to lose them.`;
 
-  const file = await generateJson<GrowthAuditFile>(prompt, file1Assertions);
+  const file = await generateJson<GrowthAuditFile>(prompt, file1Assertions, { label: "file1" });
 
   // Overlay the REAL measured metrics on top of whatever the model produced,
   // and attach the real screenshot URLs — the model never sees image URLs.
@@ -1165,7 +1223,7 @@ Return JSON in EXACTLY this shape:
 }
 
 Provide EXACTLY 7 questions and EXACTLY 3 routingLogic entries (Hot, Warm, Cold).`;
-  return generateJson<LeadQualificationFile>(prompt);
+  return generateJson<LeadQualificationFile>(prompt, undefined, { label: "file2" });
 }
 
 // ── FILE 3: the EMAIL half of the 60-day nurture workflow ────────────────────
@@ -1203,7 +1261,7 @@ Return JSON in EXACTLY this shape:
 Provide EXACTLY ${NURTURE_EMAIL_STEPS.length} emails, in the order of the Email steps above (days ${NURTURE_EMAIL_STEPS.map(
     (s) => s.day
   ).join(", ")}). Bodies are complete and realistic — roughly 90-180 words — and signed off in the owner's voice. The final email closes the loop kindly; it never tells the customer their deal has been marked anything.`;
-  const file = await generateJson<EmailNurtureFile>(prompt);
+  const file = await generateJson<EmailNurtureFile>(prompt, undefined, { label: "file3" });
 
   // STAMPED, NOT TRUSTED. The step number, the day and the timing come from
   // NURTURE_SEQUENCE, so the two halves of the workflow always agree about which
@@ -1247,7 +1305,7 @@ Return JSON in EXACTLY this shape:
 Set charCount to the actual character count of the message string. Provide EXACTLY ${NURTURE_TEXT_STEPS.length} texts, in the order of the Text steps above (days ${NURTURE_TEXT_STEPS.map(
     (s) => s.day
   ).join(", ")}).`;
-  const file = await generateJson<SmsFollowUpFile>(prompt);
+  const file = await generateJson<SmsFollowUpFile>(prompt, undefined, { label: "file4" });
   // Trust our own count over the model's — and our own schedule over its
   // numbering, for the same reason file 3 does.
   file.messages = (file.messages ?? []).slice(0, NURTURE_TEXT_STEPS.length).map((m, i) => {
@@ -1297,7 +1355,7 @@ Return JSON in EXACTLY this shape:
 }
 
 Provide 3 steps in threeStepBreakdown and 4-6 whatToExpect bullets.`;
-  const file = await generateJson<BookingSystemFile>(prompt);
+  const file = await generateJson<BookingSystemFile>(prompt, undefined, { label: "file5" });
   // Stamped destination. D3's rule is that no asset reaches the operator without
   // naming the box it goes in, and this group is four messages across two
   // channels — the one most likely to be pasted into the wrong step.
@@ -1858,7 +1916,7 @@ Provide EXACTLY 6 funnel stages (in the order above, Qualify = ${PRODUCT_NAME} w
   // cannot support would appear. Everything else here describes what we build.
   const infra = await generateJson<AcquisitionInfrastructure>(prompt, (a) =>
     (a.funnel?.stages ?? []).map((s) => ({ text: s.currentWeakness ?? "" }))
-  );
+  , { label: "infrastructure" });
   return stampBuild(infra, resolutions);
 }
 
@@ -1973,7 +2031,7 @@ Return JSON in EXACTLY this shape:
 }
 
 Provide exactly ONE postJobRequest message and 2-4 postPurchaseSequence messages.`;
-  const out = await generateJson<SupportingAssets>(prompt);
+  const out = await generateJson<SupportingAssets>(prompt, undefined, { label: "supportingAssets" });
   return {
     ...out,
     reviewAssets: { ...out.reviewAssets, where: REVIEW_REQUEST_WHERE },
@@ -2289,7 +2347,7 @@ Return JSON in EXACTLY this shape:
 
 Provide EXACTLY 3 headlineOptions and 3 subheadlineOptions, 5-8 booking-page sectionOrder entries, 5-8 FAQ items, 2-4 questionIntros, and 4-6 siteAdvisory notes. Do not emit any other keys — the destination labels and the standing rules are added afterwards and must not be written by you.`;
 
-  return stampSurfaceDestinations(await generateJson<ConversionSurfaces>(prompt, surfaceAssertions));
+  return stampSurfaceDestinations(await generateJson<ConversionSurfaces>(prompt, surfaceAssertions, { label: "conversionSurfaces" }));
 }
 
 /**
@@ -2392,7 +2450,7 @@ Return JSON in EXACTLY this shape:
 
 Provide one asset per workflow listed above, using its exact id, with the number of messages that workflow's "write:" line asks for. No other keys.`;
 
-  const out = await generateJson<{ assets: WorkflowCopyAsset[] }>(prompt);
+  const out = await generateJson<{ assets: WorkflowCopyAsset[] }>(prompt, undefined, { label: "workflowCopy" });
   return { assets: stampWorkflowCopy(needed, out.assets ?? []), coverage };
 }
 

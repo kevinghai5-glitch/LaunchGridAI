@@ -18,9 +18,6 @@ export async function GET(_req: NextRequest) {
       orderBy: { updatedAt: "desc" },
       include: {
         business: true,
-        proposal: {
-          select: { id: true, title: true, status: true, monthlyPrice: true },
-        },
       },
     });
 
@@ -59,10 +56,7 @@ export async function POST(req: NextRequest) {
         ...parsed.data,
         userId: session.user.id,
       },
-      include: {
-        business: true,
-        proposal: true,
-      },
+      include: { business: true },
     });
 
     return NextResponse.json({ deal }, { status: 201 });

@@ -6,7 +6,8 @@
 // (or anywhere else in this codebase) may hard-delete a row; that is an
 // absolute law. Every read path already filters `deletedAt: null`, so after
 // this runs the audits vanish from every surface while their history survives:
-// the proposal route's legacy read resolves to null from now on, and any old
+// nothing reads a COLD_AUDIT row any more (the proposal route that did was
+// itself deleted on 2026-08-06), and any old
 // /a/<publicId> teaser link a prospect still holds resolves to nothing (the
 // route itself is deleted).
 //

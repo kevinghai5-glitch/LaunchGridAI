@@ -34,7 +34,7 @@ export async function PATCH(
 
     const deal = await prisma.deal.findFirst({
       where: { id: params.id, deletedAt: null },
-      include: { business: true, proposal: true },
+      include: { business: true },
     });
 
     return NextResponse.json({ deal });

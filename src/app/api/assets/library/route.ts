@@ -52,6 +52,9 @@ export async function GET() {
       reviewCount: true,
       psiSnapshotAt: true,
       researchSnapshotAt: true,
+      // Part of the observed-facts cache key: a manual measure must bust it, or
+      // the row keeps serving pre-measure values until the process restarts.
+      measuredFactsAt: true,
       // Intake fields — surfaced inline in the Library so the operator can set
       // the confirmed-vs-benchmark framing + copy emphasis right where they
       // regenerate the D1–D4 deliverables (these are the only inputs that change
@@ -98,19 +101,10 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         select: { id: true, type: true, publicId: true, createdAt: true },
       },
-      proposals: {
-        where: { deletedAt: null },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          publicId: true,
-          setupFee: true,
-          monthlyPrice: true,
-          createdAt: true,
-        },
-      },
+      // The saved calculator. Only its share id ships — the assessment itself is
+      // read by the offer page, and the Library only needs to know whether there
+      // is a link to hand out.
+      leakAssessment: { select: { publicId: true } },
     },
   });
 
@@ -147,6 +141,8 @@ export async function GET() {
         psiSnapshotAt: true,
         researchSnapshot: true,
         researchSnapshotAt: true,
+        measuredFacts: true,
+        measuredFactsAt: true,
       },
     });
     for (const host of hosts) observedFactsFor(host);
@@ -160,7 +156,6 @@ export async function GET() {
     const stamps = [
       b.createdAt,
       ...b.generatedSystems.map((g) => g.createdAt),
-      ...b.proposals.map((p) => p.createdAt),
     ];
     const lastActivity = stamps.reduce((a, c) => (c > a ? c : a), b.createdAt);
 
@@ -214,15 +209,7 @@ export async function GET() {
         gbpManagement: b.gbpManagement,
         buildPriorities: b.buildPriorities,
       },
-      proposals: b.proposals.map((p) => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        publicId: p.publicId,
-        setupFee: p.setupFee,
-        monthlyPrice: p.monthlyPrice,
-        createdAt: p.createdAt.toISOString(),
-      })),
+      offerPublicId: b.leakAssessment?.publicId ?? null,
     };
   });
 

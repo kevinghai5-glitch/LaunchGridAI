@@ -45,7 +45,10 @@ const SOCIAL_PATTERNS: Record<string, RegExp> = {
   yelp: /^https?:\/\/(?:www\.)?yelp\.com\/biz\/[^/?#]+/i,
 };
 
-const BOOKING_HOSTS = [
+// Exported so the manual measure (src/lib/measure-facts.ts) checks the SAME
+// provider list the paid report checks. Two lists would drift, and then the
+// pre-call row and the deliverable would disagree about the same website.
+export const BOOKING_HOSTS = [
   "calendly.com",
   "acuityscheduling.com",
   "app.acuityscheduling.com",

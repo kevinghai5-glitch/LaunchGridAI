@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildAssetZipChecked } from "@/lib/exporters";
+import { deliverableContext } from "@/lib/exporters/deliverables";
+import { readComputed } from "@/lib/client-offer";
 import { formatOverrideLog } from "@/lib/exporters/validate-pack";
 import type { AssetPack } from "@/types";
 
@@ -74,7 +76,27 @@ export async function POST(req: NextRequest) {
     // is exactly what it was: a fatal check blocks. With it, the ZIP is built only
     // when the caller echoed back every currently-failing check id and typed a
     // reason (Phase 0.6 escape hatch).
-    const built = await buildAssetZipChecked(pack, override);
+    // ── THE DOCUMENT CONTEXT ─────────────────────────────────────────────────
+    // The two client documents are not rendered from the pack alone: the
+    // Diagnosis reads the frozen assessment and the Build Plan reads the build
+    // decisions and the kickoff date. All three live on the business row, and are
+    // read HERE — at the moment of export — so the bytes handed to a client carry
+    // the assessment as it stands now, not a copy taken when the pack was made.
+    const forDocs = await prisma.business.findFirst({
+      where: { id: businessId, userId: session.user.id, deletedAt: null },
+      select: {
+        workflowToggles: true,
+        kickoffAt: true,
+        leakAssessment: { select: { computed: true } },
+      },
+    });
+    const ctx = deliverableContext({
+      assessment: readComputed(forDocs?.leakAssessment?.computed ?? null),
+      workflowToggles: forDocs?.workflowToggles ?? null,
+      kickoffAt: forDocs?.kickoffAt ?? null,
+    });
+
+    const built = await buildAssetZipChecked(pack, override, ctx);
     if (!built.ok) {
       console.error(`Export blocked for business ${businessId}:\n${built.report}`);
       if (built.overrideError)

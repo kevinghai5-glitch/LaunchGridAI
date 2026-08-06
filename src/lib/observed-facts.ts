@@ -28,6 +28,7 @@ import { buildAuditIntelligence } from "@/lib/audit-intelligence";
 import { buildBusinessFacts } from "@/lib/business-facts";
 import { toScrapeData, type PreSaleResearch } from "@/lib/leak-detection";
 import type { Tri } from "@/lib/leak-taxonomy";
+import type { MeasuredFacts, MeasuredPresence } from "@/lib/measure-facts";
 import type { PsiBundle } from "@/lib/pagespeed";
 import type { ResearchBundle } from "@/lib/research-snapshot";
 
@@ -106,6 +107,11 @@ export interface ObservedFactsHost {
   /** Serialized ResearchBundle (JSON column) — parsed defensively, never trusted. */
   researchSnapshot: unknown;
   researchSnapshotAt?: Date | string | null;
+  /** Serialized MeasuredFacts from the manual "Fetch measured values" button
+   *  (src/lib/measure-facts.ts). Separate from the snapshots on purpose: it
+   *  records ONLY what two cheap calls actually saw, never a whole capture. */
+  measuredFacts?: unknown;
+  measuredFactsAt?: Date | string | null;
 }
 
 // ── Defensive snapshot parsing ────────────────────────────────────────────────
@@ -215,6 +221,72 @@ export function unknownObservedFacts(): ObservedFacts {
  * a PageSpeed snapshot but no research bundle still gets its speed numbers, and
  * everything unprovable stays "unknown"/"—".
  */
+/** A stored MeasuredFacts blob, parsed defensively like the snapshots. */
+function asMeasuredFacts(value: unknown): MeasuredFacts | null {
+  if (!value || typeof value !== "object") return null;
+  const m = value as Partial<MeasuredFacts>;
+  const ok = (p: unknown) => p === "found" || p === "none" || p === "unknown";
+  if (!ok(m.bookingLink) || !ok(m.clickToCall)) return null;
+  return m as MeasuredFacts;
+}
+
+/** Overlay the manual measure onto the snapshot-derived row.
+ *
+ *  TWO RULES, both load-bearing:
+ *
+ *  1. THE FRESHER SOURCE WINS. A measure taken today should beat a snapshot from
+ *     three weeks ago, and a research capture run after a measure should beat the
+ *     measure. Whichever was observed later describes the site as it is now.
+ *
+ *  2. A MEASURED "UNKNOWN" NEVER OVERWRITES SOMETHING KNOWN. If the button could
+ *     not reach the site but a previous full scan proved a booking link exists,
+ *     the row keeps the finding. Fresher-wins is about better information, and
+ *     "we could not see" is not information — it is the absence of it.
+ *
+ *  Reviews are untouched: this button does not measure them. If no research
+ *  bundle exists the local median stays null and reviews still render "—", which
+ *  is correct — a median needs a competitor sample nobody has fetched. */
+function applyMeasured(
+  base: ObservedFacts,
+  host: ObservedFactsHost,
+  snapshotAt: string | null
+): ObservedFacts {
+  const measured = asMeasuredFacts(host.measuredFacts);
+  const measuredAt = toIso(host.measuredFactsAt);
+  if (!measured || !measuredAt) return base;
+
+  // Rule 1. Missing snapshot date → the measure is the only dated evidence.
+  const fresher = !snapshotAt || measuredAt > snapshotAt;
+  if (!fresher) return base;
+
+  // Rule 2, applied per value.
+  const takePresence = (
+    now: { state: PresenceState; verdict: ObservedVerdict },
+    next: MeasuredPresence
+  ) =>
+    next === "unknown" && now.state !== "unknown"
+      ? now
+      : { state: next as PresenceState, verdict: presenceVerdict(next as PresenceState) };
+
+  const score = measured.mobile?.score ?? null;
+  const load = measured.mobile?.loadSeconds ?? null;
+  const mobileKnown = score != null || load != null;
+  const baseMobileKnown = base.mobileSpeed.score != null || base.mobileSpeed.loadSeconds != null;
+
+  return {
+    ...base,
+    mobileSpeed:
+      mobileKnown || !baseMobileKnown
+        ? { score, loadSeconds: load, verdict: mobileVerdict(score, load) }
+        : base.mobileSpeed,
+    bookingLink: takePresence(base.bookingLink, measured.bookingLink),
+    clickToCall: takePresence(base.clickToCall, measured.clickToCall),
+    // Provenance follows the value: the row now describes what was seen at the
+    // measure, so it must say so rather than quoting an older capture date.
+    observedAt: measuredAt,
+  };
+}
+
 export function computeObservedFacts(host: ObservedFactsHost): ObservedFacts {
   const psi = asPsiBundle(host.psiSnapshot);
   const bundle = asResearchBundle(host.researchSnapshot);
@@ -241,7 +313,7 @@ export function computeObservedFacts(host: ObservedFactsHost): ObservedFacts {
     // sample exists, so the verdict stays unknown either way.
     const count = host.reviewCount ?? null;
     const ratingRaw = host.rating ?? null;
-    return {
+    return applyMeasured({
       mobileSpeed,
       reviews: {
         count,
@@ -253,7 +325,7 @@ export function computeObservedFacts(host: ObservedFactsHost): ObservedFacts {
       bookingLink: { state: "unknown", verdict: "unknown" },
       clickToCall: { state: "unknown", verdict: "unknown" },
       observedAt: researchAt ?? psiOnlyAt,
-    };
+    }, host, researchAt ?? psiOnlyAt);
   }
 
   // ── Canonical assembly — mirrors /api/leak-gaps (which mirrors the paid
@@ -354,13 +426,17 @@ export function computeObservedFacts(host: ObservedFactsHost): ObservedFacts {
       : "unknown";
   const clickToCallState: PresenceState = w ? presenceOf(w.hasClickToCallOnMobile) : "unknown";
 
-  return {
-    mobileSpeed,
-    reviews: { count, rating, localAvg, verdict: reviewsVerdict(count, localAvg) },
-    bookingLink: { state: bookingState, verdict: presenceVerdict(bookingState) },
-    clickToCall: { state: clickToCallState, verdict: presenceVerdict(clickToCallState) },
-    observedAt: researchAt ?? psiOnlyAt,
-  };
+  return applyMeasured(
+    {
+      mobileSpeed,
+      reviews: { count, rating, localAvg, verdict: reviewsVerdict(count, localAvg) },
+      bookingLink: { state: bookingState, verdict: presenceVerdict(bookingState) },
+      clickToCall: { state: clickToCallState, verdict: presenceVerdict(clickToCallState) },
+      observedAt: researchAt ?? psiOnlyAt,
+    },
+    host,
+    researchAt ?? psiOnlyAt
+  );
 }
 
 // ── Memoization ───────────────────────────────────────────────────────────────
@@ -380,6 +456,9 @@ export interface ObservedFactsKeyFields {
   reviewCount?: number | null;
   psiSnapshotAt?: Date | string | null;
   researchSnapshotAt?: Date | string | null;
+  /** Part of the key: a manual measure changes the row's inputs, so it must
+   *  change the row's cache key too. */
+  measuredFactsAt?: Date | string | null;
 }
 
 const CACHE_MAX = 400;
@@ -390,6 +469,10 @@ function cacheKey(k: ObservedFactsKeyFields): string {
     k.id,
     toIso(k.psiSnapshotAt) ?? "",
     toIso(k.researchSnapshotAt) ?? "",
+    // WITHOUT THIS a click of the measure button changes nothing on screen until
+    // the server restarts: the inputs differ but the key does not, so the cache
+    // keeps serving the pre-measure row. Pinned in verify-facts.
+    toIso(k.measuredFactsAt) ?? "",
     k.rating ?? "",
     k.reviewCount ?? "",
     k.website ?? "",

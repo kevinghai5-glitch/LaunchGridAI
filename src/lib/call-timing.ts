@@ -31,6 +31,25 @@ export const METRO_TIMEZONES: Record<string, string> = {
   "Las Vegas, NV": "America/Los_Angeles",
 };
 
+// IANA zone for a stored city value. Leads carry the SHORT city ("Toronto"),
+// because gatherProspects strips the state off the metro before persisting,
+// while the map above is keyed by the full metro ("Toronto, ON") — so match on
+// the part before the comma. All 20 short names are unique, so this can't
+// collide.
+//
+// Returns "" for anything not in the metro rotation (a business added by name
+// through Studio can carry any city string). A GUESSED time zone in a
+// power-dialer export is worse than a blank one: it would schedule a call into
+// the wrong window and look authoritative doing it.
+export function timezoneForCity(city: string | null | undefined): string {
+  const key = (city ?? "").split(",")[0].trim().toLowerCase();
+  if (!key) return "";
+  for (const [metro, tz] of Object.entries(METRO_TIMEZONES)) {
+    if (metro.split(",")[0].trim().toLowerCase() === key) return tz;
+  }
+  return "";
+}
+
 // Peak cold-call windows (local hour), per the cold-call SOP: 8-9am (golden),
 // 10-11am (peak), 4-5pm (strong second window).
 const PEAK_HOURS = new Set([8, 10, 16]);

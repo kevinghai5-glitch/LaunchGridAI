@@ -1,12 +1,21 @@
 // Dashboard + sidebar revenue rollup — computed from the CANONICAL source
-// (Business.status + the latest proposal's retainer), exactly like the CRM board
-// (see src/app/api/crm/route.ts). The legacy Deal table is never populated, so
-// anything that read MRR/pipeline from it rendered $0 forever even with live
-// clients. This reads the real lifecycle instead, so the Home page and the
-// sidebar snapshot always reflect actual won/in-motion revenue.
+// (Business.status), exactly like the CRM board (see src/app/api/crm/route.ts).
+// The legacy Deal table is never populated, so anything that read MRR/pipeline
+// from it rendered $0 forever even with live clients. This reads the real
+// lifecycle instead, so the Home page and the sidebar snapshot always reflect
+// actual won/in-motion revenue.
+//
+// WHERE THE RETAINER COMES FROM (changed 2026-08-06). It used to be read off the
+// latest Proposal row. When the proposal generator was deleted and every row
+// soft-deleted, that lookup returned nothing for every business and MRR silently
+// fell to $0 — live clients and all. The retainer is now what it actually is:
+// ONE price, the same for every client, in src/lib/constants.ts. A WON business
+// is a signed client, and a signed client pays it. There is no per-client
+// retainer to look up any more, so there is nothing to fall back from.
 
 import { prisma } from "@/lib/prisma";
 import { stageForStatus, type CrmStageId } from "@/lib/crm";
+import { MONTHLY_RETAINER_CAD } from "@/lib/constants";
 
 export interface CrmRollup {
   /** Sum of monthly retainer across WON leads. */
@@ -40,12 +49,6 @@ export async function computeCrmRollup(userId: string): Promise<CrmRollup> {
       lastActivityAt: true,
       createdAt: true,
       deals: { where: { deletedAt: null }, select: { monthlyValue: true } },
-      proposals: {
-        where: { deletedAt: null },
-        select: { monthlyPrice: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
     },
   });
 
@@ -61,9 +64,10 @@ export async function computeCrmRollup(userId: string): Promise<CrmRollup> {
   };
 
   for (const b of businesses) {
-    // Prefer an attached deal's value, else the latest proposal's retainer.
+    // A negotiated deal value wins if one was ever attached; otherwise it is the
+    // standard retainer, which is what every client is actually on.
     const dealValue = b.deals.reduce((s, d) => s + (d.monthlyValue || 0), 0);
-    const monthlyValue = dealValue || b.proposals[0]?.monthlyPrice || 0;
+    const monthlyValue = dealValue || MONTHLY_RETAINER_CAD;
     const stage = stageForStatus(b.status);
     r.stageCounts[stage] = (r.stageCounts[stage] || 0) + 1;
 
@@ -76,7 +80,7 @@ export async function computeCrmRollup(userId: string): Promise<CrmRollup> {
       r.pipelineCount += 1;
       if (monthlyValue > 0) {
         r.pipelineMRR += monthlyValue;
-        r.pipelinePoints.push({ at: b.proposals[0]?.createdAt ?? b.createdAt, value: monthlyValue });
+        r.pipelinePoints.push({ at: b.lastActivityAt ?? b.createdAt, value: monthlyValue });
       }
     }
   }

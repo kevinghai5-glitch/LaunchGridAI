@@ -1,0 +1,11 @@
+-- kickoffAt: when the paid engagement begins.
+--
+-- The Build Plan computes every date it prints from this one field — build
+-- window, go-live, then ongoing. The old roadmap hardcoded relative windows
+-- ("Days 1–14") that were never anchored to a real date, so a client could not
+-- tell which Tuesday anything happened on.
+--
+-- Additive and nullable: every existing row stays valid. NULL means "no paid
+-- engagement yet", and a Build Plan generated in that state must say so rather
+-- than invent a start date.
+ALTER TABLE "Business" ADD COLUMN "kickoffAt" TIMESTAMP(3);

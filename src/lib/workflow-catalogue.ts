@@ -617,14 +617,18 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
   },
 
   // 10 ─────────────────────────────────────────────────────────────────────────
-  // INSTALLED ALWAYS, EVIDENCED SOMETIMES. no_webchat is suppressed when a chat
-  // widget is already on the site — and this one still ships, because a chat that
-  // ends in somebody else's inbox does not create a contact, does not text them
-  // back, and does not enter the pipeline.
+  // THE ONE THAT IS GENUINELY UNDECIDED WHEN THE DOCUMENTS GO OUT. no_webchat is
+  // suppressed when a chat widget is already on the site — and this one still
+  // ships, because a chat that ends in somebody else's inbox does not create a
+  // contact, does not text them back, and does not enter the pipeline.
   //
-  // THE ONE WAY OUT IS NOT A RULE. If the chat box cannot be placed on the site,
-  // that is discovered at install, not at intake — no question on the form could
-  // have told us. So it is an operator decision with a reason, not applicability.
+  // OPERATOR_ONLY, NOT EVERY_BUILD. Whether the chat box can be placed is
+  // discovered during the build, days after the Build Plan is sent — no question
+  // on the intake form could have told us, and no rule the software can evaluate
+  // decides it. It used to sit in `every_build` with an operatorOffReason, which
+  // made it look settled on a screen where it is not. It is one of the five real
+  // decisions now, and the Build Plan says PENDING for it rather than claiming
+  // either way.
   {
     id: "webchat-capture",
     name: "Webchat Capture",
@@ -640,11 +644,16 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
     justifyingLeaks: ["no_webchat"],
     gatedOnALeak: false,
     applicability: {
-      kind: "every_build",
-      operatorOffReason:
+      kind: "operator_only",
+      offWhen:
         "The chat box cannot be placed on the site — no access to it, or a platform that will not take the snippet. That is found at install time, not on the intake form, so it is the operator's call rather than a rule the software can evaluate.",
+      // No `missingIntakeQuestion`: the question is not missing, it is
+      // unanswerable at intake. Nobody knows until the snippet is attempted.
     },
-    defaultOn: true,
+    // CONDITIONAL, NOT LEFT OUT — see the note on the flag. Webchat installs in
+    // every build; `false` only marks that a decision hangs on it, which is what
+    // lets the Build Plan print it as PENDING instead of claiming either way.
+    defaultOn: false,
   },
 
   // 11 ─────────────────────────────────────────────────────────────────────────
@@ -1036,12 +1045,17 @@ export function verifyWorkflowCatalogue(): string[] {
     seen.add(w.id);
   }
 
-  // Exactly four carry a rule; the other ten are unconditional. If these two ever
+  // Exactly FIVE carry a rule; the other nine are unconditional. If these two ever
   // disagree, a workflow is claiming to be conditional with no rule behind it (or
-  // the reverse), and the toggles screen would show the wrong thing.
+  // the reverse), and the intake screen would show the wrong thing.
+  //
+  // It was four until webchat-capture moved out of `every_build`. Whether the chat
+  // snippet can be placed is discovered during the build, days after the Build
+  // Plan is sent — so presenting it as settled was the one claim in that document
+  // nobody could stand behind. It is a decision now, and the fifth switch.
   const conditional = WORKFLOWS.filter((w) => !w.defaultOn);
-  if (conditional.length !== 4)
-    problems.push(`Expected exactly 4 conditional workflows, found ${conditional.length}.`);
+  if (conditional.length !== 5)
+    problems.push(`Expected exactly 5 conditional workflows, found ${conditional.length}.`);
   for (const w of WORKFLOWS) {
     const hasRule = w.applicability.kind !== "every_build";
     if (hasRule === w.defaultOn)

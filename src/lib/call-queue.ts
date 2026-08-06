@@ -343,5 +343,9 @@ export function compareQueue(
   return da - db;
 }
 
-// Max leads surfaced in a day — keeps the list to a callable size.
-export const QUEUE_LIMIT = 30;
+// Max leads surfaced in a day. This is a SAFETY CAP on one response, not an
+// opinion about how much work a day holds — it was 30 back when a batch was
+// always 30, which silently truncated the queue (and therefore the power-dialer
+// CSV) the moment a larger batch was approved. Sized above MAX_BATCH_SIZE so a
+// full generation plus the day's callbacks and follow-ups all fit.
+export const QUEUE_LIMIT = 200;

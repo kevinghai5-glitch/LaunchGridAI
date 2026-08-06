@@ -28,13 +28,10 @@ export default async function DashboardLayout({
     select: { industry: true },
   });
 
-  // MRR / pipeline / clients come from the CANONICAL source (Business.status +
-  // latest proposal), not the never-populated Deal table that rendered $0.
-  const [rollup, proposalCount, opportunityCount] = await Promise.all([
+  // MRR / pipeline / clients come from the CANONICAL source (Business.status),
+  // not the never-populated Deal table that rendered $0.
+  const [rollup, opportunityCount] = await Promise.all([
     computeCrmRollup(session.user.id),
-    prisma.proposal.count({
-      where: { userId: session.user.id, status: { notIn: ["ACCEPTED", "REJECTED"] }, deletedAt: null },
-    }),
     // Un-triaged batch for the latest niche only — matches what Opportunities
     // shows. 0 when there's no current batch (e.g. everything's been triaged
     // or cleared), so the badge disappears instead of showing stale leftovers.
@@ -62,7 +59,7 @@ export default async function DashboardLayout({
   // colour. Every one of those was global in globals.css until now, and global
   // meant it also reached the two CLIENT-FACING routes that share the root
   // layout: /a/[publicId] (the cold-audit teaser a prospect opens from the
-  // pre-call email) and /p/[publicId] (the public proposal). Both are
+  // pre-call email) and /p/[publicId] (the client offer). Both are
   // cream/serif brand documents. Putting the theme here instead of on <html>
   // is what makes it structurally impossible for either to inherit it.
   //
@@ -87,7 +84,6 @@ export default async function DashboardLayout({
         activeClients={activeClients}
         opportunityCount={opportunityCount}
         pipelineCount={pipelineCount}
-        proposalCount={proposalCount}
         userName={session.user.name ?? "Account"}
         userPlan={session.user.plan === "pro" ? "Operator" : "Free"}
       />

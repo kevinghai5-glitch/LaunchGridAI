@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
-import { ClientDrawer, type ClientDrawerTab } from "@/components/businesses/ClientDrawer";
 import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
 // Type-only: /api/businesses/[id] computes the four values server-side and ships
 // the small object; importing VALUES from the lib here would drag the detection
@@ -75,7 +74,6 @@ interface BusinessWithSystems {
   outreachAngle: string | null;
   suggestedOffer: string | null;
   generatedSystems: Array<{ id: string; type: string; content: unknown; createdAt: string }>;
-  proposals: Array<{ id: string; title: string; status: string; monthlyPrice: number; createdAt: string }>;
   // CRM record fields
   status: string;
   nextAction: string | null;
@@ -140,19 +138,6 @@ export default function BusinessDetailPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
-  // Which tab the client drawer is open on; null = shut. The questions, the sixteen
-  // intake fields and the fourteen build switches used to be permanently-open cards
-  // in this narrow sidebar, which is most of why this page ran so long.
-  //
-  // NOTHING ON THIS PAGE HOLDS A REFETCH TOKEN FOR THE GUESSED COUNT ANY MORE.
-  // There used to be one (intelKey) because the count was rendered here; the count
-  // lives in the drawer now, the drawer re-reads it after every answer and after
-  // every full-form save, and it remounts fresh on every open. Nothing this page
-  // does — status, notes, favourite, AI suggestions — touches the research snapshot
-  // or the intake columns that count is computed from, so a token out here would be
-  // state that never means anything. (The Library keeps its one: a cold audit or a
-  // pack can finish behind an open drawer there.)
-  const [drawer, setDrawer] = useState<ClientDrawerTab | null>(null);
 
   useEffect(() => {
     loadBusiness();
@@ -377,8 +362,14 @@ export default function BusinessDetailPage() {
               <h3 className="text-sm font-semibold text-[color:var(--text)] mb-3">
                 Observed facts
               </h3>
-              <ObservedFactsRow facts={business.observedFacts} framed={false} />
+              <ObservedFactsRow facts={business.observedFacts} framed={false} businessId={business.id} />
             </div>
+
+            {/* The calculator and the intake screen are NOT linked from here.
+                Both are Library controls: the Library is the list of businesses
+                that have actually booked, which is exactly when either screen is
+                used. Putting them here too made the work start in Opportunities
+                and detour through a record page that has no part in it. */}
 
             {/* Actions */}
             <div className="glass-card p-5 space-y-3">
@@ -390,14 +381,8 @@ export default function BusinessDetailPage() {
                 </Link>
               </Button>
               <p className="text-xs text-[color:var(--text-4)] -mt-1 mb-1">
-                Generate the growth pack &amp; proposal from the Library control centre.
+                Generate the growth pack from the Library control centre.
               </p>
-              <Button variant="outline" size="sm" className="w-full" asChild>
-                <Link href={`/proposals/new?businessId=${id}`}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Create Proposal
-                </Link>
-              </Button>
             </div>
 
             {/* CRM record: status + notes */}
@@ -474,54 +459,6 @@ export default function BusinessDetailPage() {
               </div>
             </div>
 
-            {/* Client record — the three ways into it, and nothing else.
-
-                WHAT USED TO BE HERE: permanently-open cards — sixteen intake
-                fields, fourteen build switches, and the guessed-answers list —
-                stacked in a column a third of the page wide. All three are now one
-                click away in a drawer that floats over the page, and this card is a
-                constant height for every client. Same questions, same components,
-                same save path as the Library: if the two screens collected
-                different subsets, the pack would depend on which screen got used.
-
-                THE GUESSED LIST WENT WITH THEM, and nothing summarising it is left
-                behind — no count, no strip, no placeholder. It is the drawer's
-                first tab, which is also its default, so it is one click from here
-                and it opens with the full window height instead of a 34vh box with
-                its own scrollbar inside this sidebar.
-
-                BUTTON ORDER MIRRORS THE TAB ORDER: Questions, Intake, The build.
-                Questions carries the emphasis because it is the prioritised subset
-                — the handful of answers that change how the deliverables read. */}
-            <div className="glass-card p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-[color:var(--text)]">Client record</h3>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-[color:var(--text-4)]">
-                  {business.avgClientValueCad || business.monthlyLeadVolume
-                    ? "Real-mode math active"
-                    : "Benchmark mode"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="blue-outline"
-                    size="sm"
-                    onClick={() => setDrawer("questions")}
-                    title="What the scan couldn't settle, and what to ask on the call"
-                  >
-                    <HelpCircle className="h-3 w-3 mr-1" />
-                    Questions
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setDrawer("intake")}>
-                    <ClipboardList className="h-3 w-3 mr-1" />
-                    Intake
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setDrawer("build")}>
-                    <Workflow className="h-3 w-3 mr-1" />
-                    The build
-                  </Button>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* AI Suggestions + Systems */}
@@ -690,75 +627,10 @@ export default function BusinessDetailPage() {
               </div>
             )}
 
-            {/* Proposals */}
-            {business.proposals.length > 0 && (
-              <div className="glass-card p-5">
-                <h3 className="text-sm font-semibold text-[color:var(--text)] mb-4">Proposals</h3>
-                <div className="space-y-3">
-                  {business.proposals.map((p) => (
-                    <Link
-                      key={p.id}
-                      href={`/proposals/${p.id}`}
-                      className="panel p-4 flex items-center justify-between group hover:border-[color:var(--accent-soft)] transition-all"
-                    >
-                      <div>
-                        <div className="text-sm font-medium text-[color:var(--text)] group-hover:text-[color:var(--accent-hover)] transition-colors">{p.title}</div>
-                        {/* This printed a raw "$1000/mo" — no currency marker and
-                            no thousands separator — beside an audit that reads
-                            "CAD $1,290". formatCurrency is the product's one money
-                            formatter: the marker goes before the figure, always. */}
-                        <div className="text-xs text-[color:var(--text-4)]">
-                          {formatCurrency(p.monthlyPrice)}/mo
-                        </div>
-                      </div>
-                      <Badge variant={p.status === "ACCEPTED" ? "green" : p.status === "SENT" ? "blue" : "gray"}>
-                        {p.status}
-                      </Badge>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Rendered at the top level of the page, not inside the sidebar card that
-          opens it. It is `position: fixed`, so it adds no height anywhere — but a
-          fixed child of a card that ever grows a transform or a backdrop filter
-          would start being positioned against that card instead of the window,
-          and it would be clipped. Out here that can't happen. */}
-      <ClientDrawer
-        open={drawer !== null}
-        business={business}
-        businessName={business.name}
-        // `?? "questions"` is only read while open; the next open re-asserts
-        // whichever button he pressed.
-        initialTab={drawer ?? "questions"}
-        // No questionsReloadKey: nothing on this page can capture a research
-        // snapshot behind an open drawer (see the note on `drawer` above), and the
-        // Questions tab re-reads its own count after every answer.
-        onClose={() => setDrawer(null)}
-        successMessage="Client intake saved"
-        onIntakeSaved={(next) => {
-          // MERGING IS NOT OPTIONAL (see ClientDrawer.onIntakeSaved): the form
-          // decides what is unsaved by diffing its draft against this object, so a
-          // merge skipped here leaves it looking dirty forever and it would ask him
-          // to save again on the way out, over a write that landed.
-          //
-          // BOTH MERGES BELOW MUST STAY IN THE FUNCTIONAL FORM. "Save & close" fires
-          // this and onAnswersRecorded in the same tick, so two updates built from
-          // the render's `business` would keep only the second — which would drop
-          // the sixteen-field save he just made.
-          setBusiness((prev) => (prev ? { ...prev, ...next } : prev));
-        }}
-        // The chips he clicked on the Questions tab, handed over as it closes (see
-        // ClientDrawer.onAnswersRecorded for why not sooner). Already written to the
-        // database; this is what stops the same question opening blank next time.
-        onAnswersRecorded={(answers) => {
-          setBusiness((prev) => (prev ? { ...prev, ...answers } : prev));
-        }}
-      />
     </div>
   );
 }

@@ -38,16 +38,13 @@ export default async function DashboardPage() {
 
   const [
     businessCount,
-    proposalCount,
     rollup,
     recentBusinesses,
     recentGenerations,
-    recentProposals,
     recentSavedBiz,
     opportunityPool,
   ] = await Promise.all([
     prisma.business.count({ where: { userId, deletedAt: null } }),
-    prisma.proposal.count({ where: { userId, deletedAt: null } }),
     computeCrmRollup(userId),
     prisma.business.findMany({
       where: { userId, deletedAt: null },
@@ -62,17 +59,6 @@ export default async function DashboardPage() {
         type: true,
         createdAt: true,
         businessId: true,
-        business: { select: { name: true } },
-      },
-    }),
-    prisma.proposal.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: {
-        status: true,
-        createdAt: true,
-        monthlyPrice: true,
         business: { select: { name: true } },
       },
     }),
@@ -113,7 +99,7 @@ export default async function DashboardPage() {
 
   // ---- Real unified activity feed ----
   type Activity = {
-    kind: "signed" | "generated" | "proposal" | "saved";
+    kind: "signed" | "generated" | "saved";
     tone: "money" | "accent" | "neutral";
     actor: string;
     what: string;
@@ -143,17 +129,6 @@ export default async function DashboardPage() {
       what: `shipped ${label} for ${g.business?.name ?? "a business"}`,
       at: g.createdAt.getTime(),
       when: relTime(g.createdAt),
-    });
-  }
-  for (const p of recentProposals) {
-    const verb = p.status === "SENT" || p.status === "VIEWED" ? "sent" : p.status === "ACCEPTED" ? "closed" : "drafted";
-    events.push({
-      kind: "proposal",
-      tone: "neutral",
-      actor: "You",
-      what: `${verb} proposal for ${p.business?.name ?? "a business"}`,
-      at: p.createdAt.getTime(),
-      when: relTime(p.createdAt),
     });
   }
   for (const b of recentSavedBiz) {
@@ -228,7 +203,6 @@ export default async function DashboardPage() {
         pipelineMRR={pipelineMRR}
         wonCount={wonCount}
         businessCount={businessCount}
-        proposalCount={proposalCount}
         stageCounts={stageCounts}
         sparkMRR={sparkMRR}
         sparkPipe={sparkPipe}

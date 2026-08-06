@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stageForStatus } from "@/lib/crm";
+import { MONTHLY_RETAINER_CAD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,16 @@ export async function GET() {
         select: { disposition: true, note: true, calledAt: true },
       },
       deals: { where: { deletedAt: null }, select: { monthlyValue: true } },
-      proposals: { where: { deletedAt: null }, select: { monthlyPrice: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
   const leads = businesses.map((b) => {
     const lastCall = b.callLogs[0];
-    // Monthly value: prefer an attached deal, else the latest proposal's retainer.
+    // Monthly value: prefer an attached deal, else the standard retainer. It
+    // used to read the latest proposal's price; that row no longer exists and
+    // the retainer is one number for every client (see src/lib/crm-rollup.ts).
     const dealValue = b.deals.reduce((s, d) => s + (d.monthlyValue || 0), 0);
-    const monthlyValue = dealValue || b.proposals[0]?.monthlyPrice || 0;
+    const monthlyValue = dealValue || MONTHLY_RETAINER_CAD;
     return {
       id: b.id,
       name: b.name,

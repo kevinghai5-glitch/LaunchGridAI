@@ -9,7 +9,6 @@ import { LgButton } from "@/components/ui/lg-button";
 import { LgBadge } from "@/components/ui/lg-badge";
 import { LgCard } from "@/components/ui/lg-card";
 import { AssetPackView } from "@/components/businesses/AssetPackView";
-import { IntakeGaps } from "@/components/businesses/IntakeGaps";
 import {
   PackGateDialog,
   parsePackGateFailure,
@@ -116,7 +115,6 @@ export default function StudioPage() {
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   // Refetch token for the "still guessed" panel. Bumped after a run that can have
   // changed the stored research snapshot the panel reads.
-  const [gapsKey, setGapsKey] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   // Initial business list — pick from URL, then last-used (localStorage), then first.
@@ -396,11 +394,6 @@ export default function StudioPage() {
       setArchivedPack(fresh);
       setArchivedAt(now);
       setDone(true);
-      // A first generation is also what CAPTURES the research snapshot, and a
-      // "refresh research" run replaces it. Either way the gaps panel is now
-      // reading a different picture than the one it loaded, so re-read it — the
-      // alternative is a panel that says "nothing scanned yet" next to a pack.
-      setGapsKey((n) => n + 1);
       toast.success("Asset pack generated");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -463,13 +456,6 @@ export default function StudioPage() {
                 disabled={saving || savedPack}
               >
                 {saving ? "Saving…" : savedPack ? "Saved to library" : "Save to library"}
-              </LgButton>
-              <LgButton
-                variant={savedPack ? "primary" : "ghost"}
-                icon="file"
-                onClick={() => router.push(`/proposals/new?businessId=${selected.id}`)}
-              >
-                Use in proposal
               </LgButton>
             </div>
           )}
@@ -611,29 +597,6 @@ export default function StudioPage() {
                 </div>
               </div>
             </LgCard>
-
-            {/* What's still guessed — directly above the Generate button, because
-                this is the last moment before the hedges are written into the
-                deliverables: intake answers change what D1–D4 say. */}
-            {selected && (
-              <LgCard padded={false} style={flatCard}>
-                <div
-                  style={{
-                    padding: "16px 20px 12px",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
-                  <Eyebrow>Still guessed</Eyebrow>
-                </div>
-                <div style={{ padding: 16 }}>
-                  <IntakeGaps
-                    businessId={selected.id}
-                    reloadKey={gapsKey}
-                    density="comfortable"
-                  />
-                </div>
-              </LgCard>
-            )}
 
             <LgCard padded={false} style={flatCard}>
               <div style={{ padding: 16 }}>

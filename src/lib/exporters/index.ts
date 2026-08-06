@@ -6,7 +6,13 @@
 
 import JSZip from "jszip";
 import type { AssetPack, PackGovernance } from "@/types";
-import { DELIVERABLES, renderDeliverableHtml } from "./deliverables";
+import {
+  DELIVERABLES,
+  CLIENT_DELIVERABLES,
+  renderDeliverableHtml,
+  emptyDeliverableContext,
+  type DeliverableContext,
+} from "./deliverables";
 import {
   assertPackValid,
   checkId,
@@ -40,7 +46,10 @@ const RENDER_LAW = "Render · deliverable HTML";
 // own honesty laws must not reach a prospect. This function still only REPORTS
 // (it is pure and never throws, so gen-check.ts can keep listing violations); the
 // blocking happens one level up, in buildAssetZipChecked.
-export function validateRenderedDeliverables(pack: AssetPack): {
+export function validateRenderedDeliverables(
+  pack: AssetPack,
+  ctx: DeliverableContext = emptyDeliverableContext()
+): {
   html: Record<string, string>;
   violations: string[];
   /** Fatal pack-validator checks, structured — so a caller can render them
@@ -56,8 +65,11 @@ export function validateRenderedDeliverables(pack: AssetPack): {
    *  may be handed to a client. */
   ok: boolean;
 } {
+  // ALL THREE are rendered and validated, including the internal Asset Pack:
+  // it reaches the client at go-live, so it is held to the same laws. Only the
+  // two client documents are BUNDLED — see the ZIP below.
   const html: Record<string, string> = {};
-  for (const d of DELIVERABLES) html[d.id] = renderDeliverableHtml(pack, d.id);
+  for (const d of DELIVERABLES) html[d.id] = renderDeliverableHtml(pack, d.id, ctx);
 
   // Kept separate from `violations` below because only these are RENDER-level
   // findings. The pack-validator summary that also lands in `violations` is a
@@ -65,14 +77,34 @@ export function validateRenderedDeliverables(pack: AssetPack): {
   // law failure in the override handshake.
   const renderViolations: string[] = [];
 
+  // ── BENCHMARK-PRICED CLAIMS MAY NOT REACH A CLIENT DOCUMENT ───────────────
+  // This used to count kickoff-verification lines in D1: a leak priced from an
+  // industry benchmark rather than the client's own numbers had to promise it
+  // would be re-checked at kickoff. D1 was assembled from generated leak
+  // analysis, so benchmark-priced figures genuinely appeared on it.
+  //
+  // The Diagnosis is built entirely from the client's OWN two numbers, which they
+  // gave on the call and have already agreed. So the law is stronger now and the
+  // check with it: a benchmark-priced leak must not reach a client document AT
+  // ALL, rather than reaching it with a caveat attached.
+  //
+  // Asserted by its text, not by trusting that the renderer changed — if anyone
+  // wires leakAnalysis back into a client document, this fires.
   const benchmarkLeaks = (pack.intelligence?.leakAnalysis ?? []).filter(
     (l) => l.evidenceTier === "BENCHMARK"
   );
   if (benchmarkLeaks.length) {
-    const kickoffCount = (html.d1.match(new RegExp(KICKOFF_SIGNATURE, "gi")) ?? []).length;
-    if (kickoffCount < benchmarkLeaks.length)
+    const clientDocs = CLIENT_DELIVERABLES.map((d) => html[d.id] ?? "").join("\n");
+    const leaked = benchmarkLeaks.filter((l) => {
+      // `evidence` and `explanation` are the long, distinctive strings — an
+      // `area` like "speed-to-lead" is a common phrase and would false-positive.
+      return [l.evidence, l.explanation, l.businessImpact]
+        .map((t) => String(t ?? "").trim())
+        .some((t) => t.length > 24 && clientDocs.includes(t));
+    });
+    if (leaked.length)
       renderViolations.push(
-        `D1 HTML renders ${kickoffCount} kickoff-verification line(s) but has ${benchmarkLeaks.length} BENCHMARK leak(s).`
+        `${leaked.length} BENCHMARK-priced leak(s) reached a client document. The client documents carry only figures built from the client's own numbers.`
       );
   }
 
@@ -202,11 +234,12 @@ function overrideArchiveComment(governance: PackGovernance): string {
  */
 export async function buildAssetZipChecked(
   pack: AssetPack,
-  override?: unknown
+  override?: unknown,
+  ctx: DeliverableContext = emptyDeliverableContext()
 ): Promise<AssetZipResult> {
   // Render once, validate the FINAL HTML (Defect 3), then bundle those exact
   // documents so the validated artifact is the shipped artifact.
-  const { html, violations, fails, fatals, warns, ok } = validateRenderedDeliverables(pack);
+  const { html, violations, fails, fatals, warns, ok } = validateRenderedDeliverables(pack, ctx);
 
   let governance: PackGovernance | undefined;
 
@@ -239,8 +272,13 @@ export async function buildAssetZipChecked(
   // stamp (or the clearing of a stale one) rides on the returned pack.
   const shipped = withGovernance(pack, governance);
 
+  // THE CLIENT BUNDLE IS THE TWO CLIENT DOCUMENTS. The Asset Pack is the copy
+  // that runs the workflows; before the system exists it is a pile of text the
+  // client has no use for, so it goes out at go-live instead of at signing. It
+  // was still rendered and validated above — excluded from the envelope, not
+  // exempted from the laws.
   const zip = new JSZip();
-  for (const d of DELIVERABLES) {
+  for (const d of CLIENT_DELIVERABLES) {
     zip.file(d.filename, html[d.id]);
   }
   const buffer = await zip.generateAsync({

@@ -14,6 +14,7 @@ import {
   FileText,
   Library,
   PhoneCall,
+  PhoneOff,
   CalendarDays,
   Settings,
   PanelLeftClose,
@@ -42,7 +43,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   href: string;
-  badgeKey?: "opportunities" | "pipeline" | "proposals";
+  badgeKey?: "opportunities" | "pipeline";
   primary?: boolean;
 };
 
@@ -64,9 +65,9 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     heading: "Sell & Close",
     items: [
       { id: "call-queue", label: "Call Queue", icon: PhoneCall, href: "/call-queue" },
+      { id: "dial-status", label: "Dial Status", icon: PhoneOff, href: "/dial-status" },
       { id: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
       { id: "crm", label: "CRM", icon: Workflow, href: "/crm", badgeKey: "pipeline" },
-      { id: "proposals", label: "Proposals", icon: FileText, href: "/proposals", badgeKey: "proposals" },
     ],
   },
 ];
@@ -77,7 +78,6 @@ interface SidebarProps {
   activeClients: number;
   opportunityCount: number;
   pipelineCount: number;
-  proposalCount: number;
   userName: string;
   userPlan: string;
 }
@@ -88,14 +88,12 @@ export function Sidebar({
   activeClients,
   opportunityCount,
   pipelineCount,
-  proposalCount,
   userName,
   userPlan,
 }: SidebarProps) {
   const badgeFor = (key?: NavItem["badgeKey"]): number | undefined => {
     if (key === "opportunities") return opportunityCount;
     if (key === "pipeline") return pipelineCount;
-    if (key === "proposals") return proposalCount;
     return undefined;
   };
   const pathname = usePathname();

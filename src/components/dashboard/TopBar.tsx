@@ -26,7 +26,7 @@ interface TopBarProps {
 // One feed event, exactly as /api/notifications ships it. `at` arrives as an
 // ISO string over JSON.
 interface FeedEvent {
-  kind: "proposal-opened" | "proposal-won" | "proposal-lost" | "lead-due";
+  kind: "lead-due";
   title: string;
   meta: string;
   at: string;
@@ -36,9 +36,6 @@ interface FeedEvent {
 // Event kind → dot colour. Won = money-green, lost = danger, opened = accent,
 // due call = warn. All tokens, so they follow the theme.
 const KIND_COLOR: Record<FeedEvent["kind"], string> = {
-  "proposal-opened": "var(--accent)",
-  "proposal-won": "var(--money)",
-  "proposal-lost": "var(--danger)",
   "lead-due": "var(--warn)",
 };
 

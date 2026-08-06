@@ -60,7 +60,6 @@ const PAGES: PageEntry[] = [
   { label: "Call Queue", href: "/call-queue", icon: PhoneCall, keywords: "call queue phone dial today" },
   { label: "Calendar", href: "/calendar", icon: CalendarDays, keywords: "calendar zoom callbacks booked meetings" },
   { label: "CRM", href: "/crm", icon: Workflow, keywords: "crm pipeline stages" },
-  { label: "Proposals", href: "/proposals", icon: FileText, keywords: "proposals quotes offers" },
   { label: "Studio", href: "/studio", icon: Sparkles, keywords: "studio workspace generate preview deliverables" },
 ];
 
@@ -72,18 +71,10 @@ interface BusinessHit {
   status: string;
   href: string;
 }
-interface ProposalHit {
-  id: string;
-  title: string;
-  status: string;
-  businessName: string;
-  href: string;
-}
-
 // One flattened row the keyboard can walk, whatever section it came from.
 interface Item {
   key: string;
-  section: "Pages" | "Businesses" | "Proposals";
+  section: "Pages" | "Businesses";
   icon: LucideIcon;
   label: string;
   meta: string;
@@ -109,9 +100,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<{ businesses: BusinessHit[]; proposals: ProposalHit[] }>({
+  const [hits, setHits] = useState<{ businesses: BusinessHit[] }>({
     businesses: [],
-    proposals: [],
   });
   const [fetching, setFetching] = useState(false);
   const [sel, setSel] = useState(0);
@@ -143,14 +133,14 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
         if (seq.current === mine) {
-          setHits({ businesses: data.businesses ?? [], proposals: data.proposals ?? [] });
+          setHits({ businesses: data.businesses ?? [] });
           setFetching(false);
         }
       } catch {
         // A failed search shows "Nothing matches" for the DB sections rather
         // than a spinner that never resolves; the Pages section still works.
         if (seq.current === mine) {
-          setHits({ businesses: [], proposals: [] });
+          setHits({ businesses: [] });
           setFetching(false);
         }
       }
@@ -188,14 +178,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         label: b.name,
         meta: [b.city, LEAD_LABEL[b.status]?.label ?? b.status].filter(Boolean).join(" · "),
         href: b.href,
-      })),
-      ...hits.proposals.map((p) => ({
-        key: `prop:${p.id}`,
-        section: "Proposals" as const,
-        icon: FileText,
-        label: p.title,
-        meta: [p.businessName, PROPOSAL_LABEL[p.status] ?? p.status].filter(Boolean).join(" · "),
-        href: p.href,
       })),
     ],
     [pages, hits]
@@ -389,8 +371,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search businesses, proposals, pages…"
-            aria-label="Search businesses, proposals and pages"
+            placeholder="Search businesses and pages…"
+            aria-label="Search businesses and pages"
             role="combobox"
             aria-expanded="true"
             aria-controls="lg-cp-list"

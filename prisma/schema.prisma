@@ -38,6 +38,9 @@ model User {
   proposals         Proposal[]
   deals             Deal[]
   callLogs          CallLog[]
+  dialStatusEvents  DialStatusEvent[]
+  storedScreenshots StoredScreenshot[]
+  leakAssessments   LeakAssessment[]
 }
 
 model Account {
@@ -112,6 +115,32 @@ model Business {
   followUpUntil DateTime?                     // WAITING resurface date (hide until then)
   attemptCount  Int       @default(0)
   closedReason  String?                       // see ClosedReason; set on CLOSED/DEAD
+
+  // --- Engagement start ---
+  // The kickoff date: when the paid engagement actually begins. Every date the
+  // Build Plan prints is computed from this one field (build window, go-live,
+  // then ongoing) — so a client's timeline is real dates rather than the
+  // relative "Days 1–14" the old roadmap hardcoded and could never anchor.
+  //
+  // Nullable: it is set at kickoff, and a business that has not paid has no
+  // engagement to date. A Build Plan generated with this unset must say so
+  // rather than inventing a start.
+  kickoffAt     DateTime?
+
+  // --- Dial status (do-not-call / compliance axis) — see src/lib/dial-status.ts ---
+  // A SEPARATE axis from `status` above. `status` runs the CRM/call-queue pipeline
+  // and only advances when the operator logs a call outcome in-app — which, when
+  // dialing 10k businesses from a GoHighLevel CSV, he does not. So `status` cannot
+  // be trusted to answer "have I already dialed this one?".
+  //
+  // dialStatus answers exactly that, and it is set WITHOUT in-app logging: exporting
+  // a business in a call CSV flips it to "dialed" automatically. It is the single
+  // authority the generator consults — only "fresh" businesses are ever served.
+  //   fresh | dialed | not_interested | do_not_call | booked | disqualified
+  // do_not_call is PERMANENT and has no UI path back (see dial-status.ts).
+  dialStatus    String    @default("fresh")
+  dialStatusAt  DateTime?                      // when dialStatus last changed
+  dialStatusEvents DialStatusEvent[]           // append-only history, never overwritten
 
   // --- CRM / daily-prospecting ---
   source         String    @default("MANUAL") // "MANUAL" (hand-saved) | "DAILY" (auto-sourced)
@@ -244,6 +273,23 @@ model Business {
   psiSnapshot   Json?                           // serialized PsiBundle
   psiSnapshotAt DateTime?                        // when the snapshot was taken (TTL refresh)
 
+  // --- Manually measured pre-call values (the "Fetch measured values" button) ---
+  // Deliberately SEPARATE from researchSnapshot rather than written into it.
+  // A full research capture means Firecrawl + DataForSEO + Places competitors ran;
+  // this button runs neither. Writing a half-filled ResearchBundle would make an
+  // unrun scan look like a scan that found nothing — the exact "unknown vs none"
+  // confusion the whole observed-facts model exists to prevent. So this column
+  // holds ONLY what the cheap measure actually observed, and each value carries
+  // its own state (found / none / unknown).
+  //
+  // Shape: { mobile: { score, loadSeconds } | null,
+  //          bookingLink: "found"|"none"|"unknown",
+  //          clickToCall: "found"|"none"|"unknown" }
+  // Cost when clicked: 1 mobile-only PageSpeed call + 1 plain homepage GET.
+  // No Firecrawl, no desktop PSI, no DataForSEO.
+  measuredFacts   Json?
+  measuredFactsAt DateTime?
+
   // --- Research snapshot (determinism fix 2) ---
   // The full enrichment bundle (native page, Places reviews, competitors,
   // Firecrawl scrape, DataForSeo) captured ONCE and reused verbatim on every
@@ -263,6 +309,67 @@ model Business {
   proposals        Proposal[]
   deals            Deal[]
   callLogs         CallLog[]
+  leakAssessment   LeakAssessment?
+}
+
+// The leak calculator, saved against a business.
+//
+// THE FIRST OF THE TWO SOURCES OF TRUTH about a client — what they told us live
+// on the sales call, priced against their own two numbers. (The other is the
+// intake form.) Everything client-facing downstream reads THIS: the shareable
+// page the prospect signs from, and the Diagnosis document.
+//
+// WHY THE COMPUTED RESULT IS STORED AND NOT RECOMPUTED. The inputs alone would
+// be enough to derive the figures again — but then a later change to a band or a
+// default would silently restate what a client was already shown and has already
+// signed. `computed` freezes the numbers at the moment they were put on screen.
+// The Diagnosis and the shareable page read this column; neither runs the maths.
+// That is what makes the two documents agree by construction rather than by
+// coincidence.
+//
+// One row per business, updated in place. This is a live working figure, not an
+// audit record — it is meant to change while the operator is on the call.
+model LeakAssessment {
+  id         String @id @default(cuid())
+  businessId String @unique
+  userId     String
+
+  // Share id for the client-facing offer at /p/[publicId]. It lives HERE rather
+  // than on Business on purpose: the offer page is the saved assessment, so a
+  // business with no assessment has no link to hand out, and there is no way to
+  // share a page that would render as zeroes.
+  publicId String @unique @default(cuid())
+
+  // Their two numbers — typed on the call, never bucketed.
+  monthlyEnquiries Int?
+  avgJobValue      Int?
+
+  // The six answers as { leakId: optionIndex | null }. Indexes into LEAKS in
+  // src/lib/leak-calculator.ts, which is the one definition of the questions.
+  answers Json
+
+  // Exactly two free-text rows: [{ label, jobsPerMonth }, …]. For the case where
+  // a prospect volunteers something the six questions don't cover.
+  customRows Json
+
+  // The assumptions, operator-tunable and disclosed on the page. Kept editable
+  // on purpose: when a sceptic challenges a figure, changing the input in front
+  // of him is the answer, and a frozen panel makes the total a black box.
+  closeRatePct Int @default(30)
+  overlapPct   Int @default(30)
+  capPct       Int @default(20)
+
+  // The frozen ComputedAssessment. See the note above.
+  computed   Json
+  computedAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model GeneratedSystem {
@@ -360,6 +467,56 @@ model CallLog {
   calledAt    DateTime @default(now())
   // Soft delete — never hard-deleted; filtered out of reads via deletedAt: null.
   deletedAt   DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([userId])
+}
+
+// A screenshot fetched ONCE from ScreenshotOne at generation time and stored as
+// bytes, so the delivered document serves OUR copy (/api/assets/screenshot/[id])
+// instead of a signed ScreenshotOne URL. Two problems that fix at once:
+//   1. ScreenshotOne bills PER RENDER. A signed URL in the document re-rendered
+//      (and re-billed) every time a client opened their pack. Our copy renders
+//      exactly once, ever.
+//   2. A signed URL carries our access_key in plain sight in the document source.
+//      Our copy carries none.
+// Served by id (an unguessable cuid, the capability) with no auth — the client
+// who received the deliverable is a stranger, not a logged-in user.
+model StoredScreenshot {
+  id          String   @id @default(cuid())
+  userId      String
+  businessId  String?
+  contentType String // e.g. "image/jpeg"
+  bytes       Bytes // the image itself (BYTEA)
+  byteSize    Int
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Append-only history of a business's dial status. One row per transition, never
+// updated or overwritten — so the full arc (fresh → dialed → dialed →
+// not_interested) is always reconstructable, which the audit/compliance case for
+// do-not-call requires. Mirrors CallLog's shape intentionally.
+//
+// NOTE: unlike almost everything else in this schema there is NO soft-delete
+// column here. A dial-status history is an audit record; deleting an entry would
+// be rewriting history, which is the one thing this table exists to prevent.
+model DialStatusEvent {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String
+  status     String   // the dialStatus this transition moved TO — see dial-status.ts
+  // Where the change came from, for the trail: "export" (CSV download flipped it
+  // to dialed), "manual" (phone-first logger), "booking" (call-queue disposition),
+  // "generate" (initial fresh). Never drives logic; it's provenance only.
+  source     String?
+  createdAt  DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)

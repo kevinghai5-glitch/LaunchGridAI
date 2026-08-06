@@ -1,17 +1,27 @@
-// V2 flagship deliverable composer.
+// The deliverable composer — THREE documents, two of which the client sees.
 //
-// Reorganizes the underlying file1..file5 content PLUS the V2 strategic
-// components (intelligence, infrastructure, supportingAssets, roadmap) into the
-// FOUR client-facing flagship deliverables the platform now sells:
+//   diagnosis    THE DIAGNOSIS   · client · the saved calculator, rendered
+//   build-plan   THE BUILD PLAN  · client · what we install, what we don't, when
+//   asset-pack   ASSET PACK      · INTERNAL · the copy that runs the system
 //
-//   D1  Growth Leak Intelligence Report          (diagnosis)
-//   D2  Client Acquisition Infrastructure Blueprint (architecture)
-//   D3  Conversion Asset Pack                     (supporting assets)
-//   D4  90-Day Growth Execution Roadmap           (execution guidance)
+// It was four, and the four were the product. The build inside GoHighLevel is the
+// product now and these are proof of work, so they stopped being written and
+// started being assembled:
 //
-// All V2 components are optional on AssetPack — when missing (pre-V2 packs),
-// every renderer falls back to the underlying file content so old packs still
-// produce a complete, premium document.
+//   · The Diagnosis was the Growth Leak Intelligence Report — a model-written
+//     scorecard, leak analysis, "fastest wins" and recommendations, generated from
+//     scraped material. It now renders the frozen assessment from the sales call,
+//     which the client has already agreed to. Same row the offer page reads.
+//
+//   · The Build Plan is the Blueprint and the Roadmap merged. They answered one
+//     question between them and neither answered it alone: the Blueprint gave an
+//     architecture with no dates, the Roadmap a schedule for something it never
+//     fully listed. It is assembled from the workflow catalogue, the five build
+//     decisions and one nullable kickoff date.
+//
+//   · The Asset Pack is unchanged and is now INTERNAL. It is the copy that runs
+//     the workflows, and it is sent at go-live rather than at signing — before
+//     the system exists it is a pile of text a client has no use for.
 
 import type {
   AssetPack,
@@ -37,8 +47,21 @@ import {
   reconcileLeakTotal,
   type LeakTotalInput,
 } from "../leak-narrative";
-import { workflowById } from "../workflow-catalogue";
-import { DEFAULT_SETUP_FEE, DEFAULT_MONTHLY } from "../proposal-defaults";
+import { workflowById, PIPELINE } from "../workflow-catalogue";
+import {
+  buildPlan as assembleBuildPlan,
+  type BuildPlan,
+  type BuildPlanItem,
+  type BuildDates,
+} from "../build-plan";
+import { markCurrency, type ComputedAssessment, type ComputedRow } from "../leak-calculator";
+// The two engagement prices, straight from the constants module.
+//
+// These used to be imported from proposal-defaults, which only re-exported them
+// from here — so the deliverables depended on the proposal generator to know
+// what the engagement costs. The proposal is being deleted; the price is not the
+// proposal's fact to own. constants.ts is the one definition and always was.
+import { SETUP_FEE_CAD, MONTHLY_RETAINER_CAD } from "../constants";
 import {
   esc,
   para,
@@ -227,8 +250,8 @@ function authorisedAmounts(pack: AssetPack): AuthorisedAmounts {
   // The two engagement prices are figures the document stands behind everywhere —
   // D4 prints them itself. Without them here, a sentence that legitimately named
   // the fee would be treated as a stray number and dropped.
-  out.add(DEFAULT_SETUP_FEE);
-  out.add(DEFAULT_MONTHLY);
+  out.add(SETUP_FEE_CAD);
+  out.add(MONTHLY_RETAINER_CAD);
   return out;
 }
 
@@ -861,308 +884,266 @@ function renderLandingIntelligenceFallback(
   return parts.join("");
 }
 
-function renderDeliverable1(pack: AssetPack): string {
-  const intel = pack.intelligence;
-  const f = pack.file1;
+// ── THE DIAGNOSIS · reads the saved calculator, never recomputes ──────────────
+//
+// This replaced the Growth Leak Intelligence Report, which was assembled from
+// model-written prose: a scorecard, a leak analysis, a list of "fastest wins" and
+// a set of strategic recommendations, all generated from scraped material. The
+// client had already been shown a number on the call, and this document quietly
+// produced a different one from a different method.
+//
+// It now renders the assessment the client watched being filled in — the same
+// frozen ComputedAssessment the offer page reads, from the same row. Not a copy
+// of it, not a recomputation of it: the identical object. verify-build-plan
+// asserts the two surfaces print the same total from one source.
+//
+// When there is no assessment the document says so and stops. It does not fall
+// back to generated prose — the fallback IS the failure this rewrite removes.
+
+function renderAssessmentRows(rows: ComputedRow[]): string {
+  return rows
+    .map((r) => {
+      const figure = r.monthlyLow !== null && r.monthlyHigh !== null
+        ? `${money(r.monthlyLow)}–${money(r.monthlyHigh).replace("CAD $", "")}/mo`
+        : "";
+      return `<div class="leak-card"><div class="lc-head"><span class="lc-title">${esc(r.label)}${
+        r.assumed ? `<span class="pill pill-medium" style="margin-left:8px">Assumed</span>` : ""
+      }</span>${figure ? `<span class="lc-cost">${esc(figure)}</span>` : ""}</div>${
+        r.answerText ? `<p class="lc-said">You told us: ${esc(r.answerText)}</p>` : ""
+      }${r.consequence ? `<p>${esc(r.consequence)}</p>` : ""}${
+        r.fix ? `<p class="lc-fix"><strong>What closes it.</strong> ${esc(r.fix)}</p>` : ""
+      }</div>`;
+    })
+    .join("");
+}
+
+function renderCleanRows(rows: ComputedRow[]): string {
+  if (!rows.length) return "";
+  return `<div class="clean-grid">${rows
+    .map(
+      (r) =>
+        `<div class="clean-card"><div class="cc-head"><span class="cc-title">${esc(
+          r.label
+        )}</span><span class="cc-flag">No leak</span></div>${
+          r.answerText ? `<p>${esc(r.answerText)}</p>` : ""
+        }</div>`
+    )
+    .join("")}</div>`;
+}
+
+function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
+  const a = ctx.assessment;
   const parts: string[] = [];
   let n = 0;
   const next = () => ++n;
 
-  // Computed ONCE per document and threaded down: every dollar figure this pack's
-  // own math produced. Prose anywhere in D1 may repeat these and nothing else.
-  const authorised = authorisedAmounts(pack);
-
-  parts.push(section(next(), "Executive Summary", renderExecutiveSummary(pack, authorised)));
-
-  const visuals = renderVisuals(f.visuals);
-  if (visuals)
-    parts.push(section(next(), "Visual Intelligence (Target vs. Local Competitors)", visuals));
-
-  const tux = renderTechnicalUx(f.technicalUx);
-  if (tux) parts.push(section(next(), "Technical UX & Performance", tux));
-
-  // Landing Page Conversion Intelligence — diagnoses the landing page as a
-  // conversion system (absorbed from the old Landing Page Growth Audit). Sits
-  // between Technical UX and the Growth Leak Scorecard.
-  const landingIntel = pack.landing?.intelligence
-    ? renderLandingIntelligence(pack.landing.intelligence, authorised)
-    : renderLandingIntelligenceFallback(f, authorised);
-  if (landingIntel)
+  if (!a || !a.ready) {
+    // No saved calculator. Say exactly that. A diagnosis with no diagnosis in it
+    // must not be padded out with generated prose to look complete.
     parts.push(
       section(
         next(),
-        "Website Conversion Intelligence — Advisory",
-        `${SITE_ADVISORY_BAND}${landingIntel}`
+        "No assessment on file",
+        para(
+          "This document is built from the assessment we filled in together on the call. " +
+            "That assessment has not been saved for this business yet, so there is nothing to report here. " +
+            "Once it is saved, this document carries the same figures you were shown, unchanged."
+        )
       )
     );
-
-  const scorecard = renderScorecard(
-    intel?.scorecard.metrics,
-    intel?.leakAnalysis ?? [],
-    intel?.scorecard.overallReadout
-  );
-  if (scorecard) parts.push(section(next(), "Conversion Leak Scorecard", scorecard));
-
-  const leaks = renderLeakAnalysis(intel?.leakAnalysis);
-  if (leaks) {
-    parts.push(section(next(), "Growth Leak Analysis", leaks));
-  } else if (f.revenueLeaks?.length) {
-    // Fallback to file1 revenue leaks table.
-    parts.push(
-      section(
-        next(),
-        "Growth Leak Analysis",
-        `<table><thead><tr><th>Issue</th><th>Why it matters</th><th>Impact</th><th>Fix</th></tr></thead><tbody>${f.revenueLeaks
-          .map(
-            (l) =>
-              `<tr><td><strong>${esc(l.issue)}</strong></td><td>${esc(
-                l.whyItMatters
-              )}</td><td class="score">${esc(l.impact)}/10</td><td>${esc(
-                l.recommendedFix
-              )}</td></tr>`
-          )
-          .join("")}</tbody></table>`
-      )
-    );
+    return shell(pack.meta, "The Diagnosis", parts.join("\n"), shellOpts("diagnosis"));
   }
 
-  // Fastest Revenue Wins
-  const wins = intel?.fastestWins;
-  if (wins?.length) {
+  const answered = a.rows.filter((r) => r.answerText !== null);
+  const leakRows = answered.filter((r) => !r.clean && r.monthlyHigh !== null);
+  const cleanRows = answered.filter((r) => r.clean);
+  const customRows = (a.customRows ?? []).filter(
+    (r) => r.monthlyHigh !== null && r.label.trim().length > 0
+  );
+
+  if (a.allClean) {
     parts.push(
       section(
         next(),
-        "Fastest Revenue Wins",
-        `<table><thead><tr><th>Opportunity</th><th>Impact</th><th>Effort</th><th>Speed</th></tr></thead><tbody>${wins
-          .map(
-            (w) =>
-              `<tr><td><strong>${esc(w.opportunity)}</strong></td><td>${esc(
-                w.impact
-              )}</td><td>${pill(w.difficulty, w.difficulty)}</td><td>${esc(
-                w.speed
-              )}</td></tr>`
-          )
-          .join("")}</tbody></table>`
+        "What We Found",
+        `${para(
+          "Every area we asked about came back covered — after hours, missed calls, response speed, quote follow-up, no-shows, and past customers. On these questions nothing is leaking, so nothing here is priced."
+        )}${para(
+          "That is a real result, not an empty one. What the build changes is that the coverage you already have stops depending on somebody being free to provide it."
+        )}${renderCleanRows(cleanRows)}`
       )
     );
-  } else if (f.fastestWins?.length) {
-    parts.push(section(next(), "Fastest Revenue Wins", list(f.fastestWins)));
+  } else {
+    parts.push(
+      section(
+        next(),
+        "What We Found",
+        `${para(
+          "Each of these is an answer you gave on the call, priced against your own two numbers. Nothing here was measured from the outside or estimated on your behalf."
+        )}${renderAssessmentRows([...leakRows, ...customRows])}`
+      )
+    );
+
+    parts.push(
+      section(
+        next(),
+        "What That Adds Up To",
+        `<div class="total-band"><div class="tb-k">Estimated monthly recoverable</div><div class="tb-v">${esc(
+          `${money(a.totalLow)}–${money(a.totalHigh).replace("CAD $", "")}`
+        )}</div><div class="tb-a">${esc(
+          `${money(a.annualLow)}–${money(a.annualHigh).replace("CAD $", "")} across a year`
+        )}${a.capped ? " · conservatively capped" : ""}</div></div>${para(markCurrency(a.derivation))}`
+      )
+    );
+
+    if (cleanRows.length) {
+      parts.push(
+        section(
+          next(),
+          "Areas That Came Back Covered",
+          `${para(
+            "We asked about these too. Nothing is priced against them, and they are listed so the report shows everything we checked rather than only what we found."
+          )}${renderCleanRows(cleanRows)}`
+        )
+      );
+    }
   }
 
-  const recs = intel?.strategicRecommendations;
-  parts.push(
-    section(
-      next(),
-      "What We Deploy",
-      recs?.length ? list(recs) : para(f.positioningStrategy)
-    )
-  );
-
-  const summary = intel?.executiveSummary;
-  const keyActions: NonNullable<ShellOptions["keyActions"]> = [];
-  if (summary?.mostUrgentFixes?.length)
-    keyActions.push({ title: "Fix now", tone: "urgent", items: summary.mostUrgentFixes });
-  if (summary?.quickWins?.length)
-    keyActions.push({ title: "Quick wins", tone: "win", items: summary.quickWins });
-  if (summary?.biggestThreats?.length)
-    keyActions.push({ title: "Watch-outs", tone: "threat", items: summary.biggestThreats });
-
-  return shell(pack.meta, "Growth Leak Intelligence Report", parts.join("\n"), {
-    ...shellOpts("d1"),
-    keyActions: keyActions.length ? keyActions : undefined,
-  });
+  return shell(pack.meta, "The Diagnosis", parts.join("\n"), shellOpts("diagnosis"));
 }
 
-// ── D2 · Client Acquisition Infrastructure Blueprint ──────────────────────────
+// ── THE BUILD PLAN · the Blueprint and the Roadmap, merged ───────────────────
+//
+// They were two documents answering one question between them. The Blueprint
+// described an architecture without saying when it arrived; the Roadmap gave a
+// schedule for something it never fully listed. A client had to hold both open.
 
-function renderFunnel(stages: FunnelStage[] | undefined): string {
-  if (!stages?.length) return "";
-  const blocks = stages
+function renderWorkflowCards(items: BuildPlanItem[]): string {
+  return `<div class="wf-grid">${items
     .map(
-      (s, i) =>
-        `<div class="funnel-row"><div class="fn-node">${String(i + 1).padStart(
-          2,
-          "0"
-        )}</div><div class="fn-card${s.isRetainer ? " is-retainer" : ""}"><div class="st">${esc(
-          s.stage
-        )}${
-          s.isRetainer ? `<span class="retainer-badge">Monthly retainer · runs continuously</span>` : ""
-        }</div>${
-          s.role ? `<p><strong>Role.</strong> ${esc(s.role)}</p>` : ""
-        }${
-          s.currentWeakness
-            ? `<p><strong>Current break point.</strong> ${esc(s.currentWeakness)}</p>`
-            : ""
-        }${
-          s.whatWeDeploy
-            ? `<p><strong>What we deploy.</strong> ${esc(s.whatWeDeploy)}</p>`
-            : ""
-        }<div class="fn-meta">${ownerTag(s.owner)}${
-          s.kpi ? `<span class="chip">KPI · ${esc(s.kpi)}</span>` : ""
-        }</div></div></div>`
+      (w) =>
+        `<div class="wf-card${w.state === "off" ? " is-off" : ""}${
+          w.state === "pending" ? " is-pending" : ""
+        }"><div class="wf-name">${esc(w.name)}</div>${
+          w.state === "installed"
+            ? `<p>${esc(w.whatItDoes)}</p><p class="wf-sees"><strong>What you will see.</strong> ${esc(
+                w.whatTheClientSees
+              )}</p>`
+            : `<p>${esc(w.whatItDoes)}</p><p class="wf-why"><strong>${
+                w.state === "pending" ? "Pending." : "Not installed."
+              }</strong> ${esc(w.note ?? "")}</p>`
+        }</div>`
     )
-    .join("");
-  return `<div class="funnel">${blocks}</div>`;
+    .join("")}</div>`;
 }
 
-function renderLeadTiers(tiers: LeadTier[] | undefined): string {
-  if (!tiers?.length) return "";
-  const cards = tiers
-    .map(
-      (t) =>
-        `<div class="tier"><div class="tn">${esc(t.tier)}</div><div class="rng">${esc(
-          t.range
-        )}</div><p>${esc(t.meaning)}</p><p><strong>Action.</strong> ${esc(
-          t.action
-        )}</p><p class="muted"><strong>Response.</strong> ${esc(
-          t.responseTime
-        )} · <strong>Owner.</strong> ${esc(t.owner)} · <strong>Method.</strong> ${esc(
-          t.followUpMethod
-        )}</p></div>`
-    )
-    .join("");
-  return `<div class="tiers">${cards}</div>`;
+function renderPipeline(): string {
+  return `<table><thead><tr><th>Stage</th><th>What it means</th><th>A lead arrives when</th><th>A lead leaves when</th></tr></thead><tbody>${PIPELINE.map(
+    (s) =>
+      `<tr><td><strong>${esc(s.stage)}</strong></td><td>${esc(s.whatItMeans)}</td><td>${esc(
+        s.howALeadArrives
+      )}</td><td>${esc(s.howALeadLeaves)}</td></tr>`
+  ).join("")}</tbody></table>`;
 }
 
-function renderCrmStages(stages: CrmStage[] | undefined): string {
-  if (!stages?.length) return "";
-  return `<table><thead><tr><th>Stage</th><th>Entry criteria</th><th>Exit criteria</th><th>Ownership</th><th>Review</th></tr></thead><tbody>${stages
-    .map(
-      (s) =>
-        `<tr><td><strong>${esc(s.stage)}</strong></td><td>${esc(
-          s.entryCriteria
-        )}</td><td>${esc(s.exitCriteria)}</td><td>${esc(s.ownership)}</td><td>${esc(
-          s.reviewProcess
-        )}</td></tr>`
-    )
-    .join("")}</tbody></table>`;
+function renderSchedule(dates: BuildDates): string {
+  const row = (when: string, title: string, body: string) =>
+    `<div class="sched-row"><div class="sr-when">${esc(when)}</div><div class="sr-main"><div class="sr-title">${esc(
+      title
+    )}</div><p>${esc(body)}</p></div></div>`;
+
+  // The note renders ONLY when there is no kickoff date. It is placed FIRST, so a
+  // reader meets the caveat before the schedule rather than after it.
+  const caveat = dates.note
+    ? `<div class="sched-note"><strong>Dates are not set yet.</strong> ${esc(dates.note)}</div>`
+    : "";
+
+  return `${caveat}<div class="schedule">${row(
+    dates.kickoff,
+    "Kickoff",
+    "We take everything we need from you in one session — access, your numbers, how you want calls handled — and the build starts from there."
+  )}${row(
+    dates.buildWindow,
+    "The build",
+    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows: stood up, tested and handed over. Anything that slips gets told to you rather than absorbed quietly."
+  )}${row(
+    dates.goLive,
+    "Go-live",
+    "The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point."
+  )}${row(
+    dates.runningFrom,
+    "Running it",
+    "LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked."
+  )}</div>`;
 }
 
-function renderDeliverable2(pack: AssetPack): string {
-  const infra = pack.infrastructure;
-  const f2 = pack.file2;
-  const f3 = pack.file3;
-  const f4 = pack.file4;
-  const f5 = pack.file5;
+function renderBuildPlan(pack: AssetPack, ctx: DeliverableContext): string {
+  const plan = ctx.plan;
   const parts: string[] = [];
   let n = 0;
   const next = () => ++n;
 
-  if (infra?.funnel.overview)
-    parts.push(
-      section(next(), "Infrastructure Overview", `<div class="strategy-block">${para(
-        infra.funnel.overview
-      )}</div>`)
-    );
-
-  const funnel = renderFunnel(infra?.funnel.stages);
-  if (funnel) parts.push(section(next(), "The Conversion Path", funnel));
-
-  // Lead Qualification Framework: tiers + file2 intake/scoring/routing.
-  const tiers = renderLeadTiers(infra?.crmPipeline.leadTiers);
-  const intake = (f2.questions ?? []).length
-    ? `<div class="label">Intake & scoring questions</div>${(f2.questions ?? [])
-        .map(
-          (q, i) =>
-            `<div class="card"><strong>${i + 1}. ${esc(q.question)}</strong><p class="muted">${esc(
-              q.purpose
-            )} · ${esc(q.scoringImpact)}</p></div>`
-        )
-        .join("")}`
-    : "";
-  const routing = f2.routingLogic?.length
-    ? `<div class="label">Routing logic</div><table><thead><tr><th>Tier</th><th>Timing</th><th>Action</th></tr></thead><tbody>${f2.routingLogic
-        .map(
-          (r) =>
-            `<tr><td><strong>${esc(r.tier)}</strong></td><td>${esc(r.timing)}</td><td>${esc(
-              r.action
-            )}</td></tr>`
-        )
-        .join("")}</tbody></table>`
-    : "";
-  const crmFields = f2.crmFields?.length
-    ? `<div class="label">CRM fields to capture</div>${list(f2.crmFields)}`
-    : "";
   parts.push(
     section(
       next(),
-      "Lead Qualification Framework",
-      `${tiers}${intake}${routing}${crmFields}`
+      "What We Install",
+      `${para(
+        `${plan.installed.length} of ${plan.totalWorkflows} automations are built into your account and handed over working. Each one runs on its own — none of them depends on somebody remembering.`
+      )}${renderWorkflowCards(plan.installed)}`
     )
   );
 
-  // Follow-Up Operating System: SMS (file4) + email (file3) + reply strategy.
-  const sms = (f4.messages ?? []).length
-    ? `<div class="label">SMS follow-up framework</div>${(f4.messages ?? [])
-        .map(
-          (m) =>
-            `<div class="card"><div class="label">Send ${esc(m.timing)}</div><p><strong>${esc(
-              m.message
-            )}</strong></p><p class="muted">${esc(m.psychology)} · On reply: ${esc(
-              m.replyStrategy
-            )}</p></div>`
-        )
-        .join("")}`
-    : "";
-  const emailRhythm = (f3.emails ?? []).length
-    ? `<div class="label">Email nurture rhythm</div><table><thead><tr><th>Day</th><th>Purpose</th><th>Subject</th></tr></thead><tbody>${(
-        f3.emails ?? []
-      )
-        .map(
-          (e) =>
-            `<tr><td>${esc(e.day)}</td><td>${esc(e.purpose)}</td><td>${esc(
-              e.subject
-            )}</td></tr>`
-        )
-        .join("")}</tbody></table>`
-    : "";
-  parts.push(
-    section(next(), "Follow-Up Operating System", `${sms}${emailRhythm}`)
-  );
+  // ── THE SECTION THAT MUST NEVER GO SILENT ─────────────────────────────────
+  // Three states, all stated. An empty "not installed" section is not the same
+  // as no section: a client who cannot tell whether anything was left out will
+  // assume something was. When nothing is off, we say so in words.
+  const notInstalled: string[] = [];
 
-  // Booking & Show-Up System (file5).
-  parts.push(
-    section(
-      next(),
-      "Booking & Show-Up System",
-      `${f5.whatToExpect?.length ? `<div class="label">What to expect</div>${list(f5.whatToExpect)}` : ""}${
-        f5.appointmentPositioning
-          ? `<div class="label">Appointment positioning</div>${para(f5.appointmentPositioning)}`
-          : ""
-      }${
-        f5.showUpQualityNotes
-          ? `<div class="label">Show-up quality</div>${para(f5.showUpQualityNotes)}`
-          : ""
-      }${
-        f5.rescheduleFraming
-          ? `<div class="label">Reschedule framing</div>${para(f5.rescheduleFraming)}`
-          : ""
-      }`
-    )
-  );
-
-  // CRM / Pipeline Blueprint.
-  const crm = renderCrmStages(infra?.crmPipeline.stages);
-  if (crm) {
-    parts.push(
-      section(
-        next(),
-        "CRM & Pipeline Blueprint",
-        `${
-          infra?.crmPipeline.overview
-            ? `<div class="strategy-block">${para(infra.crmPipeline.overview)}</div>`
-            : ""
-        }${crm}`
-      )
+  if (plan.pending.length) {
+    notInstalled.push(
+      `<h3 class="sub-h">Confirmed during the build</h3>${para(
+        "This is in your build, but it depends on something on your side that we cannot check from here. We will tell you either way."
+      )}${renderWorkflowCards(plan.pending)}`
     );
   }
 
-  return shell(
-    pack.meta,
-    "Client Acquisition Infrastructure Blueprint",
-    parts.join("\n"),
-    shellOpts("d2")
+  if (plan.nothingOff) {
+    notInstalled.push(
+      `<h3 class="sub-h">Nothing has been left out</h3>${para(
+        `All ${plan.totalWorkflows} workflows are installed for you. Some builds leave one or two out — a client with no social accounts does not need the social capture, for instance — and none of those applied to you. You are getting the whole system.`
+      )}`
+    );
+  } else {
+    notInstalled.push(
+      `<h3 class="sub-h">Not installed for you</h3>${para(
+        `${plan.off.length} of the ${plan.totalWorkflows} workflows are not in your build, and each one is listed with the reason. They are named rather than quietly dropped so you can see exactly what was decided and tell us if we got it wrong.`
+      )}${renderWorkflowCards(plan.off)}`
+    );
+  }
+
+  parts.push(section(next(), "What Is Not Installed, and Why", notInstalled.join("")));
+
+  parts.push(
+    section(
+      next(),
+      "Your Pipeline",
+      `${para(
+        "Every enquiry lands in one of six columns and moves through them as it progresses. This is the board you open to see where the work is."
+      )}${renderPipeline()}`
+    )
   );
+
+  parts.push(section(next(), "The Schedule", renderSchedule(plan.dates)));
+
+  parts.push(
+    section(
+      next(),
+      "What You Are Paying For, and When",
+      renderEngagementSpine(plan.dates)
+    )
+  );
+
+  return shell(pack.meta, "The Build Plan", parts.join("\n"), shellOpts("build-plan"));
 }
 
 // ── D3 · Conversion Asset Pack ────────────────────────────────────────────────
@@ -1782,62 +1763,21 @@ function renderDeliverable3(pack: AssetPack): string {
     );
   }
 
-  return shell(pack.meta, "Conversion Asset Pack", parts.join("\n"), shellOpts("d3"));
+  return shell(pack.meta, "Conversion Asset Pack", parts.join("\n"), shellOpts("asset-pack"));
 }
 
-// ── D4 · 90-Day Growth Execution Roadmap ──────────────────────────────────────
-
-function renderPhases(phases: RoadmapPhase[] | undefined): string {
-  if (!phases?.length) return "";
-  const blocks = phases
-    .map(
-      (p, i) =>
-        `<div class="phase-row"><div class="phase-node">${i + 1}</div><div class="phase-card${
-          p.isRetainerPhase ? " is-retainer" : ""
-        }"><div class="ph-h"><span class="ph-n">${esc(p.phase)}${
-          p.isRetainerPhase
-            ? `<span class="retainer-badge">Monthly retainer</span>`
-            : ""
-        }</span><span class="ph-w">${esc(p.window)}</span></div><p class="ph-obj"><strong>Objective.</strong> ${esc(
-          p.objective
-        )}</p>${
-          p.deployActions?.length || p.doneDefinition?.length
-            ? `<div class="phase-cols">${
-                p.deployActions?.length
-                  ? `<div><div class="label">What we deploy</div>${list(p.deployActions)}</div>`
-                  : ""
-              }${
-                p.doneDefinition?.length
-                  ? `<div><div class="label">Done means</div>${checklist(p.doneDefinition)}</div>`
-                  : ""
-              }</div>`
-            : ""
-        }<div class="fn-meta" style="margin-top:14px">${ownerTag(p.owner)}</div></div></div>`
-    )
-    .join("");
-  return `<div class="timeline">${blocks}</div>`;
-}
-
-// ── The engagement spine (D5) ─────────────────────────────────────────────────
-// D4 used to show three phases and no money at all, which meant the one document
-// that answers "when does this happen" never answered "and what am I paying for
-// it". An owner reading the timeline should be able to see the two-week build he
-// paid a one-time fee for, the moment it goes live, and the ongoing month he pays
-// a monthly fee for — without opening the proposal again.
+// ── The engagement spine ─────────────────────────────────────────────────────
+// The two prices, attached to the two WINDOWS the commercials actually define.
 //
 // DETERMINISTIC, AND DELIBERATELY SO. Every word and both figures come from the
-// engagement itself (proposal-defaults is the single source of the two prices),
-// never from the model. What we charge is not something a generation gets to
-// paraphrase, and it must render identically on a pack where the roadmap came back
-// thin.
+// engagement itself (constants.ts is the single source of the two prices), never
+// from the model. What we charge is not something a generation gets to
+// paraphrase.
 //
-// It attaches the fees to the two WINDOWS, not to individual phases, because that
-// is the only split the commercials actually define. Guessing which fee covers a
-// model-authored phase called "Stabilize · Month 2" would be inventing a billing
-// claim, so the spine states the two windows and points at the retainer badge
-// already on the phases below.
-function renderEngagementSpine(roadmap: AssetPack["roadmap"]): string {
-  const hasRetainerPhase = (roadmap?.phases ?? []).some((p) => p.isRetainerPhase);
+// It reads the SAME BuildDates the schedule above does, so the money and the
+// calendar can never disagree — and when kickoff is unbooked both render
+// relative to it rather than one of them inventing a date.
+function renderEngagementSpine(dates: BuildDates): string {
   const band = (
     cls: string,
     when: string,
@@ -1854,68 +1794,23 @@ function renderEngagementSpine(roadmap: AssetPack["roadmap"]): string {
 
   return `<div class="spine">${band(
     "is-build",
-    "Days 1–14",
+    dates.buildWindow,
     "The build",
-    money(DEFAULT_SETUP_FEE),
+    money(SETUP_FEE_CAD),
     "one-time",
-    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows — stood up, tested and handed over. The four documents in this pack are part of it. This is the window we work to, and anything that slips gets told to you rather than absorbed quietly."
-  )}<div class="spine-golive"><span class="sg-dot"></span><div><strong>Go-live.</strong> The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point.</div></div>${band(
+    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows \u2014 stood up, tested and handed over. This document and the Diagnosis are part of it. This is the window we work to, and anything that slips gets told to you rather than absorbed quietly."
+  )}<div class="spine-golive"><span class="sg-dot"></span><div><strong>Go-live${
+    dates.anchored ? ` \u2014 ${esc(dates.goLive)}` : ""
+  }.</strong> The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point.</div></div>${band(
     "is-run",
-    "Days 15–90",
+    dates.runningFrom,
     "Running it",
-    `${money(DEFAULT_MONTHLY)}/month`,
+    `${money(MONTHLY_RETAINER_CAD)}/month`,
     "monthly, from go-live",
-    `LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked. It continues past day 90 on the same terms.${
-      hasRetainerPhase
-        ? " Anything marked Monthly retainer below is what this covers."
-        : ""
-    }`
+    "LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked. It continues past the first ninety days on the same terms."
   )}</div>`;
 }
 
-function renderDeliverable4(pack: AssetPack): string {
-  const roadmap = pack.roadmap;
-  const parts: string[] = [];
-  let n = 0;
-  const next = () => ++n;
-
-  parts.push(
-    section(next(), "What You Are Paying For, and When", renderEngagementSpine(roadmap))
-  );
-
-  if (roadmap?.overview)
-    parts.push(
-      section(next(), "Roadmap Overview", `<div class="strategy-block">${para(
-        roadmap.overview
-      )}</div>`)
-    );
-
-  const phases = renderPhases(roadmap?.phases);
-  if (phases) {
-    parts.push(section(next(), "Implementation & Optimization Plan", phases));
-  } else {
-    // Fallback: derive a lightweight plan from each file's implementation guide.
-    const guides = [
-      pack.file1.framing?.implementationGuide,
-      pack.file2.framing?.implementationGuide,
-      pack.file5.framing?.implementationGuide,
-    ]
-      .filter((g): g is string[] => Boolean(g?.length))
-      .flat();
-    if (guides.length) {
-      parts.push(
-        section(next(), "Execution Checklist", checklist(guides))
-      );
-    }
-  }
-
-  return shell(
-    pack.meta,
-    "Implementation & Optimization Timeline",
-    parts.join("\n"),
-    shellOpts("d4")
-  );
-}
 
 // ── Metadata + dispatcher ─────────────────────────────────────────────────────
 
@@ -1924,51 +1819,97 @@ export const DELIVERABLES: {
   title: string;
   subtitle: string;
   filename: string;
+  /** Who it is for. `internal` documents are excluded from the client bundle —
+   *  the Asset Pack goes out at go-live, not at signing. */
+  audience: "client" | "internal";
 }[] = [
   {
-    id: "d1",
-    title: "Growth Leak Intelligence Report",
-    subtitle: "Diagnosis — where revenue is quietly leaking and why",
-    filename: "01-growth-leak-intelligence-report.html",
+    id: "diagnosis",
+    title: "The Diagnosis",
+    subtitle: "What we found on the call, priced against your own numbers",
+    filename: "01-the-diagnosis.html",
+    audience: "client",
   },
   {
-    id: "d2",
-    title: "Client Acquisition Infrastructure Blueprint",
-    subtitle: "Architecture — the conversion path we build to turn your leads into customers",
-    filename: "02-client-acquisition-infrastructure-blueprint.html",
+    id: "build-plan",
+    title: "The Build Plan",
+    subtitle: "What we install, what we don't, and when it goes live",
+    filename: "02-the-build-plan.html",
+    audience: "client",
   },
   {
-    id: "d3",
+    id: "asset-pack",
     title: "Conversion Asset Pack",
     subtitle: "Assets — the copy and messaging that runs the system",
     filename: "03-conversion-asset-pack.html",
-  },
-  {
-    id: "d4",
-    title: "Implementation & Optimization Timeline",
-    subtitle: "Execution — what we deploy, then the ongoing retainer cadence",
-    filename: "04-implementation-optimization-timeline.html",
+    audience: "internal",
   },
 ];
 
+/** The two the client is sent at signing. Derived, so moving a document between
+ *  audiences moves it everywhere at once. */
+export const CLIENT_DELIVERABLES = DELIVERABLES.filter((d) => d.audience === "client");
+
 function shellOpts(id: DeliverableId): ShellOptions {
-  const idx = DELIVERABLES.findIndex((d) => d.id === id);
-  const d = DELIVERABLES[idx];
+  // Numbered within the CLIENT set, so the two documents a client receives read
+  // "01 / 02" and "02 / 02". The internal Asset Pack carries no index — a
+  // document nobody outside the company opens does not need a place in a series.
+  const idx = CLIENT_DELIVERABLES.findIndex((d) => d.id === id);
+  const d = DELIVERABLES.find((x) => x.id === id);
   return {
     subtitle: d?.subtitle,
-    docIndex: `${String(idx + 1).padStart(2, "0")} / ${String(DELIVERABLES.length).padStart(2, "0")}`,
+    docIndex:
+      idx === -1
+        ? undefined
+        : `${String(idx + 1).padStart(2, "0")} / ${String(CLIENT_DELIVERABLES.length).padStart(2, "0")}`,
   };
 }
 
-export function renderDeliverableHtml(pack: AssetPack, id: DeliverableId): string {
+/** Everything the two client documents need that is NOT in the AssetPack.
+ *
+ *  It is threaded in rather than baked into the pack at generation time, and that
+ *  is the whole point: the Diagnosis must read the LIVE frozen assessment — the
+ *  same row the offer page reads — so the two can never show a client different
+ *  totals. A copy taken at generation would drift the moment the calculator was
+ *  corrected. */
+export interface DeliverableContext {
+  /** LeakAssessment.computed. Null when no calculator has been saved. */
+  assessment: ComputedAssessment | null;
+  /** Derived from Business.workflowToggles + Business.kickoffAt. */
+  plan: BuildPlan;
+}
+
+/** Build the context from the two raw column values. One place that knows how a
+ *  business row becomes document input. */
+export function deliverableContext(input: {
+  assessment: ComputedAssessment | null;
+  workflowToggles: unknown;
+  kickoffAt: Date | null;
+}): DeliverableContext {
+  return {
+    assessment: input.assessment,
+    plan: assembleBuildPlan(input.workflowToggles, input.kickoffAt),
+  };
+}
+
+/** A context for a pack with no business behind it (fixtures, previews of an
+ *  old pack). Everything defaults ON and kickoff is unbooked, which is the
+ *  honest reading of "we do not know yet" rather than a silent best case. */
+export function emptyDeliverableContext(): DeliverableContext {
+  return deliverableContext({ assessment: null, workflowToggles: null, kickoffAt: null });
+}
+
+export function renderDeliverableHtml(
+  pack: AssetPack,
+  id: DeliverableId,
+  ctx: DeliverableContext = emptyDeliverableContext()
+): string {
   switch (id) {
-    case "d1":
-      return renderDeliverable1(pack);
-    case "d2":
-      return renderDeliverable2(pack);
-    case "d3":
+    case "diagnosis":
+      return renderDiagnosis(pack, ctx);
+    case "build-plan":
+      return renderBuildPlan(pack, ctx);
+    case "asset-pack":
       return renderDeliverable3(pack);
-    case "d4":
-      return renderDeliverable4(pack);
   }
 }

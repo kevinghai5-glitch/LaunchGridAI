@@ -17,6 +17,8 @@ import {
   MapPin,
   Globe,
   ExternalLink,
+  Download,
+  Check,
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { DateNav, isSameDay, startOfDay } from "@/components/dashboard/DateNav";
@@ -24,7 +26,6 @@ import {
   QUICK_DISPOSITIONS,
   SECONDARY_DISPOSITIONS,
   STATUS_META,
-  QUEUE_LIMIT,
   type Disposition,
   type LeadStatus,
   type Urgency,
@@ -452,7 +453,17 @@ export default function CallQueuePage() {
           style={{ gap: 14, marginBottom: 18, justifyContent: "space-between" }}
         >
           <DateNav date={selectedDate} onChange={setSelectedDate} />
-          {isToday && <ProgressRing done={calledToday} total={QUEUE_LIMIT} />}
+          <div className="flex items-center" style={{ gap: 12 }}>
+            {/* Available on every view, not just today: re-pulling a past day's
+                no-answers is a normal second pass through the dialer. */}
+            <ExportCsvButton date={dateKey} count={leads.length} disabled={loading} />
+            {/* Denominator is the REAL day: calls already logged plus what's
+                still queued. It used to be QUEUE_LIMIT, which only matched
+                reality back when every batch was exactly that size — after the
+                batch size became the operator's to choose, a fixed denominator
+                would report 40/30 on a 77-lead day. */}
+            {isToday && <ProgressRing done={calledToday} total={calledToday + leads.length} />}
+          </div>
         </div>
 
         {/* legend */}
@@ -688,7 +699,7 @@ export default function CallQueuePage() {
                         could not see", which is a different fact from "nothing
                         is wrong", and it stays different on screen. */}
                     <div style={{ marginBottom: 12 }}>
-                      <ObservedFactsRow facts={lead.observedFacts} />
+                      <ObservedFactsRow facts={lead.observedFacts} businessId={lead.id} />
                     </div>
                     {/* talking-point peek — AI outreach suggestions + last call */}
                     {(lead.enrichment.painPoint ||
@@ -1166,6 +1177,137 @@ function QueueDetailRow({
     >
       {inner}
     </a>
+  );
+}
+
+// Download the visible list as a power-dialer CSV.
+//
+// The file is fetched rather than linked so the button can show real state —
+// a link would fire, look identical, and leave him guessing whether a 200-lead
+// export was still building. The server owns the filename (it carries the date);
+// this only reads it back off Content-Disposition.
+function ExportCsvButton({
+  date,
+  count,
+  disabled,
+}: {
+  date: string;
+  count: number;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const empty = count === 0;
+  const inert = busy || disabled || empty;
+
+  const run = async () => {
+    if (inert) return;
+    setBusy(true);
+    try {
+      // POST, not GET: exporting flips every included business to dialStatus
+      // "dialed" (see the export route). A download that mutates must not be a GET
+      // a browser could prefetch.
+      const res = await fetch(`/api/call-queue/export?date=${date}`, {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        toast.error("Export failed");
+        return;
+      }
+
+      // Prefer the server's filename; fall back to the same shape if a proxy
+      // ever strips the header, so a download is never named "download".
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const filename =
+        /filename="([^"]+)"/.exec(disposition)?.[1] ?? `call-queue-${date}.csv`;
+      const rows = Number(res.headers.get("X-Row-Count") ?? 0);
+      const skipped = Number(res.headers.get("X-Skipped-No-Phone") ?? 0);
+      const markedDialed = Number(res.headers.get("X-Marked-Dialed") ?? 0);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setDone(true);
+      setTimeout(() => setDone(false), 1600);
+
+      toast.success(
+        `${filename} · ${rows} lead${rows === 1 ? "" : "s"}${
+          markedDialed > 0 ? ` · ${markedDialed} marked dialed` : ""
+        }`
+      );
+      if (skipped > 0) {
+        // Said out loud, because a dialer row with no number wastes a slot
+        // mid-block — he should know the file is short before he imports it.
+        toast.info(
+          `${skipped} lead${skipped === 1 ? " has" : "s have"} no dialable phone number and ${
+            skipped === 1 ? "was" : "were"
+          } left out. Add the number on the lead to include ${skipped === 1 ? "it" : "them"}.`
+        );
+      }
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={run}
+      disabled={inert}
+      title={
+        empty
+          ? "Nothing to export for this day"
+          : "Download this list as a CSV for the GHL power dialer"
+      }
+      aria-label="Export call list as CSV"
+      className="flex items-center"
+      style={{
+        gap: 7,
+        padding: "7px 13px",
+        fontSize: 12,
+        fontWeight: 600,
+        borderRadius: 999,
+        letterSpacing: "-0.01em",
+        color: done ? "var(--money)" : inert ? "var(--text-4)" : "var(--text-2)",
+        background: done ? "rgba(120,190,140,0.10)" : "var(--surface)",
+        border: `1px solid ${done ? "rgba(120,190,140,0.35)" : "var(--line)"}`,
+        cursor: inert ? "default" : "pointer",
+        fontFamily: "inherit",
+        opacity: empty && !busy ? 0.5 : 1,
+        transition:
+          "color var(--t), background var(--t), border-color var(--t), opacity var(--t)",
+      }}
+      onMouseEnter={(e) => {
+        if (inert || done) return;
+        (e.currentTarget as HTMLElement).style.color = "var(--text)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--line-strong)";
+      }}
+      onMouseLeave={(e) => {
+        if (inert || done) return;
+        (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--line)";
+      }}
+    >
+      {busy ? (
+        <Loader2 size={13} strokeWidth={2} className="animate-spin" />
+      ) : done ? (
+        <Check size={13} strokeWidth={2.2} />
+      ) : (
+        <Download size={13} strokeWidth={2} />
+      )}
+      {busy ? "Preparing…" : done ? "Downloaded" : "Export CSV"}
+    </button>
   );
 }
 

@@ -146,7 +146,13 @@ const DASH_LAYOUT = "src/app/(dashboard)/layout.tsx";
 // 2026-07-29. The public proposal page is now the ONE client route under the
 // root layout, so it inherits the whole fence the teaser used to be measured by.
 const PUBLIC_PROPOSAL_PAGE = "src/app/p/[publicId]/page.tsx";
-const PUBLIC_PROPOSAL = "src/components/proposals/PublicProposal.tsx";
+// The generated proposal was deleted on 2026-08-06 and this component replaced
+// it at the same route: the offer, assembled from the saved calculator. The
+// route did not move, so the whole fence below still measures the same boundary
+// — only the component behind it changed. It renders in TWO places (the public
+// page and, inside the dark call cockpit, the Zoom runner's Offer phase), which
+// is exactly why its palette must be self-contained rather than inherited.
+const PUBLIC_PROPOSAL = "src/components/client/ClientOffer.tsx";
 const TAILWIND = "tailwind.config.ts";
 const DOC_SHELL = "src/lib/exporters/_shell.ts";
 

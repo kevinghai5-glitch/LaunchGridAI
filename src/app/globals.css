@@ -13,7 +13,7 @@
 
        /a/[publicId]   the cold-audit teaser a prospect opens from the pre-call
                        email  (src/app/a/[publicId]/page.tsx)
-       /p/[publicId]   the public proposal  (src/app/p/[publicId]/page.tsx)
+       /p/[publicId]   the client offer  (src/app/p/[publicId]/page.tsx)
 
    Both are cream/serif brand documents (#FBFAF7, Georgia, muted gold). A dark
    dashboard rule landing on either one is a visible regression in the
@@ -23,7 +23,7 @@
      · Custom PROPERTIES may live at :root. A custom property paints nothing
        until something reads it, and neither client route reads one — the
        teaser sets every colour inline from its own palette object, and the
-       public proposal's <PublicProposal> re-declares all eleven tokens it
+       client offer's <ClientOffer> re-declares all eleven tokens it
        reads inside its own `.lgp` block. Verified, both files.
      · Anything that PAINTS — background, color, font-family, letter-spacing,
        font-feature-settings, ::selection, :focus-visible, accent-color,
@@ -38,7 +38,7 @@
    CLIENT-DOCUMENT vocabulary. They are self-declared by the files that read
    them (exporters/_shell.ts, exporters/cold-audit-html.ts — both standalone
    <!DOCTYPE html> documents this stylesheet never touches — and
-   components/proposals/PublicProposal.tsx inside `.lgp`). Defining them
+   components/client/ClientOffer.tsx inside `.lgp`). Defining them
    globally would invent a bleed path where none exists today.
    ═══════════════════════════════════════════════════════════════════════════ */
 

@@ -49,11 +49,13 @@ import { buildAuditIntelligence } from "@/lib/audit-intelligence";
 import { detectLeaks } from "@/lib/leak-detection";
 import { gradeOf, intakeFieldsForZeroInferred, LEAKS } from "@/lib/leak-taxonomy";
 import { NURTURE_SEQUENCE } from "@/lib/asset-generation";
-import { buildProposalDefaults } from "@/lib/proposal-defaults";
-import { PublicProposal } from "@/components/proposals/PublicProposal";
+import { buildClientOffer } from "@/lib/client-offer";
+import { ClientOffer } from "@/components/client/ClientOffer";
+// Aliased: leak-taxonomy also exports LEAKS, and they are different lists — the
+// taxonomy's detection catalogue versus the calculator's six questions.
+import { computeAssessment, emptyInputs, LEAKS as CALC_LEAKS } from "@/lib/leak-calculator";
 import type { AuditIntelligence } from "@/lib/audit-intelligence";
 import type { FirecrawlScrape } from "@/lib/firecrawl";
-import type { ProposalContent } from "@/types";
 
 /* ════════════════════════════════════════════════════════════════════════════
  * (THE CTA PROBE — DELETED 2026-08-01. It re-ran this file as a child process
@@ -247,75 +249,123 @@ section("H · THE MONEY LAW — 'CAD $6,500', never a bare '$6,500', on the page
 
 const PROSPECT = { name: "Harbourline Air", industry: "HVAC", city: "Dartmouth" };
 
-function renderProposal(content: ProposalContent): string {
-  return renderToStaticMarkup(
-    createElement(PublicProposal, { business: PROSPECT, content })
-  );
+/* WHAT CHANGED HERE, AND WHY TWO CHECKS DIED (Phase 2, 2026-08-06).
+ *
+ * The subject of this section was the GENERATED proposal: a model wrote prose,
+ * an operator edited it on a builder page, and PublicProposal.tsx repaired bare
+ * dollar figures at render time because hand-typed prose was the last thing
+ * between a stale convention and the buyer.
+ *
+ * That whole surface is deleted. The page a prospect now decides on is
+ * ClientOffer.tsx, assembled from the frozen calculator plus the workflow
+ * catalogue. It has NO editable prose and NO free-text field: every string is
+ * either a constant in the component or a number the client watched being
+ * entered. So the two checks that proved the REPAIR guard (a hand-edited bare
+ * "$2,400" rewritten at the page; a deliberate "US$84" left alone) have no
+ * subject left, and a check whose subject is gone can only rot. They are gone
+ * with it, and the guard they protected is gone too — stated here rather than
+ * quietly dropped.
+ *
+ * The LAW itself did not change and is now enforced earlier and harder: the
+ * marker is applied by cad()/cadRange() in src/lib/leak-calculator.ts, the ONE
+ * pair of formatters shared by the calculator the prospect watches and the offer
+ * page he is sent. H1–H3 below render the real component and read the visible
+ * words; section J scans the source of both files so a bare "$" cannot be typed.
+ */
+
+/** A synthetic assessment, computed by the REAL model rather than hand-written,
+ *  so this section cannot pass against a blob that the shipped code would never
+ *  produce. Worst answer on every question — the page with the most figures on
+ *  it, which is the page most likely to leak an unmarked one. */
+function syntheticOffer(worst: boolean): NonNullable<ReturnType<typeof buildClientOffer>> {
+  const inputs = emptyInputs();
+  inputs.monthlyEnquiries = 45;
+  inputs.avgJobValue = 850;
+  for (const leak of CALC_LEAKS) {
+    // index 0 is the clean answer on every question; the last is the worst.
+    inputs.answers[leak.id] = worst ? leak.options.length - 1 : 0;
+  }
+  inputs.customRows[0] = { label: "Abandoned online bookings", jobsPerMonth: 1 };
+  const offer = buildClientOffer({
+    business: PROSPECT,
+    computed: computeAssessment(inputs),
+    workflowToggles: { "text-to-pay": false },
+  });
+  assert(offer, "buildClientOffer returned null for a fully-answered assessment");
+  return offer;
 }
 
-check("H1 · RUNTIME — the default proposal renders with no bare dollar figure anywhere visible", () => {
-  const html = renderProposal(buildProposalDefaults(PROSPECT));
-  const visible = visibleText(html);
+function renderOffer(offer: NonNullable<ReturnType<typeof buildClientOffer>>): string {
+  return renderToStaticMarkup(createElement(ClientOffer, { offer }));
+}
+
+check("H1 · RUNTIME — the offer page renders with no bare dollar figure anywhere visible", () => {
+  const visible = visibleText(renderOffer(syntheticOffer(true)));
   const bare = bareDollarFigures(visible);
-  show("marked figures", Array.from(new Set(visible.match(/CAD \$[\d,]+/g) ?? [])).slice(0, 6));
+  show("marked figures", Array.from(new Set(visible.match(/CAD \$[\d,]+/g) ?? [])).slice(0, 8));
   show("bare figures  ", bare);
-  assert.deepEqual(bare, [], "the proposal a prospect opens carries a bare dollar figure");
+  assert.deepEqual(bare, [], "the offer a client opens carries a bare dollar figure");
 });
 
-check("H2 · RUNTIME — a hand-edited proposal carrying bare figures is repaired at the page", () => {
-  // The prose is SAVED on the proposal row and editable afterwards, so a proposal
-  // written before the convention was fixed can still reach this page carrying a
-  // bare "$2,400" or a trailing "$18,500 CAD". The component is the last thing
-  // between that text and the buyer.
-  const content = buildProposalDefaults(PROSPECT);
-  const dirty: ProposalContent = {
-    ...content,
-    packageOverview: "The build is $6,500 one-time and the retainer is $1,000 CAD a month.",
-    problem: {
-      summary: "Roughly $2,400 a month is leaking out before it converts.",
-      basis: "Estimated at $2,400–$4,100 a month from the audit.",
-      leaks: [
-        {
-          title: "Missed calls",
-          monthlyCost: "$1,290 / mo",
-          detail: "About $1,290 a month of demand you already paid for, going unanswered.",
-        },
-      ],
-    },
-    roi: { ...content.roi, summary: "Recovering $18,500 CAD over a year.", points: ["$860 a month, conservatively."] },
-  };
-  const visible = visibleText(renderProposal(dirty));
-  show("input carried", ["$6,500", "$1,000 CAD", "$2,400", "$1,290", "$18,500 CAD", "$860"]);
-  show("bare on page ", bareDollarFigures(visible));
-  assert.deepEqual(bareDollarFigures(visible), [], "a hand-edited bare figure reached the buyer");
-  for (const fig of ["CAD $6,500", "CAD $2,400", "CAD $1,290", "CAD $18,500", "CAD $860"]) {
-    assert(visible.includes(fig), `"${fig}" is not on the rendered page — the guard changed the digits or dropped one`);
-  }
-  assert(!/\$18,500\s*CAD/.test(visible), "the now-redundant trailing CAD survived beside a marked figure");
-});
-
-check("H3 · RUNTIME — the two headline prices are the offer's prices, CAD-marked", () => {
-  const visible = visibleText(renderProposal(buildProposalDefaults(PROSPECT)));
+check("H2 · RUNTIME — the two headline prices are the offer's prices, CAD-marked", () => {
+  const visible = visibleText(renderOffer(syntheticOffer(true)));
   show("one-time", /CAD\s*\$6,500/.test(visible));
   show("monthly ", /CAD\s*\$1,000/.test(visible));
   assert(/CAD\s*\$6,500/.test(visible), "the one-time fee is not rendered as CAD $6,500");
   assert(/CAD\s*\$1,000/.test(visible), "the monthly retainer is not rendered as CAD $1,000");
 });
 
-check("H4 · RUNTIME — a foreign-currency figure somebody wrote on purpose is left alone", () => {
-  // "US$84" is not the money law being broken, it is a different currency. A guard
-  // that rewrote it would be inventing a number, which is worse than the ambiguity
-  // it is trying to remove.
-  const content = buildProposalDefaults(PROSPECT);
-  const withUsd: ProposalContent = {
-    ...content,
-    roi: { ...content.roi, points: ["Industry cost per lead runs US$84 before conversion."] },
-  };
-  const visible = visibleText(renderProposal(withUsd));
-  show("on the page", /US\$84/.test(visible));
-  assert(visible.includes("US$84"), "a deliberately foreign figure was rewritten as CAD");
-  assert.deepEqual(bareDollarFigures(visible), [], "the foreign figure was counted as a bare one");
+check("H3 · RUNTIME — the all-clean page is a different code path, and it holds the law too", () => {
+  // Every answer clean renders a page with no leak table and no total. It is a
+  // real outcome, not an error state, and it still prints the two prices — so it
+  // is a second surface the law has to hold on, exercised separately.
+  const offer = syntheticOffer(false);
+  const visible = visibleText(renderOffer(offer));
+  show("all clean  ", offer.allClean);
+  show("bare figures", bareDollarFigures(visible));
+  assert(offer.allClean, "the all-clean fixture is not actually all clean — this check proves nothing");
+  assert.deepEqual(bareDollarFigures(visible), [], "the all-clean offer carries a bare dollar figure");
+  assert(/CAD\s*\$6,500/.test(visible), "the all-clean page dropped the one-time price");
 });
+
+check("H4 · RUNTIME — an omitted workflow is named WITH its reason, never listed bare", () => {
+  // The offer states what we are not installing. An omission with no reason
+  // beside it reads to a client as something we forgot, so the reason is part of
+  // the data, not the copy.
+  const offer = syntheticOffer(true);
+  const visible = visibleText(renderOffer(offer));
+  show("omitted", offer.omitted.map((w) => w.name));
+  assert(offer.omitted.length > 0, "the fixture switched a workflow off but none came back omitted");
+  for (const w of offer.omitted) {
+    assert(w.omittedBecause && w.omittedBecause.length > 0, `${w.id} is omitted with no reason`);
+    assert(visible.includes(w.name), `${w.name} is omitted but not named on the page`);
+    assert(visible.includes(w.omittedBecause), `${w.name} is named but its reason is not on the page`);
+  }
+});
+
+check("H5 · RUNTIME — an unconfigured closing link renders a loud placeholder, never a dead button", () => {
+  // Both links come from env vars the owner supplies. Unset is the DEFAULT state
+  // of a fresh clone, so the unset rendering is the one that has to be safe: a
+  // button a client can click that goes nowhere costs a signature.
+  const offer = syntheticOffer(true);
+  const html = renderOffer(offer);
+  const visible = visibleText(html);
+  const hrefs = Array.from(html.matchAll(/<a[^>]+href="([^"]*)"/g)).map((m) => m[1]);
+  show("agreement", offer.agreement);
+  show("payment  ", offer.payment);
+  show("hrefs    ", hrefs);
+  for (const link of [offer.agreement, offer.payment]) {
+    if (link.href) continue;
+    assert(link.missingEnvVar, "an unconfigured link names no variable to set");
+    assert(visible.includes(link.missingEnvVar), `${link.label} is unset but the page does not say what to set`);
+    assert(visible.includes("LINK NOT SET"), "an unset link does not announce itself");
+  }
+  assert(
+    !hrefs.some((h) => h === "" || h === "#" || h === "undefined"),
+    `a closing button points nowhere: ${hrefs.join(" ")}`
+  );
+});
+
 
 /* ──────────────────────────────────────────────────────────────────────────
  * I · THE OWNER'S DOCUMENT IS KEPT TRUE BY THE CODE
@@ -682,10 +732,20 @@ check("J1 · every rendered dollar figure a prospect can see carries the CAD mar
   // The two genuinely public surfaces, plus the operator screens that print a
   // price beside an audit figure — the exact place a mismatch is noticed.
   const FILES = [
-    "src/components/proposals/PublicProposal.tsx",
+    // The two genuinely client-facing surfaces. They are scanned TOGETHER on
+    // purpose: the calculator is screen-shared live and the offer page is sent
+    // afterwards, so the same person reads both, and money formatted two ways
+    // across them is the exact failure this law exists to stop.
+    "src/components/client/ClientOffer.tsx",
+    "src/app/(dashboard)/library/[id]/calculator/page.tsx",
+    // The shared formatter both of them route through. Scanning it closes the
+    // hole where the marker is stripped at the source and every caller stays
+    // clean-looking.
+    "src/lib/leak-calculator.ts",
     // src/app/a/[publicId]/page.tsx was scanned here until the teaser was
     // deleted with the cold audit (2026-08-01).
-    "src/app/(dashboard)/proposals/page.tsx",
+    // src/components/proposals/PublicProposal.tsx and the proposals list page
+    // were scanned here until the proposal generator was deleted (2026-08-06).
     "src/app/(dashboard)/library/page.tsx",
     "src/app/(dashboard)/businesses/[id]/page.tsx",
     "src/app/(dashboard)/crm/page.tsx",
@@ -728,14 +788,24 @@ check("J1 · every rendered dollar figure a prospect can see carries the CAD mar
           t.startsWith("{/*")
         )
           return;
-        for (let j = 0; j < line.length; j++) {
-          if (line[j] !== "$") continue;
-          if (line[j + 1] === "{") continue; // a template placeholder, not a sign
-          if (line[j - 1] === "\\") continue; // escaped
-          if (line.slice(Math.max(0, j - 4), j) === "CAD ") continue; // already marked
+
+        // …and the same for a TRAILING comment, which the rule above missed.
+        // The rationale is identical — a comment documenting the fix is not the
+        // violation — but a `// US$84 is a different currency` note sitting at
+        // the end of a line of real code was still being flagged. Only the
+        // comment is removed; the CODE on that line is still scanned, so this
+        // strictly narrows a false positive rather than opening a hole.
+        // "://" is excluded so a URL in code is never mistaken for a comment.
+        const code = line.replace(/(^|[^:])\/\/.*$/, "$1");
+
+        for (let j = 0; j < code.length; j++) {
+          if (code[j] !== "$") continue;
+          if (code[j + 1] === "{") continue; // a template placeholder, not a sign
+          if (code[j - 1] === "\\") continue; // escaped
+          if (code.slice(Math.max(0, j - 4), j) === "CAD ") continue; // already marked
           // Only a "$" immediately followed by a digit or an interpolation is a
           // rendered figure. A lone "$" in prose is not money.
-          if (!/^\$\s*(\d|\$\{)/.test(line.slice(j))) continue;
+          if (!/^\$\s*(\d|\$\{)/.test(code.slice(j))) continue;
           offenders.push(`${rel}:${i + 1} → ${t.slice(0, 78)}`);
         }
       });

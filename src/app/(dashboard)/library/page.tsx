@@ -7,7 +7,7 @@ import { TopBar } from "@/components/dashboard/TopBar";
 import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
 import type { SavedBusiness } from "@/types";
 import { formatCurrency } from "@/lib/utils";
-import { ClientDrawer, type ClientDrawerTab } from "@/components/businesses/ClientDrawer";
+import { offerPath, offerShareUrl, SHARE_URL_UNSET } from "@/lib/share-link";
 import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
 // Type-only: the compute lives server-side (the feed ships the small object);
 // importing VALUES from the lib here would drag the detection layer into the
@@ -36,26 +36,14 @@ import {
   Link as LinkIcon,
   Layers,
   Loader2,
-  SlidersHorizontal,
   ChevronRight,
   ChevronDown,
-  Workflow,
-  HelpCircle,
+  ClipboardList,
 } from "lucide-react";
 
 type LibraryMode = "workspaces" | "saved";
 
 // ── Types mirroring /api/assets/library ───────────────────────────────────────
-
-interface ProposalRow {
-  id: string;
-  title: string;
-  status: string;
-  publicId: string;
-  setupFee: number;
-  monthlyPrice: number;
-  createdAt: string;
-}
 
 interface LibraryItem {
   id: string;
@@ -118,7 +106,8 @@ interface LibraryItem {
   // free audit was deleted (owner ruling, 2026-08-01): a number cannot
   // hallucinate, and "—" honestly means "we could not see".
   observedFacts: ObservedFacts;
-  proposals: ProposalRow[];
+  /** Share id of the saved calculator, or null when there is none yet. */
+  offerPublicId: string | null;
 }
 
 // The four flagship deliverables, rendered from a single asset pack. Kept local
@@ -155,33 +144,16 @@ function fmtDate(iso: string): string {
 // formatter in this file is what let the two drift apart in the first place.
 // (formatCurrency rounds to whole dollars, same as the helper it replaced.)
 
-// Proposal status → accent color. Mirrors the lifecycle: draft → sent → viewed →
-// accepted / rejected.
-function statusColor(status: string): { fg: string; bg: string } {
-  switch (status.toUpperCase()) {
-    case "ACCEPTED":
-      return { fg: "var(--money)", bg: "rgba(74,222,128,0.10)" };
-    case "SENT":
-      return { fg: "var(--accent)", bg: "var(--accent-soft)" };
-    case "VIEWED":
-      return { fg: "oklch(0.82 0.14 85)", bg: "rgba(234,179,8,0.10)" };
-    case "REJECTED":
-      return { fg: "var(--danger, #f87171)", bg: "rgba(248,113,113,0.10)" };
-    default:
-      return { fg: "var(--text-3)", bg: "rgba(255,255,255,0.05)" };
-  }
-}
-
 // ── How tall an open business is allowed to get ───────────────────────────────
 //
 // THE COMPLAINT THIS ANSWERS: "it expands the page and makes it so long… i have
 // to scroll." Every column below is capped and scrolls INSIDE the panel, so an
-// open business is the same height whatever is in it — six proposals or none, a
+// open business is the same height whatever is in it — six deliverables or none, a
 // generated pack or an empty state. Nothing that happens inside a column can move
 // the business rows underneath it.
 //
 // WHY A CAP AND NOT A FIXED HEIGHT. A fixed height would leave a tall empty box
-// under a client with one proposal and no pack. A cap only bites when there is
+// under a client with one offer link and no pack. A cap only bites when there is
 // genuinely more content than fits; below it the panel is exactly as tall as its
 // content, and CSS grid stretches all three columns to match the tallest one, so
 // they still read as one block rather than three ragged ones.
@@ -226,7 +198,8 @@ function SectionHead({
   icon: typeof Activity;
   label: string;
   count: number;
-  action: React.ReactNode;
+  /** Optional: a column whose content IS the action has no header button. */
+  action?: React.ReactNode;
 }) {
   return (
     <div
@@ -290,6 +263,86 @@ function EmptyRow({ text }: { text: string }) {
       }}
     >
       {text}
+    </div>
+  );
+}
+
+// The saved calculator's share link: open it, or copy it for the client.
+//
+// The copy control is the one that can hurt. A link built on localhost looks
+// right here and is dead in a client's inbox, so when no public host is
+// configured the button does not copy a broken URL quietly — it refuses and
+// names the variable to set (see src/lib/share-link.ts).
+function OfferLinkRow({ publicId }: { publicId: string }) {
+  const shareUrl = offerShareUrl(publicId);
+  const copy = () => {
+    if (!shareUrl) {
+      toast.error(SHARE_URL_UNSET);
+      return;
+    }
+    navigator.clipboard.writeText(shareUrl);
+    toast.success("Client link copied");
+  };
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.015)",
+        padding: "10px 12px",
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+        Offer page is live
+      </div>
+      <div
+        style={{
+          fontSize: 10.5,
+          color: shareUrl ? "var(--text-subtle)" : "var(--danger, #f87171)",
+          marginTop: 4,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {shareUrl ?? SHARE_URL_UNSET}
+      </div>
+      <div className="flex items-center" style={{ gap: 12, marginTop: 9 }}>
+        <a
+          href={offerPath(publicId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--text-3)",
+            textDecoration: "none",
+          }}
+        >
+          <LinkIcon size={11} strokeWidth={2} />
+          Open
+        </a>
+        <button
+          onClick={copy}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 11,
+            fontWeight: 600,
+            color: shareUrl ? "var(--accent)" : "var(--text-subtle)",
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+          }}
+        >
+          Copy client link
+        </button>
+      </div>
     </div>
   );
 }
@@ -363,6 +416,38 @@ function InlineProgress({ label, pct }: { label: string; pct?: number }) {
 // Button twin of MiniAction (same look) that runs an in-place generator.
 // Pass no `label` for an icon-only button (used for secondary actions that need
 // to stay compact so a header's actions fit on one line).
+/** MiniButton's navigating twin — same chrome, but it goes somewhere. */
+function MiniLink({
+  href,
+  icon: Icon,
+  title,
+}: {
+  href: string;
+  icon: typeof Plus;
+  title: string;
+}) {
+  return (
+    <Link
+      href={href}
+      title={title}
+      aria-label={title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        color: "var(--text-3)",
+        background: "transparent",
+        border: "1px solid var(--line)",
+        borderRadius: 7,
+        padding: "4px 6px",
+        textDecoration: "none",
+        transition: "color 140ms ease, border-color 140ms ease",
+      }}
+    >
+      <Icon size={13} strokeWidth={1.9} />
+    </Link>
+  );
+}
+
 function MiniButton({
   onClick,
   icon: Icon,
@@ -469,12 +554,10 @@ function BusinessPanel({
   // patches this business's item so the new artifact appears without a reload.
   const [packRunning, setPackRunning] = useState(false);
   const [packProgress, setPackProgress] = useState<{ pct: number; label: string } | null>(null);
-  const [proposalRunning, setProposalRunning] = useState(false);
   // The questions, the sixteen intake fields and the fourteen build switches used
   // to be toggles that appended themselves BELOW this panel — which is what made
   // the page grow. They are now three tabs of one drawer over the page: one piece
   // of state, where null means closed and the value is which tab it opens on.
-  const [drawer, setDrawer] = useState<ClientDrawerTab | null>(null);
   // Refetch token for "what's still guessed", which is COMPUTED SERVER-SIDE from
   // the intake answers plus the stored research. It has exactly one job left now
   // that the panel itself lives in the drawer: a pack that finishes while the
@@ -510,7 +593,7 @@ function BusinessPanel({
   // and costs the panel no height, so whether it is open has nothing to do with
   // whether this business is expanded.
   const [expanded, setExpanded] = useState(false);
-  const open = expanded || packRunning || proposalRunning;
+  const open = expanded || packRunning;
 
   /**
    * Merge answers into this row's business — and the reason it goes through a ref
@@ -698,56 +781,6 @@ function BusinessPanel({
     }
   };
 
-  // Proposal — one-shot: generate pack-grounded content, then persist a row.
-  const runProposal = async () => {
-    if (proposalRunning) return;
-    setProposalRunning(true);
-    try {
-      const genRes = await fetch("/api/generate/proposal", {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ businessId: b.id }),
-      });
-      const genData = await genRes.json().catch(() => ({}));
-      if (!genRes.ok) {
-        toast.error(genData.error || "Failed to generate proposal");
-        return;
-      }
-      const saveRes = await fetch("/api/proposals", {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ businessId: b.id, ...genData.proposalData }),
-      });
-      const saveData = await saveRes.json().catch(() => ({}));
-      if (!saveRes.ok) {
-        toast.error(saveData.error || "Failed to save proposal");
-        return;
-      }
-      const p = saveData.proposal;
-      onChange({
-        ...item,
-        proposals: [
-          {
-            id: p.id,
-            title: p.title,
-            status: p.status,
-            publicId: p.publicId,
-            setupFee: p.setupFee,
-            monthlyPrice: p.monthlyPrice,
-            createdAt: p.createdAt,
-          },
-          ...item.proposals,
-        ],
-        lastActivity: new Date().toISOString(),
-      });
-      toast.success("Proposal generated");
-    } catch {
-      toast.error("Failed to generate proposal");
-    } finally {
-      setProposalRunning(false);
-    }
-  };
-
   // Arriving from a "Generate asset pack" button (CRM modal / Opportunities card)
   // routes here as /library?businessId=…&generate=1. When that flag targets this
   // panel, open it and immediately kick off the pack — the whole point is to land
@@ -847,9 +880,7 @@ function BusinessPanel({
           {!open && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <StatChip icon={Layers} label={item.hasPack ? "Pack" : "No pack"} on={item.hasPack} />
-              {item.proposals.length > 0 && (
-                <StatChip icon={ScrollText} label={String(item.proposals.length)} on />
-              )}
+              {item.offerPublicId && <StatChip icon={ScrollText} label="offer" on />}
             </div>
           )}
           <Link
@@ -887,144 +918,34 @@ function BusinessPanel({
           gap: 0,
         }}
       >
-        {/* Proposals */}
+        {/* Client offer — the share link, not a document to build */}
         <section style={{ ...COLUMN_SHELL, borderRight: "1px solid var(--line)" }}>
           <SectionHead
             icon={ScrollText}
-            label="Proposals"
-            count={item.proposals.length}
-            action={
-              <MiniButton
-                onClick={runProposal}
-                icon={Plus}
-                label={item.proposals.length ? "New" : "Generate"}
-                busy={proposalRunning}
-              />
-            }
+            label="Client offer"
+            count={item.offerPublicId ? 1 : 0}
           />
           <div style={COLUMN_BODY}>
-            {proposalRunning && (
-              <div style={{ marginBottom: item.proposals.length ? 8 : 0 }}>
-                <InlineProgress label="Generating proposal…" />
-              </div>
-            )}
-            {item.proposals.length === 0 ? (
-              proposalRunning ? null : <EmptyRow text="No proposals yet." />
+            {item.offerPublicId ? (
+              <OfferLinkRow publicId={item.offerPublicId} />
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {item.proposals.map((p) => {
-                  const sc = statusColor(p.status);
-                  return (
-                    <div
-                      key={p.id}
-                      style={{
-                        border: "1px solid var(--line)",
-                        borderRadius: 10,
-                        background: "rgba(255,255,255,0.015)",
-                        transition: "border-color 140ms ease, background 140ms ease",
-                      }}
-                      onMouseEnter={(e) => rowHover(e, true)}
-                      onMouseLeave={(e) => rowHover(e, false)}
-                    >
-                      <Link
-                        href={`/proposals/${p.id}`}
-                        style={{
-                          display: "block",
-                          padding: "10px 12px",
-                          textDecoration: "none",
-                          color: "inherit",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 8,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: "var(--text)",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {p.title}
-                          </span>
-                          <span
-                            style={{
-                              flex: "none",
-                              fontSize: 9.5,
-                              fontWeight: 700,
-                              letterSpacing: "0.07em",
-                              textTransform: "uppercase",
-                              color: sc.fg,
-                              background: sc.bg,
-                              borderRadius: 999,
-                              padding: "2px 7px",
-                            }}
-                          >
-                            {p.status}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 8,
-                            marginTop: 7,
-                          }}
-                        >
-                          <span
-                            className="tnum"
-                            style={{ fontSize: 11.5, color: "var(--money)", fontWeight: 600 }}
-                          >
-                            {formatCurrency(p.setupFee)}
-                            <span style={{ color: "var(--text-3)", fontWeight: 500 }}>
-                              {" "}
-                              + {formatCurrency(p.monthlyPrice)}/mo
-                            </span>
-                          </span>
-                          <span
-                            className="tnum"
-                            style={{ fontSize: 10.5, color: "var(--text-subtle)" }}
-                          >
-                            {fmtDate(p.createdAt)}
-                          </span>
-                        </div>
-                      </Link>
-                      <div
-                        style={{
-                          borderTop: "1px solid var(--line)",
-                          padding: "6px 12px",
-                        }}
-                      >
-                        <a
-                          href={`/p/${p.publicId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 5,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: "var(--text-3)",
-                            textDecoration: "none",
-                          }}
-                        >
-                          <LinkIcon size={11} strokeWidth={2} />
-                          Public link
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div>
+                <EmptyRow text="No calculator saved yet." />
+                <Link
+                  href={`/library/${item.businessId}/calculator`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    marginTop: 8,
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: "var(--accent)",
+                    textDecoration: "none",
+                  }}
+                >
+                  Open the calculator
+                </Link>
               </div>
             )}
           </div>
@@ -1038,29 +959,20 @@ function BusinessPanel({
             count={item.hasPack ? 4 : 0}
             action={
               <div style={{ display: "inline-flex", gap: 6 }}>
-                {/* THREE WAYS INTO THE SAME DRAWER, in the drawer's own tab order —
-                    Questions, Intake, Build — so the row and the tabs it lands on
-                    read as one thing, and the order is also most-used first: on a
-                    call he wants the five questions that move the report, then the
-                    other eleven, then the switches. All three used to unroll this
-                    panel downwards; now the panel behind does not move by a pixel.
-
-                    THE COUNT DOES NOT RIDE ON THE FIRST BUTTON. See the note above
-                    the drawer at the foot of this component for why. */}
-                <MiniButton
-                  onClick={() => setDrawer("questions")}
-                  icon={HelpCircle}
-                  title="Questions — what the scan couldn't settle, and what to ask on the call"
+                {/* BOTH WORKING SCREENS LIVE HERE, in call order: the calculator
+                    (run live on the Zoom) then intake (confirmed at kickoff), then
+                    generate. They used to hang off the business-detail page, which
+                    meant the work started from Opportunities and detoured through a
+                    record screen that had nothing to do with it. */}
+                <MiniLink
+                  href={`/library/${b.id}/calculator`}
+                  icon={Gauge}
+                  title="Leak calculator — their numbers, the six questions, what it costs a month"
                 />
-                <MiniButton
-                  onClick={() => setDrawer("intake")}
-                  icon={SlidersHorizontal}
-                  title="Client intake — the full set of questions, beside this record"
-                />
-                <MiniButton
-                  onClick={() => setDrawer("build")}
-                  icon={Workflow}
-                  title="The build — which of the 14 workflows this client gets"
+                <MiniLink
+                  href={`/library/${b.id}/intake`}
+                  icon={ClipboardList}
+                  title="Intake & build — their numbers, the six answers, the five decisions"
                 />
                 <MiniButton
                   onClick={runPack}
@@ -1200,56 +1112,12 @@ function BusinessPanel({
             action={null}
           />
           <div style={COLUMN_BODY}>
-            <ObservedFactsRow facts={item.observedFacts} />
+            <ObservedFactsRow facts={item.observedFacts} businessId={item.businessId} />
           </div>
         </section>
       </div>
       )}
 
-      {/* The questions, the intake form and the build switches, over the page
-          instead of under it. It is `position: fixed`, so it costs this panel no
-          height and the Library keeps its scroll position exactly where he left it.
-
-          WHY THERE IS NO COUNT BADGE ON THE QUESTIONS BUTTON. "5 of 8 findings
-          will read as industry pattern" is the reason to press it, and a number on
-          the button would be labelling the button rather than putting the card back
-          in this column — so it was worth having. It is not affordable HERE. The
-          count is computed server-side from the research snapshot plus the intake
-          answers, /api/assets/library does not carry it, and this component is
-          rendered once per client — so a badge means one leak-detection GET per
-          expanded row purely to draw a digit, and a second code path onto the same
-          endpoint that the drawer's own panel is already the authority on. Two
-          copies of one number is exactly what this change removed. The honest
-          version is one field in the library feed; see the handoff. Until then the
-          count is the first line inside the tab that opens by default, and the
-          button's tooltip says what is behind it. */}
-      <ClientDrawer
-        open={drawer !== null}
-        business={item.business}
-        businessName={b.name}
-        // `?? "questions"` is only ever read while open; on close the drawer
-        // unmounts, and the next open re-asserts whichever button he pressed.
-        initialTab={drawer ?? "questions"}
-        // A pack generation started BEFORE he opened this can land while it is
-        // open, and it can capture the research snapshot the whole guessed list
-        // is computed from — so the token that tracks that reaches the Questions
-        // tab. Nothing else needs to: it re-reads itself after each of its own
-        // answers, and it remounts fresh on every open.
-        questionsReloadKey={intelKey}
-        onClose={() => setDrawer(null)}
-        successMessage="Intake saved — regenerate to apply"
-        // MERGING IS NOT OPTIONAL (see ClientDrawer.onIntakeSaved): the form diffs
-        // its draft against this object to decide what is unsaved, so a merge
-        // skipped here leaves it looking dirty forever and it would ask him to save
-        // again on the way out, over a write that already landed.
-        onIntakeSaved={mergeBusiness}
-        // The answers he clicked straight onto the Questions tab, handed over as it
-        // closes (see ClientDrawer.onAnswersRecorded for why not sooner). They are
-        // already in the database; this is what stops the same question opening
-        // blank next time and getting asked twice on a call. Both of these can fire
-        // in the same tick — see mergeBusiness for why that needs a ref.
-        onAnswersRecorded={mergeBusiness}
-      />
 
       {gate && (
         <PackGateDialog
@@ -1381,7 +1249,7 @@ export default function LibraryPage() {
                     clickToCall: { state: "unknown", verdict: "unknown" },
                     observedAt: null,
                   },
-                  proposals: [],
+                  offerPublicId: null,
                 };
                 nextItems = [synth, ...nextItems];
               }
@@ -1449,11 +1317,11 @@ export default function LibraryPage() {
   const totals = useMemo(() => {
     return items.reduce(
       (acc, i) => {
-        acc.proposals += i.proposals.length;
+        acc.offers += i.offerPublicId ? 1 : 0;
         acc.packs += i.hasPack ? 1 : 0;
         return acc;
       },
-      { proposals: 0, packs: 0 }
+      { offers: 0, packs: 0 }
     );
   }, [items]);
 
@@ -1520,7 +1388,7 @@ export default function LibraryPage() {
                 <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
                 {totals.packs} asset pack{totals.packs === 1 ? "" : "s"}
                 <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
-                {totals.proposals} proposal{totals.proposals === 1 ? "" : "s"}
+                {totals.offers} client offer{totals.offers === 1 ? "" : "s"}
               </>
             )}
           </div>

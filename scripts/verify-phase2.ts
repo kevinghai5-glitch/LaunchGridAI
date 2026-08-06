@@ -754,9 +754,12 @@ const THE_FOURTEEN_IDS: readonly string[] = [
   "review-response",
 ];
 
-/** The four the catalogue marks CONDITIONAL — see C4 for what that does and does
- *  not mean. */
-const THE_FOUR_CONDITIONAL: readonly string[] = [
+/** The five the catalogue marks CONDITIONAL — see C4 for what that does and does
+ *  not mean. Webchat joined them when it left `every_build`: whether the snippet
+ *  can be placed is found during the build, so a document that claimed it either
+ *  way was claiming something nobody knew yet. Catalogue order. */
+const THE_CONDITIONAL: readonly string[] = [
+  "webchat-capture",
   "social-dm-capture",
   "text-to-pay",
   "database-reactivation",
@@ -811,16 +814,16 @@ check("C3 · every cited leak resolves to a real, in-scope taxonomy leak", () =>
   }
 });
 
-check("C4 · exactly four are CONDITIONAL — and conditional does NOT mean left out", () => {
+check("C4 · exactly five are CONDITIONAL — and conditional does NOT mean left out", () => {
   // READ THIS BEFORE USING defaultOn. `false` means "a fact about the client
-  // decides this one", not "it is off". All four rules are OFF-SWITCHES: the answer
+  // decides this one", not "it is off". All five rules are OFF-SWITCHES: the answer
   // that removes the workflow is named in applicability.offWhen, and every other
   // answer — including "we never asked" — leaves it in.
   const conditional = WORKFLOWS.filter((w) => !w.defaultOn);
   show("defaultOn = false", conditional.map((w) => w.id));
   for (const w of conditional) show(`  ${w.id.padEnd(38)}`, `${w.applicability.kind} — ${w.applicability.kind === "every_build" ? "(no rule)" : w.applicability.offWhen}`);
-  assert.equal(conditional.length, 4, `expected exactly 4 conditional workflows, found ${conditional.length}`);
-  assert.deepStrictEqual(conditional.map((w) => w.id), THE_FOUR_CONDITIONAL, "the conditional four are not the four named");
+  assert.equal(conditional.length, 5, `expected exactly 5 conditional workflows, found ${conditional.length}`);
+  assert.deepStrictEqual(conditional.map((w) => w.id), THE_CONDITIONAL, "the conditional five are not the five named");
 
   // The flag and the rule must agree, or the toggles screen shows the wrong thing.
   for (const w of WORKFLOWS) {
@@ -832,9 +835,9 @@ check("C4 · exactly four are CONDITIONAL — and conditional does NOT mean left
     );
   }
 
-  // THE HONEST HALF. With nothing on file, all four are still in the build.
+  // THE HONEST HALF. With nothing on file, all five are still in the build.
   const resolved = resolveWorkflows({ intake: null, firedLeaks: null, overrides: null });
-  for (const id of THE_FOUR_CONDITIONAL) {
+  for (const id of THE_CONDITIONAL) {
     const row = resolvedWorkflowById(resolved, id)!;
     show(`  ${id.padEnd(38)} with NOTHING on file`, `${row.on ? "IN THE BUILD" : "LEFT OUT"} (${row.source})`);
     assert.strictEqual(row.on, true, `"${id}" is defaultOn:false and resolves OFF with no client facts at all — an unanswered question has removed a workflow the client paid for`);
@@ -1237,14 +1240,27 @@ check("D7 · ONLY OVERRIDES ARE PERSISTED — never the resolved set", () => {
   assert.deepStrictEqual(readStoredToggles(null), {}, "a null column did not read as no decisions");
   assert.deepStrictEqual(readStoredToggles(["webchat-capture"]), {}, "an array column did not read as no decisions");
 
-  // [SOURCE-LEVEL] the write path. The route stores the value withOverride returned
-  // and nothing else — this is the line that would have to change for a resolved
-  // row to reach the column.
-  const write = sourceLine("src/app/api/workflow-toggles/route.ts", /data:\s*\{\s*workflowToggles:/);
-  const built = sourceLine("src/app/api/workflow-toggles/route.ts", /const next = withOverride\(/);
-  show("[SOURCE-LEVEL] write         ", write ? `L${write.line}  ${write.text}` : "(NOT FOUND)");
-  show("[SOURCE-LEVEL] what it writes", built ? `L${built.line}  ${built.text}` : "(NOT FOUND)");
-  assert(write && built, "the PATCH route no longer writes withOverride(...) into workflowToggles — check what it writes now");
+  // [SOURCE-LEVEL] the write path, now /api/intake/[businessId].
+  //
+  // WHAT THIS CHECK PROTECTS, RESTATED. The danger was never "a key got stored";
+  // it was storing the RESOLVED SET — all fourteen — which freezes today's
+  // defaults into every existing client, so changing a default later leaves the
+  // clients who never touched it on the old one.
+  //
+  // The intake screen closes that structurally rather than by convention: the
+  // write loop iterates DECIDABLE_WORKFLOWS, so the nine every_build workflows
+  // have no key to write and a stray one arriving in the payload is dropped. The
+  // five that ARE written were each confirmed by hand on the screen, which is a
+  // decision worth persisting, not a default worth freezing.
+  const write = sourceLine("src/app/api/intake/[businessId]/route.ts", /workflowToggles:\s*decisions/);
+  const scoped = sourceLine("src/app/api/intake/[businessId]/route.ts", /for \(const w of DECIDABLE_WORKFLOWS\)/);
+  show("[SOURCE-LEVEL] write        ", write ? `L${write.line}  ${write.text}` : "(NOT FOUND)");
+  show("[SOURCE-LEVEL] scoped to the five", scoped ? `L${scoped.line}  ${scoped.text}` : "(NOT FOUND)");
+  assert(write, "the intake route no longer writes workflowToggles — check what it writes now");
+  assert(
+    scoped,
+    "the write is no longer scoped to DECIDABLE_WORKFLOWS — the nine every_build workflows could now be frozen into a client's row"
+  );
 });
 
 check("D8 · DETERMINISM — the same inputs resolve identically, twice", () => {
@@ -1348,12 +1364,16 @@ check("E2 · [COMPILE-TIME] nothing the resolver takes could carry copy emphasis
     [],
     "a copy-emphasis field is now declared on ClientIntake, so it can reach the resolver through the intake argument"
   );
-  // And the field the toggles API deliberately does NOT copy across from the row.
-  const note = sourceLine("src/app/api/workflow-toggles/route.ts", /NOT READ, ON PURPOSE: servicesFocus/);
-  const routeCode = codeOnly("src/app/api/workflow-toggles/route.ts");
-  show("[SOURCE-LEVEL] the route's own note", note ? `L${note.line}  ${note.text}` : "(NOT FOUND)");
-  show("[SOURCE-LEVEL] route CODE reads servicesFocus", routeCode.includes("servicesFocus"));
-  assert(!routeCode.includes("servicesFocus"), "the toggles route now copies servicesFocus into the intake it resolves against");
+  // And the field the intake API must never let near a build decision. Same claim
+  // as before, pointed at the route that now owns the write: copy emphasis shapes
+  // wording, and must never change what a client actually gets installed.
+  const routeCode = codeOnly("src/app/api/intake/[businessId]/route.ts");
+  show("[SOURCE-LEVEL] intake route CODE reads servicesFocus", routeCode.includes("servicesFocus"));
+  show("[SOURCE-LEVEL] intake route CODE reads buildPriorities", routeCode.includes("buildPriorities"));
+  assert(
+    !routeCode.includes("servicesFocus") && !routeCode.includes("buildPriorities"),
+    "the intake route now reads a copy-emphasis field on the path that writes build decisions"
+  );
 });
 
 /* ════════════════════════════════════════════════════════════════════════════

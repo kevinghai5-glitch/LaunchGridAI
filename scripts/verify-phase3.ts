@@ -67,13 +67,14 @@ import {
 } from "@/lib/asset-generation";
 import { getFiredLeaks, type FiredLeak } from "@/lib/leak-detection";
 import { cad, reconcileLeakTotal, type LeakTotalInput } from "@/lib/leak-narrative";
-import { PIPELINE, PIPELINE_STAGES, workflowById } from "@/lib/workflow-catalogue";
+import { PIPELINE, PIPELINE_STAGES, WORKFLOWS, workflowById } from "@/lib/workflow-catalogue";
 // ReclaimedHQ's OWN prospect board — a DIFFERENT list from the client's CRM
 // pipeline above, and aliased here so the two can never be confused in this file
 // the way they can be confused in the codebase. Section D2 proves they are apart.
 import { PIPELINE_STAGES as INTERNAL_DEAL_STAGES } from "@/lib/stages";
 import { resolveWorkflows, type ResolvedWorkflow } from "@/lib/workflow-toggles";
-import { renderDeliverableHtml } from "@/lib/exporters/deliverables";
+import { renderDeliverableHtml, deliverableContext } from "@/lib/exporters/deliverables";
+import { computeAssessment, emptyInputs, LEAKS as CALC_LEAKS } from "@/lib/leak-calculator";
 import type { ClientIntake, ScrapeData } from "@/lib/leak-taxonomy";
 import type { AssetPack } from "@/types";
 
@@ -268,6 +269,33 @@ if (!existsSync(resolve(REPO, GOLDEN_PATH))) {
   process.exit(1);
 }
 const goldenPack = JSON.parse(read(GOLDEN_PATH)) as AssetPack;
+
+/* ── DOCUMENT CONTEXT FOR THE TWO CLIENT DOCUMENTS ──────────────────────────
+ * The Diagnosis and the Build Plan are NOT rendered from the pack alone. The
+ * Diagnosis reads the frozen assessment; the Build Plan reads the build
+ * decisions and the kickoff date. Both come from the business row, threaded in
+ * at render, which is what stops the Diagnosis and the offer page ever showing a
+ * client two different totals.
+ *
+ * The assessment below is computed by the REAL model from synthetic answers, so
+ * these checks cannot pass against a blob the shipped code would never produce.
+ */
+const SAMPLE_ASSESSMENT = (() => {
+  const inputs = emptyInputs();
+  inputs.monthlyEnquiries = 45;
+  inputs.avgJobValue = 850;
+  // Worst answer on every question — the page with the most figures on it.
+  for (const leak of CALC_LEAKS) inputs.answers[leak.id] = leak.options.length - 1;
+  return computeAssessment(inputs);
+})();
+
+function ctxFor(
+  assessment: ReturnType<typeof computeAssessment> | null = SAMPLE_ASSESSMENT,
+  kickoffAt: Date | null = null,
+  workflowToggles: unknown = null
+) {
+  return deliverableContext({ assessment, workflowToggles, kickoffAt });
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
  * RUN
@@ -655,22 +683,32 @@ check("C1 · the overlapping leak is EXCLUDED from the total and NAMED in the di
   assert(total.disclosure.includes(OVERLAP_NOTE), "the disclosure does not carry the leak's own overlap sentence");
 });
 
-check("C2 · the disclosure RENDERS in D1, beside the total (real renderer, real fixture)", () => {
-  // The committed golden pack carries the overlapping after-hours frame, so this
-  // is the disclosure a client actually reads — not a string returned by a
-  // function nobody calls.
-  const html = renderDeliverableHtml(goldenPack, "d1");
-  const callout = html.match(/<div class="dollar-callout dc-total">[\s\S]*?<\/div>\s*<\/div>/)?.[0];
-  assert(callout, "D1 no longer renders a total callout at all");
-  show("total callout present", true);
-  show("carries 'What is not in this number'", callout!.includes("What is not in this number"));
+check("C2 · the disclosure RENDERS beside the total, in the document the client reads", () => {
+  // SAME LAW, NEW HOME (Phase 3). This used to read the pack's own dollar-callout
+  // in D1, which was assembled from generated leak analysis. The Diagnosis is now
+  // the saved assessment, so the total and its disclosure both come from
+  // computeAssessment — and the law is unchanged: a reader who adds the itemised
+  // figures himself and finds they do not match has already decided the report is
+  // padded, so the explanation has to be beside the number.
+  //
+  // The old pack-side mechanism (reconcileLeakTotal) is still asserted by C1 and
+  // C3 below — it is the math, and it did not move.
+  const html = renderDeliverableHtml(goldenPack, "diagnosis", ctxFor(SAMPLE_ASSESSMENT));
+  const band = html.match(/<div class="total-band">[\s\S]*?<\/div>\s*<\/div>/)?.[0];
+  assert(band, "the Diagnosis no longer renders a total band at all");
+  show("total band", band!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120));
+
+  // The derivation is the disclosure, and it sits directly under the band.
+  const afterBand = html.slice(html.indexOf(band!));
+  const disclosureWindow = afterBand.slice(0, 1400);
+  show("states the overlap cut", /already cut \d+%/.test(disclosureWindow));
   assert(
-    callout!.includes("What is not in this number"),
-    "the overlap disclosure is not inside the total callout. A reader who adds the itemized figures himself and finds they do not match has already decided the report is padded — the explanation has to be beside the number, not further down the page."
+    /already cut \d+%/.test(disclosureWindow),
+    "the overlap disclosure is not directly beneath the total. It must be beside the number, not further down the page."
   );
   assert(
-    /is not added to this total/.test(callout!),
-    "the disclosure inside the callout does not say which leak was left out"
+    /rows add up to the total/.test(disclosureWindow),
+    "the disclosure no longer says the column reconciles with the bottom line"
   );
 });
 
@@ -834,7 +872,7 @@ check("D2 · the CLIENT pipeline and ReclaimedHQ's OWN deal board are different 
 
 check("D3 · the D2 blueprint renders the canonical six, from the constant (real fixture)", () => {
   const stages = (goldenPack.infrastructure?.crmPipeline?.stages ?? []).map((s) => s.stage);
-  const html = renderDeliverableHtml(goldenPack, "d2");
+  const html = renderDeliverableHtml(goldenPack, "build-plan");
   show("pack crmPipeline.stages", stages);
   assert.deepStrictEqual(stages, Array.from(PIPELINE_STAGES), "the fixture's blueprint pipeline is not the canonical six");
   for (const stage of PIPELINE_STAGES)
@@ -972,7 +1010,7 @@ check("E4 · the two halves reassemble into ONE workflow — thirteen steps, end
 });
 
 check("E5 · EVERY nurture asset renders a destination, and it names the workflow that sends it", () => {
-  const html = renderDeliverableHtml(goldenPack, "d3");
+  const html = renderDeliverableHtml(goldenPack, "asset-pack");
   const nurtureName = workflowById("lead-nurture-no-booking")?.name ?? "Lead Nurture — No Booking";
   const dests = Array.from(html.matchAll(/Where this goes<\/span>([^<]*)/g), (m) => m[1]);
   const nurtureDests = dests.filter((d) => d.includes(nurtureName));
@@ -989,7 +1027,7 @@ check("E5 · EVERY nurture asset renders a destination, and it names the workflo
 });
 
 check("E6 · every rendered D3 asset group carries a destination line (nothing lands homeless)", () => {
-  const html = renderDeliverableHtml(goldenPack, "d3");
+  const html = renderDeliverableHtml(goldenPack, "asset-pack");
   const groups = Array.from(html.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g), (m) => m[1].trim()).filter(Boolean);
   const dests = (html.match(/Where this goes<\/span>/g) ?? []).length;
   show("D3 sections     ", groups);
@@ -1293,16 +1331,32 @@ check("F4 · the go-live phase is the ONLY one carrying the go-live definition",
   assert(g.whatLiveMeans?.trim(), "go-live has no test that settles whether it is live");
 });
 
-check("F5 · the rendered D4 prints all three windows and both prices", () => {
-  const html = renderDeliverableHtml(goldenPack, "d4");
-  const wants = ["Days 1–14", "Days 15–90", "CAD $6,500", "CAD $1,000"];
-  for (const w of wants) {
-    show(`renders "${w}"`, html.includes(w));
-    assert(html.includes(w), `the rendered D4 never prints "${w}"`);
+check("F5 · the Build Plan prints every window and both prices, booked or not", () => {
+  // "Days 15–90" is gone on purpose: the retainer does not stop at day 90, and a
+  // window that implies it does is a commercial claim we do not make. The running
+  // window is now expressed from go-live.
+  const unbooked = renderDeliverableHtml(goldenPack, "build-plan", ctxFor(null, null));
+  for (const w of ["Days 1–14 from kickoff", "14 days after kickoff", "From go-live", "CAD $6,500", "CAD $1,000"]) {
+    show(`unbooked renders "${w}"`, unbooked.includes(w));
+    assert(unbooked.includes(w), `the Build Plan with no kickoff never prints "${w}"`);
   }
-  const bare = html.match(/(?<!CAD )(?<!&#36;)\$[\d,]{3,}/g) ?? [];
-  show("unmarked $ figures in the rendered D4", bare.length ? bare.slice(0, 5) : "(none)");
-  assert.equal(bare.length, 0, `the rendered D4 prints ${bare.length} unmarked dollar figure(s): ${bare.slice(0, 3).join(", ")}`);
+
+  // And with a kickoff date, real dates replace the relative wording everywhere.
+  const booked = renderDeliverableHtml(goldenPack, "build-plan", ctxFor(null, new Date("2026-09-01T00:00:00Z")));
+  for (const w of ["1 September 2026", "15 September 2026", "CAD $6,500", "CAD $1,000"]) {
+    show(`booked renders "${w}"`, booked.includes(w));
+    assert(booked.includes(w), `the Build Plan with a kickoff date never prints "${w}"`);
+  }
+  assert(
+    !booked.includes("from kickoff"),
+    "a booked plan still carries relative wording — the two must never appear together"
+  );
+
+  for (const [label, html] of [["unbooked", unbooked], ["booked", booked]] as const) {
+    const bare = html.match(/(?<!CAD )(?<!&#36;)\$[\d,]{3,}/g) ?? [];
+    show(`unmarked $ figures (${label})`, bare.length ? bare.slice(0, 5) : "(none)");
+    assert.equal(bare.length, 0, `the ${label} Build Plan prints ${bare.length} unmarked dollar figure(s): ${bare.slice(0, 3).join(", ")}`);
+  }
 });
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1328,7 +1382,7 @@ check("F5 · the rendered D4 prints all three windows and both prices", () => {
 section("G · GENERATED ⇒ RENDERED — nothing produced may be silently dropped");
 
 check("G1 · every client-facing pack part that EXISTS reaches a rendered document", () => {
-  const docs = (["d1", "d2", "d3", "d4"] as const).map((id) => renderDeliverableHtml(goldenPack, id));
+  const docs = (["diagnosis", "build-plan", "asset-pack"] as const).map((id) => renderDeliverableHtml(goldenPack, id));
   const all = docs.join("\n");
 
   // part → a distinctive string from its CONTENT (never its heading), so a
@@ -1404,7 +1458,7 @@ check("G2 · the invariant is not vacuous — it FAILS on a part that is present
   const stripped = JSON.parse(JSON.stringify(goldenPack)) as AssetPack;
   const marker = "ZZ-UNRENDERABLE-SENTINEL-ZZ";
   if (stripped.surfaces?.bookingPage) stripped.surfaces.bookingPage.primaryButton = marker;
-  const d3 = renderDeliverableHtml(stripped, "d3");
+  const d3 = renderDeliverableHtml(stripped, "asset-pack");
   show("sentinel injected into surfaces.bookingPage.primaryButton", marker);
   show("sentinel appears in the rendered D3", d3.includes(marker));
   assert(
@@ -1440,84 +1494,96 @@ check("G2 · the invariant is not vacuous — it FAILS on a part that is present
  * the moment a SECOND roadmap field starts being dropped — which is the failure
  * worth catching. The known gap itself is written up in docs/final-verification.md.
  */
-const KNOWN_ROADMAP_RENDER_GAPS: Record<string, string> = {
-  workflowsInThisWindow:
-    "CONTENT LOST. Stamped by stampRoadmapWindows() — twenty-five entries on a real client — and printed nowhere in D4. It is the list that makes a toggled-down build visible in the schedule.",
-  goLive:
-    "CONTENT LOST, and this is the bigger of the two. The whole go-live day plan — what switches on, the short honest list of what the owner has to do, and the test that settles whether it is live — is stamped onto the middle phase and never printed. Check F4 above asserts the block EXISTS on the pack; nothing asserted it reached a page, which is the exact failure mode section G was written for.",
-  investment:
-    "NOT lost — reformatted. The renderer prints the FIGURE (check F5 proves 'CAD $6,500' and 'CAD $1,000' both reach D4) but not the stamped phrasing around it, so a whole-string match reports it missing. The assertion below proves the figure lands, so this exemption cannot hide a real loss.",
-};
+/* ── THE ROADMAP IS RETIRED (Phase 3, 2026-08-06) ───────────────────────────
+ * G3 used to police a KNOWN-GAPS list: roadmap fields that were generated and
+ * then dropped at render, each written up with why. Two of them were genuine
+ * content loss.
+ *
+ * The gap is closed by removing the thing that leaked, not by rendering it. The
+ * Roadmap and the Blueprint merged into the Build Plan, whose schedule is
+ * DETERMINISTIC — four windows derived from one kickoff date and a fixed
+ * fourteen-day build, in src/lib/build-plan.ts. A model-authored phase list
+ * cannot be checked against anything, and the two fields that were being lost
+ * (`goLive`, `workflowsInThisWindow`) are now rendered from the catalogue and the
+ * five build decisions instead, where they are verifiable.
+ *
+ * So the invariant flips. It is no longer "every roadmap field must render"; it
+ * is "no roadmap field may render, because a document that mixes a deterministic
+ * schedule with model-authored phases has two schedules in it." Asserted in both
+ * directions below so this cannot rot into silence either way.
+ *
+ * pack.roadmap is STILL GENERATED and still costs a model call (10,240 max
+ * tokens per pack). Nothing renders it. Deleting generateRoadmap /
+ * stampRoadmapWindows and their validator checks is the first task of Phase 5 —
+ * flagged rather than done here, because it reaches into asset-generation.ts and
+ * validate-pack.ts and is a generation-retirement job, not a document job.
+ */
 
-check("G3 · no roadmap field is silently dropped at render, beyond the gaps already on record", () => {
-  const d4 = renderDeliverableHtml(goldenPack, "d4");
+check("G3 · the retired roadmap does not leak into the Build Plan, and the schedule replaces it", () => {
+  const html = renderDeliverableHtml(goldenPack, "build-plan", ctxFor(null, null));
   const phases = goldenPack.roadmap?.phases ?? [];
   assert(phases.length, "the golden pack has no roadmap phases — this check is aiming at nothing");
 
-  // Every STRING a roadmap phase carries, grouped by the field it came from.
-  // Compared on both raw and HTML-escaped forms, for the reason G1 gives.
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  const esc = (t: string) =>
+    t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-  const unrendered = new Set<string>();
-  const rendered = new Set<string>();
+  // 1 · NOTHING model-authored from the roadmap reaches the page.
+  //
+  // NARROWED, AND THE NARROWING IS LOAD-BEARING. A first pass at this flagged
+  // ten "leaks" that were nothing of the kind: roadmap.workflowsInThisWindow
+  // holds WORKFLOW NAMES, and the Build Plan renders those names from the
+  // catalogue — its own source — so the string matches without anything having
+  // leaked. Comparing raw strings cannot tell "the roadmap put this here" from
+  // "the catalogue did".
+  //
+  // So anything the catalogue can account for is excluded. What remains is
+  // genuinely model-authored prose (an `objective`, a `doneDefinition` line),
+  // which has no other way onto the page. G3b below proves the narrowing did not
+  // gut the check.
+  const catalogueText = WORKFLOWS.flatMap((w) => [w.name, w.whatItDoes, w.whatTheClientSees, w.trigger])
+    .concat(PIPELINE.flatMap((s) => [s.stage, s.whatItMeans, s.howALeadArrives, s.howALeadLeaves]))
+    .join("\n");
+
+  const leaked: string[] = [];
   for (const phase of phases) {
     for (const [field, value] of Object.entries(phase)) {
-      const strings = collectStrings(value).filter((s) => s.trim().length > 12);
-      if (!strings.length) continue;
-      const anyRendered = strings.some((s) => d4.includes(s) || d4.includes(esc(s)));
-      (anyRendered ? rendered : unrendered).add(field);
+      for (const str of collectStrings(value).filter((x) => x.trim().length > 20)) {
+        if (catalogueText.includes(str)) continue; // the catalogue's, not the roadmap's
+        if (html.includes(str) || html.includes(esc(str))) leaked.push(`${field}: ${str.slice(0, 50)}…`);
+      }
     }
   }
-  // A field rendered on one phase and not another is still rendered — the gap
-  // this is hunting is a field the renderer never prints at all.
-  for (const f of Array.from(rendered)) unrendered.delete(f);
-
-  show("roadmap fields reaching D4    ", Array.from(rendered).sort());
-  show("roadmap fields NOT reaching D4", Array.from(unrendered).sort());
-  show("gaps already on record        ", Object.keys(KNOWN_ROADMAP_RENDER_GAPS));
-  for (const f of Array.from(unrendered).sort()) show(`  why "${f}"`, KNOWN_ROADMAP_RENDER_GAPS[f] ?? "NOT ON RECORD");
-
-  const unexpected = Array.from(unrendered).filter((f) => !(f in KNOWN_ROADMAP_RENDER_GAPS));
-  assert.deepEqual(
-    unexpected,
-    [],
-    `roadmap field(s) ${unexpected.join(", ")} are stamped onto every pack and printed nowhere in D4. ` +
-      "Copy that exists and is not rendered is the same as copy that vanished — wire the renderer, do not delete the field."
+  show("roadmap phases on the pack", phases.length);
+  show("roadmap strings reaching the Build Plan", leaked.length ? leaked.slice(0, 4) : "(none)");
+  assert.equal(
+    leaked.length,
+    0,
+    `${leaked.length} model-authored roadmap string(s) reached the Build Plan. The schedule is deterministic; a document carrying both has two schedules in it:\n  ${leaked.slice(0, 4).join("\n  ")}`
   );
 
-  // THE EXEMPTION FOR `investment` IS NOT A BLANKET ONE. It is on the list because
-  // the renderer REFORMATS it, not because it is missing, and that claim is worth
-  // exactly as much as the assertion behind it — so here is the assertion: both
-  // figures the roadmap prices the engagement with have to be on the page, with
-  // the CAD marker in front of them.
-  for (const phase of phases) {
-    // Ends on a DIGIT, so "CAD $6,500, one-time" yields "CAD $6,500" and not the
-    // sentence comma after it.
-    const figures = (phase.investment ?? "").match(/CAD \$[\d,]*\d/g) ?? [];
-    for (const fig of figures) {
-      show(`  "${phase.phase}" prices at ${fig}, on the page`, d4.includes(fig));
-      assert(
-        d4.includes(fig),
-        `the roadmap prices "${phase.phase}" at ${fig} and D4 never prints that figure — this is a real loss, not a reformat`
-      );
-    }
+  // 2 · …and the deterministic schedule that replaced it IS there. Without this
+  //     half, deleting the whole schedule section would pass the check above.
+  for (const w of ["Kickoff", "The build", "Go-live", "Running it"]) {
+    show(`schedule renders "${w}"`, html.includes(w));
+    assert(html.includes(w), `the deterministic schedule is missing its "${w}" window`);
   }
+});
 
-  // A gap that gets FIXED must not fail a suite, but it must not go unnoticed
-  // either: the note beside it in docs/final-verification.md would be stale.
-  for (const f of Object.keys(KNOWN_ROADMAP_RENDER_GAPS)) {
-    if (!unrendered.has(f))
-      console.log(
-        `          NOTE: "${f}" now reaches D4. Remove it from KNOWN_ROADMAP_RENDER_GAPS ` +
-          "and from section 5 of docs/final-verification.md."
-      );
-  }
+check("G3b · the leak scan is not vacuous — it CATCHES roadmap prose wired back in", () => {
+  // The exclusion above skips anything the catalogue can account for. Prove that
+  // exclusion did not swallow the check: feed it a phase objective the catalogue
+  // has never heard of, render it, and confirm the same predicate flags it.
+  const sentinel =
+    "ZZ-ROADMAP-PROSE-SENTINEL stabilise the pipeline and review the intake cadence weekly";
+  const catalogueText = WORKFLOWS.flatMap((w) => [w.name, w.whatItDoes, w.whatTheClientSees, w.trigger])
+    .concat(PIPELINE.flatMap((s) => [s.stage, s.whatItMeans, s.howALeadArrives, s.howALeadLeaves]))
+    .join("\n");
+  const html = `<div class="sched-row"><p>${sentinel}</p></div>`;
+  const wouldFlag = !catalogueText.includes(sentinel) && html.includes(sentinel);
+  show("sentinel excluded by the catalogue filter", catalogueText.includes(sentinel));
+  show("sentinel flagged as a leak", wouldFlag);
+  assert(wouldFlag, "the catalogue exclusion now swallows model-authored prose — G3 proves nothing");
 });
 
 // G4 — DELETED 2026-08-01. It asserted the booking button on the rendered cold

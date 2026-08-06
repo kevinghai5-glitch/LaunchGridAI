@@ -19,11 +19,12 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
-import { PublicProposal } from "@/components/proposals/PublicProposal";
+import { ClientOffer } from "@/components/client/ClientOffer";
 import { STATUS_META, type LeadStatus, type ZoomOutcome } from "@/lib/call-queue";
 // Type-only: the server page computes the four values and ships the small object.
 import type { ObservedFacts } from "@/lib/observed-facts";
-import type { ProposalContent } from "@/types";
+import type { ClientOffer as Offer } from "@/lib/client-offer";
+import { rangeText } from "@/lib/leak-calculator";
 
 interface RunnerBusiness {
   name: string;
@@ -41,15 +42,17 @@ interface ZoomRunnerProps {
    *  audit (owner ruling, 2026-08-01): same slot on the call, numbers instead of
    *  prose, because a number cannot hallucinate. */
   observedFacts: ObservedFacts | null;
-  proposal: ProposalContent;
+  /** The saved calculator, assembled. Null when it has not been filled in for
+   *  this business — the phases then say so and link to it. */
+  offer: Offer | null;
 }
 
-type PhaseId = "diagnose" | "pivot" | "proposal";
+type PhaseId = "diagnose" | "pivot" | "offer";
 
 const PHASES: { id: PhaseId; n: string; label: string; window: string; icon: typeof Stethoscope }[] = [
   { id: "diagnose", n: "01", label: "Diagnose", window: "0–10 min", icon: Stethoscope },
   { id: "pivot", n: "02", label: "Pivot", window: "10–15 min", icon: Shuffle },
-  { id: "proposal", n: "03", label: "Proposal", window: "15–30 min", icon: FileText },
+  { id: "offer", n: "03", label: "Offer", window: "15–30 min", icon: FileText },
 ];
 
 // The four ways a Zoom ends → the lifecycle state each writes (via resolveZoomOutcome).
@@ -73,7 +76,7 @@ function toneColor(tone: "success" | "accent" | "danger" | "muted"): string {
   return "var(--text-3)";
 }
 
-export function ZoomRunner({ businessId, business, observedFacts, proposal }: ZoomRunnerProps) {
+export function ZoomRunner({ businessId, business, observedFacts, offer }: ZoomRunnerProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<PhaseId>("diagnose");
   const [submitting, setSubmitting] = useState<ZoomOutcome | null>(null);
@@ -201,8 +204,10 @@ export function ZoomRunner({ businessId, business, observedFacts, proposal }: Zo
 
         {/* Phase body */}
         {phase === "diagnose" && <DiagnosePhase facts={observedFacts} />}
-        {phase === "pivot" && <PivotPhase proposal={proposal} />}
-        {phase === "proposal" && <ProposalPhase business={business} proposal={proposal} />}
+        {phase === "pivot" &&
+          (offer ? <PivotPhase offer={offer} /> : <NoAssessment businessId={businessId} />)}
+        {phase === "offer" &&
+          (offer ? <OfferPhase offer={offer} /> : <NoAssessment businessId={businessId} />)}
 
         {/* Prev / next */}
         <div className="flex items-center justify-between" style={{ marginTop: 24 }}>
@@ -322,44 +327,54 @@ function DiagnosePhase({ facts }: { facts: ObservedFacts | null }) {
 }
 
 // ── Phase 2: Pivot — each leak becomes the thing we deploy (DIY vs DFY) ─────────
-function PivotPhase({ proposal }: { proposal: ProposalContent }) {
-  const leaks = proposal.problem?.leaks ?? [];
-  const components = proposal.deliverables ?? [];
+// Both halves of every pair come from the calculator: the answer they gave and
+// the figure it carries on the left, the fix defined against that same question
+// on the right. Nothing here is written for the call — it is the row they just
+// watched being filled in.
+function PivotPhase({ offer }: { offer: Offer }) {
   return (
     <div className="panel" style={{ padding: 24, borderRadius: 14 }}>
       <ScriptCue text="Pivot from pain to path: “Here's exactly what's leaking, and here's what closes each one.” Then frame the choice — do it yourself, or have us build and run it." />
 
+      {offer.allClean && (
+        <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 16, lineHeight: 1.55 }}>
+          Every area came back covered. There is no leak column to walk — go straight to
+          what the build makes automatic.
+        </p>
+      )}
+
       <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
-        {leaks.map((leak, i) => {
-          const fix = components[i];
-          return (
-            <div
-              key={i}
-              className="flex items-stretch"
-              style={{ gap: 0, borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)" }}
-            >
-              <div style={{ flex: 1, padding: "14px 16px", background: "rgba(255,80,80,0.04)" }}>
-                <div className="lg-mono" style={{ fontSize: 10.5, color: "oklch(0.62 0.2 25)", marginBottom: 4 }}>
-                  LEAK{leak.monthlyCost ? ` · ${leak.monthlyCost}` : ""}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{leak.title}</div>
-                <p style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 5, lineHeight: 1.55 }}>{leak.detail}</p>
+        {offer.leakRows.map((row) => (
+          <div
+            key={row.id}
+            className="flex items-stretch"
+            style={{ gap: 0, borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)" }}
+          >
+            <div style={{ flex: 1, padding: "14px 16px", background: "rgba(255,80,80,0.04)" }}>
+              <div className="lg-mono" style={{ fontSize: 10.5, color: "oklch(0.62 0.2 25)", marginBottom: 4 }}>
+                LEAK · {rangeText(row.monthlyLow ?? 0, row.monthlyHigh ?? 0)}/MO
+                {row.assumed ? " · ASSUMED" : ""}
               </div>
-              <div className="grid place-items-center" style={{ width: 40, flex: "none", background: "var(--surface-2)" }}>
-                <ArrowRight size={16} strokeWidth={2} style={{ color: "var(--text-4)" }} />
-              </div>
-              <div style={{ flex: 1, padding: "14px 16px", background: "rgba(52,199,89,0.04)" }}>
-                <div className="lg-mono" style={{ fontSize: 10.5, color: "var(--money)", marginBottom: 4 }}>
-                  WE DEPLOY{fix?.isRetainer ? " · RUNS MONTHLY" : ""}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fix?.name ?? "Covered in the build"}</div>
-                {fix?.detail && (
-                  <p style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 5, lineHeight: 1.55 }}>{fix.detail}</p>
-                )}
-              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{row.label}</div>
+              {row.consequence && (
+                <p style={{ fontSize: 12.5, color: "var(--text-3)", marginTop: 5, lineHeight: 1.55 }}>
+                  {row.consequence}
+                </p>
+              )}
             </div>
-          );
-        })}
+            <div className="grid place-items-center" style={{ width: 40, flex: "none", background: "var(--surface-2)" }}>
+              <ArrowRight size={16} strokeWidth={2} style={{ color: "var(--text-4)" }} />
+            </div>
+            <div style={{ flex: 1, padding: "14px 16px", background: "rgba(52,199,89,0.04)" }}>
+              <div className="lg-mono" style={{ fontSize: 10.5, color: "var(--money)", marginBottom: 4 }}>
+                WE DEPLOY
+              </div>
+              <p style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 0, lineHeight: 1.55 }}>
+                {row.fix || "Covered in the build"}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* DIY vs DFY framing */}
@@ -374,8 +389,8 @@ function PivotPhase({ proposal }: { proposal: ProposalContent }) {
         <div style={{ padding: "16px 18px", borderRadius: 12, border: "1px solid oklch(0.55 0.18 248 / 0.4)", background: "var(--accent-soft)" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>Done for you</div>
           <p style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 6, lineHeight: 1.55 }}>
-            We build and run the whole system — {proposal.deliverables.length} components, live in two
-            weeks, then managed monthly. That&apos;s the proposal on the next screen.
+            We build and run the whole system — {offer.installedCount} automations, live in two
+            weeks, then managed monthly. That&apos;s the offer on the next screen.
           </p>
         </div>
       </div>
@@ -383,8 +398,10 @@ function PivotPhase({ proposal }: { proposal: ProposalContent }) {
   );
 }
 
-// ── Phase 3: Proposal — present the two-part investment live ─────────────────────
-function ProposalPhase({ business, proposal }: { business: RunnerBusiness; proposal: ProposalContent }) {
+// ── Phase 3: Offer — present the two-part investment live ───────────────────────
+// The SAME component the share link renders. What he presents and what he sends
+// are one artefact, so there is no version of the offer that only exists live.
+function OfferPhase({ offer }: { offer: Offer }) {
   return (
     <div>
       <div className="panel" style={{ padding: 20, borderRadius: 14, marginBottom: 14 }}>
@@ -400,11 +417,44 @@ function ProposalPhase({ business, proposal }: { business: RunnerBusiness; propo
           background: "#FBFAF7",
         }}
       >
-        <PublicProposal
-          business={{ name: business.name, industry: business.industry, city: business.city }}
-          content={proposal}
-        />
+        <ClientOffer offer={offer} />
       </div>
+    </div>
+  );
+}
+
+// No saved calculator for this business. Says so and links to it, rather than
+// rendering an offer nobody agreed to — a made-up figure on a live call is
+// unrecoverable in a way an empty panel is not.
+function NoAssessment({ businessId }: { businessId: string }) {
+  return (
+    <div className="panel" style={{ padding: 24, borderRadius: 14 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+        No calculator saved for this business yet
+      </div>
+      <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 8, lineHeight: 1.6, maxWidth: "60ch" }}>
+        The leak figures and the offer are both built from it. Open the calculator, fill it
+        in on the call, and both of these screens fill themselves.
+      </p>
+      <a
+        href={`/library/${businessId}/calculator`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          marginTop: 16,
+          padding: "10px 16px",
+          borderRadius: 10,
+          background: "var(--accent)",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 600,
+          textDecoration: "none",
+        }}
+      >
+        Open the calculator
+        <ArrowRight size={14} strokeWidth={2.2} />
+      </a>
     </div>
   );
 }

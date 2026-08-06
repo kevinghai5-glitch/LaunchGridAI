@@ -208,7 +208,7 @@ export default function DealsPage() {
 
         {!loading && deals.length === 0 && (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13.5 }}>
-            No deals yet. Send a proposal to start building your pipeline.
+            No deals yet. Close a client to start building your pipeline.
           </div>
         )}
       </div>

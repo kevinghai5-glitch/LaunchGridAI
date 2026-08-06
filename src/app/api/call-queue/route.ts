@@ -12,16 +12,17 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import {
-  compareQueue,
-  isInQueue,
   resolveDisposition,
   urgency,
-  QUEUE_LIMIT,
   type ClosedReason,
   type Disposition,
   type DispositionPatch,
 } from "@/lib/call-queue";
+// Selection (which leads, in what order, capped) lives in one place so this
+// route and the CSV export can never disagree about what "today's queue" is.
+import { parseQueueParams, selectQueueLeads } from "@/lib/call-queue-query";
 // The audit peek this route used to compute off the latest COLD_AUDIT row was
 // replaced by the observed-facts row when the cold audit was deleted (owner
 // ruling, 2026-08-01). Computed HERE, server-side, off the snapshot columns the
@@ -31,12 +32,6 @@ import { observedFactsFor } from "@/lib/observed-facts";
 
 export const dynamic = "force-dynamic";
 
-// Which slice of the queue to return:
-//   today    — due now (the callable list): default.
-//   upcoming — future scheduled (callbacks/Zooms/follow-ups not yet due).
-//   past     — already-called leads, most-recent first (the activity log).
-type QueueView = "today" | "upcoming" | "past";
-
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -45,93 +40,15 @@ export async function GET(req: Request) {
 
   const now = new Date();
   const params = new URL(req.url).searchParams;
-  const viewParam = params.get("view");
-
-  // Optional ?date=YYYY-MM-DD scopes the result to a single calendar day. The
-  // day's relation to today derives the slice: past day → that day's call log,
-  // future day → that day's scheduled items, today → the live callable queue.
-  const dateParam = params.get("date");
-  let dayStart: Date | null = null;
-  let dayEnd: Date | null = null;
-  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-    const [y, m, d] = dateParam.split("-").map(Number);
-    dayStart = new Date(y, m - 1, d, 0, 0, 0, 0);
-    dayEnd = new Date(y, m - 1, d, 23, 59, 59, 999);
-  }
 
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
 
-  // Resolve the effective view. An explicit ?view wins; otherwise a ?date derives
-  // it from the day's relation to today; default is today's live queue.
-  let view: QueueView;
-  if (viewParam === "upcoming" || viewParam === "past" || viewParam === "today") {
-    view = viewParam;
-  } else if (dayStart) {
-    if (dayStart.getTime() < startOfToday.getTime()) view = "past";
-    else if (dayStart.getTime() > startOfToday.getTime()) view = "upcoming";
-    else view = "today";
-  } else {
-    view = "today";
-  }
+  // Optional ?view / ?date=YYYY-MM-DD — see parseQueueParams.
+  const query = parseQueueParams(params, now);
+  const selected = await selectQueueLeads(session.user.id, query, now);
 
-  const inDay = (d: Date | null | undefined): boolean =>
-    !!d && !!dayStart && !!dayEnd && d.getTime() >= dayStart.getTime() && d.getTime() <= dayEnd.getTime();
-
-  const businesses = await prisma.business.findMany({
-    where: { userId: session.user.id, deletedAt: null },
-    include: {
-      callLogs: {
-        where: { deletedAt: null },
-        orderBy: { calledAt: "desc" },
-        take: dayStart && view === "past" ? 20 : 1,
-        select: { id: true, disposition: true, note: true, calledAt: true },
-      },
-    },
-  });
-
-  const filtered = businesses.filter((b) => {
-    const core = { status: b.status, nextActionAt: b.nextActionAt, followUpUntil: b.followUpUntil };
-    if (view === "upcoming") {
-      // Scheduled ahead but not yet due, and not terminal.
-      if (dayStart) {
-        // Day-scoped: items whose next touch lands on that specific day.
-        return inDay(b.nextActionAt) || inDay(b.followUpUntil);
-      }
-      if (isInQueue(core, now)) return false;
-      const due = b.nextActionAt ?? b.followUpUntil;
-      return Boolean(due && due.getTime() > now.getTime());
-    }
-    if (view === "past") {
-      // Day-scoped: called on that specific day. Otherwise: ever called.
-      if (dayStart) return b.callLogs.some((c) => inDay(c.calledAt));
-      return b.callLogs.length > 0;
-    }
-    return isInQueue(core, now);
-  });
-
-  const sorted =
-    view === "past"
-      ? filtered.sort(
-          (a, b) =>
-            (b.callLogs[0]?.calledAt.getTime() ?? 0) - (a.callLogs[0]?.calledAt.getTime() ?? 0)
-        )
-      : view === "upcoming"
-        ? filtered.sort((a, b) => {
-            const da = (a.nextActionAt ?? a.followUpUntil)?.getTime() ?? Infinity;
-            const db = (b.nextActionAt ?? b.followUpUntil)?.getTime() ?? Infinity;
-            return da - db;
-          })
-        : filtered.sort((a, b) =>
-            compareQueue(
-              { status: a.status, nextActionAt: a.nextActionAt, followUpUntil: a.followUpUntil },
-              { status: b.status, nextActionAt: b.nextActionAt, followUpUntil: b.followUpUntil },
-              now
-            )
-          );
-
-  const leads = sorted
-    .slice(0, QUEUE_LIMIT)
+  const leads = selected
     .map((b) => {
       const lastCall = b.callLogs[0];
       return {
@@ -150,8 +67,9 @@ export async function GET(req: Request) {
           { status: b.status, nextActionAt: b.nextActionAt, followUpUntil: b.followUpUntil },
           now
         ),
-        // The four pre-dial values, computed after the QUEUE_LIMIT slice so at
-        // most one page of leads pays the (cached, pure-CPU) compute per request.
+        // The four pre-dial values, computed after selectQueueLeads has already
+        // capped the list, so at most one page of leads pays the (cached,
+        // pure-CPU) compute per request.
         observedFacts: observedFactsFor(b),
         enrichment: {
           rating: b.rating,
@@ -230,24 +148,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid disposition" }, { status: 400 });
   }
 
-  // Scope the lead to the operator.
+  // Scope the lead to the operator. dialStatus comes along so a BOOKED disposition
+  // can also advance the dial axis — the SECONDARY path to dialStatus "booked"
+  // (the primary is the phone-first logger, because bookings actually happen
+  // through a GoHighLevel form, not by tapping BOOKED here).
   const lead = await prisma.business.findFirst({
     where: { id: body.businessId, userId: session.user.id, deletedAt: null },
-    select: { id: true },
+    select: { id: true, dialStatus: true },
   });
   if (!lead) {
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
 
+  const now = new Date();
   const callbackTime = body.callbackTime ? new Date(body.callbackTime) : null;
   const patch = resolveDisposition(body.disposition as Disposition, {
     callbackTime: callbackTime && !isNaN(callbackTime.getTime()) ? callbackTime : null,
     closedReason: (body.closedReason as ClosedReason) ?? null,
-    now: new Date(),
+    now,
   });
 
-  // One click → one transaction: append the attempt + advance the lead.
-  const [, updated] = await prisma.$transaction([
+  // A BOOKED disposition also flips the dial axis to "booked" — UNLESS the
+  // business is already do_not_call, which is permanent and nothing overrides.
+  const marksBooked =
+    body.disposition === "BOOKED" && lead.dialStatus !== "do_not_call";
+
+  // One click → one transaction: append the attempt + advance the lead (and, on a
+  // booking, the dial axis + its history event).
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.callLog.create({
       data: {
         businessId: lead.id,
@@ -266,6 +194,7 @@ export async function POST(req: Request) {
         followUpUntil: patch.followUpUntil,
         closedReason: patch.closedReason,
         attemptCount: { increment: 1 },
+        ...(marksBooked ? { dialStatus: "booked", dialStatusAt: now } : {}),
       },
       select: {
         id: true,
@@ -277,7 +206,21 @@ export async function POST(req: Request) {
         closedReason: true,
       },
     }),
-  ]);
+  ];
+  if (marksBooked) {
+    ops.push(
+      prisma.dialStatusEvent.create({
+        data: {
+          businessId: lead.id,
+          userId: session.user.id,
+          status: "booked",
+          source: "booking",
+          createdAt: now,
+        },
+      })
+    );
+  }
+  const [, updated] = await prisma.$transaction(ops);
 
   return NextResponse.json({ lead: updated });
 }
