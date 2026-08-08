@@ -2126,71 +2126,6 @@ function buildWeeks(resolutions: ResolvedWorkflow[]): { one: string[]; two: stri
  *  0 Build (all of them, tagged with the week they land in), 1 Go-Live (all of
  *  them — go-live is the day the whole build starts running), 2 Ongoing (only the
  *  ones whose results exist in that window). */
-function roadmapWorkflowNames(resolutions: ResolvedWorkflow[], phaseIndex: number): string[] {
-  const on = resolutions.filter((r) => r.on).map((r) => r.workflow);
-  if (phaseIndex === 0) {
-    const weeks = buildWeeks(resolutions);
-    return [
-      ...weeks.one.map((n) => `${n} (week one)`),
-      ...weeks.two.map((n) => `${n} (week two)`),
-    ];
-  }
-  if (phaseIndex === 1) return on.map((w) => w.name);
-  return on.filter((w) => WORKFLOW_MATURES_LATER.has(w.id)).map((w) => w.name);
-}
-
-async function generateRoadmap(ctx: GenerationContext): Promise<GrowthRoadmap> {
-  const resolutions = clientBuild(ctx);
-  const { one: weekOne, two: weekTwo } = buildWeeks(resolutions);
-
-  const prompt = `${STYLE_RULES}
-
-${contextHeader(ctx)}
-
-TASK: Produce the IMPLEMENTATION & OPTIMIZATION TIMELINE for THIS business — what we build in the first fortnight, what happens the day it goes live, and what the following months actually look like. DONE FOR YOU (Law 3): every phase is what WE do. The only things the owner does are genuine human steps — approving copy, answering the enquiries worth answering himself, showing up to the jobs.
-
-THREE PHASES, in this EXACT order. The names, the windows and the money are fixed; write the substance.
-
-1. Build — Days 1–14 — ${ONE_TIME_INVESTMENT}, one-time. We stand the whole system up inside their GoHighLevel sub-account. Nothing here is a task for the owner. Sequence the work by the leaks THIS report actually surfaced, biggest first. Week one is the spine: ${weekOne.join(
-    ", "
-  ) || "the core response and booking workflows"}. Week two is everything that builds on it: ${
-    weekTwo.join(", ") || "the follow-up, review and payment workflows"
-  }. isRetainerPhase=false.
-
-2. Go-Live — the single day it starts answering for them. This is NOT a stretch of work, it is a moment, and it has to be defined precisely enough that the owner knows the exact point at which his phone behaviour changes. Three parts:
-   · whatSwitchesOn — what we turn on, in order (the tracked number starts taking calls and forwarding to the phone he already answers; the booking calendar starts accepting real bookings; every workflow moves from draft to live; the pipeline starts receiving; the chat box goes on the site if it can be placed).
-   · whatWeNeedFromYou — the SHORT, honest list of things only he can do: approve the copy, confirm the hours and availability on the calendar, forward his existing number or publish the new one, get the chat snippet onto the site (or tell us who can), confirm who controls the Google listing, hand over the past-customer list if there is one. Nothing else lands on him.
-   · whatLiveMeans — the test that settles it, in one sentence: a real enquiry arriving through his own number or form gets an answer inside about a minute, appears in the pipeline at ${
-     PIPELINE_STAGES[0]
-   }, and is followed up without anybody at his end doing anything.
-   isRetainerPhase=false.
-
-3. Ongoing — Days 15–90 and beyond — ${MONTHLY_INVESTMENT} per month. ${PRODUCT_NAME} qualifying and routing every enquiry, us watching the numbers and tuning the system, and a report every month. This is also when the slower workflows show what they are worth: the 60-day follow-up sequence reaches its end and starts closing deals out, review replies accumulate, and any past-customer campaign has been through a batch. isRetainerPhase=true. Name ${PRODUCT_NAME}.
-
-For EACH phase: objective, the concrete actions WE take, and a "done" definition stated as MEASURABLE CONVERSION OUTCOMES ("median first reply under five minutes", "no missed call goes without a text back"), never activities. Do not invent a number that is not in the data above.
-
-ONE HARD RULE ACROSS PHASES 1 AND 2: neither of them may claim ${PRODUCT_NAME}, lead qualification, lead scoring or scoring thresholds as something the one-time build delivers. Those belong to phase 3, the monthly service. If a Build or Go-Live line genuinely has to mention the qualification engine — connecting it, for instance — that same line must also say it is the monthly service that runs and tunes it. Written the other way round, the timeline gives away the ${MONTHLY_INVESTMENT}-a-month engine inside the ${ONE_TIME_INVESTMENT} fee.
-
-Return JSON in EXACTLY this shape:
-{
-  "overview": "2-3 sentences: the fortnight, the day it goes live, then the months — and what 'working' looks like in booked-job terms",
-  "phases": [
-    {"phase": "Build", "window": "Days 1–14", "objective": "...", "deployActions": ["..."], "owner": "us", "doneDefinition": ["measurable conversion outcome"], "isRetainerPhase": false,
-     "goLive": {"whatSwitchesOn": ["..."], "whatWeNeedFromYou": ["..."], "whatLiveMeans": "..."}}
-  ]
-}
-
-Provide EXACTLY 3 phases in the order listed, 3-6 deployActions and 2-4 doneDefinition outcomes each. Include the "goLive" object on the SECOND phase ONLY, and omit it from the other two. The Build phase's actions must map to the actual leaks in this report, sequenced by dollar impact.`;
-  // Law 13: the overview and each phase objective are the only slots here that
-  // describe the CURRENT state; deployActions and doneDefinition describe our
-  // future work and would read absurdly if hedged.
-  const roadmap = await generateJson<GrowthRoadmap>(prompt, (r) => [
-    { text: r.overview ?? "" },
-    ...(r.phases ?? []).map((p) => ({ text: p.objective ?? "" })),
-  ]);
-  return stampRoadmapWindows(roadmap, resolutions);
-}
-
 /**
  * Stamp the fixed half of the timeline: the three phase names, their windows,
  * which phase is the retainer, what each window costs, and which workflows land
@@ -2202,32 +2137,6 @@ Provide EXACTLY 3 phases in the order listed, 3-6 deployActions and 2-4 doneDefi
  * go-live block, and an owner value the model spells differently ("we", "US") is
  * a fatal validator failure at the export boundary for no reason at all.
  */
-export function stampRoadmapWindows(
-  roadmap: GrowthRoadmap,
-  resolutions: ResolvedWorkflow[]
-): GrowthRoadmap {
-  const model = roadmap.phases ?? [];
-  const phases = ROADMAP_WINDOWS.map((w, i) => {
-    const m = model[i];
-    return {
-      phase: w.phase,
-      window: w.window,
-      objective: m?.objective ?? "",
-      deployActions: m?.deployActions ?? [],
-      owner: "us" as const,
-      doneDefinition: m?.doneDefinition ?? [],
-      isRetainerPhase: w.isRetainerPhase,
-      investment: w.investment,
-      workflowsInThisWindow: roadmapWorkflowNames(resolutions, i),
-      // The go-live block belongs to the middle phase and nowhere else. Taking it
-      // from whichever phase the model attached it to means a model that put it on
-      // phase 1 does not silently lose it.
-      goLive: i === 1 ? m?.goLive ?? model.find((p) => p?.goLive)?.goLive : undefined,
-    };
-  });
-  return { ...roadmap, phases };
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // D3 · CONVERSION SURFACES — the copy, addressed to the box it goes in
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2586,7 +2495,6 @@ export async function generateAssetPack(
     intelligence,
     infrastructure,
     supportingAssets,
-    roadmap,
     surfaces,
     workflowCopy,
   ] = (await Promise.all([
@@ -2598,7 +2506,6 @@ export async function generateAssetPack(
     track("Growth leak intelligence", generateIntelligence(ctx)),
     track("Acquisition infrastructure", generateInfrastructure(ctx)),
     track("Review & thank-you assets", generateSupportingAssets(ctx)),
-    track("Implementation timeline", generateRoadmap(ctx)),
     track("Booking page, form, webchat & site advice", generateConversionSurfaces(ctx)),
     track("Workflow copy", generateWorkflowCopy(ctx)),
   ])) as [
@@ -2610,7 +2517,6 @@ export async function generateAssetPack(
     GrowthIntelligence,
     AcquisitionInfrastructure,
     SupportingAssets,
-    GrowthRoadmap,
     ConversionSurfaces,
     WorkflowCopyPack,
   ];
@@ -2631,7 +2537,6 @@ export async function generateAssetPack(
     intelligence,
     infrastructure,
     supportingAssets,
-    roadmap,
     surfaces,
     workflowCopy,
   });

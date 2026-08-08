@@ -115,6 +115,12 @@ export async function POST(req: Request) {
   // already prevents the same Place from being added twice.
   const now = new Date();
   await prisma.business.createMany({
+    // skipDuplicates pairs with the partial unique index: two generate requests
+    // racing each other (a double-click, two tabs) both build the same exclude
+    // set and both try to insert. Without this the second one 500s and the
+    // operator loses the batch; with it, the overlap is silently dropped and the
+    // rest lands.
+    skipDuplicates: true,
     data: prospects.map((p, i) => ({
       userId: session.user.id,
       googlePlaceId: p.placeId || null,

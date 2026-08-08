@@ -82,6 +82,11 @@ model VerificationToken {
 model Business {
   id            String   @id @default(cuid())
   userId        String
+  // A partial UNIQUE index guards this: (userId, googlePlaceId) must be unique
+  // among LIVE rows. It is declared in SQL (20260806210000) rather than with
+  // @@unique because Prisma cannot express a WHERE clause on an index, and the
+  // clause is the point — soft-deleted rows must not block a legitimate re-add.
+  // Do not "fix" this by adding @@unique: that would apply to deleted rows too.
   googlePlaceId String?
   name          String
   address       String?

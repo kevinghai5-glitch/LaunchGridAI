@@ -84,7 +84,6 @@ import {
   NURTURE_SEQUENCE,
   nurtureMeta,
   stampLeakAnalysis,
-  stampRoadmapWindows,
   stampSurfaceDestinations,
   stampWorkflowCopy,
   workflowCoverage,
@@ -1152,94 +1151,6 @@ const workflowResolutions = resolveWorkflows({
   intake: detected.data.intake ?? null,
   firedLeaks: detected.report,
 });
-
-const roadmap: AssetPack["roadmap"] = stampRoadmapWindows(
-  {
-    overview:
-      "A fortnight of build, one day when it starts answering for you, then the months where it earns its keep. The order below is set by this report: capture first, because everything downstream only works on enquiries that reached the system, then booking, then the follow-up that runs on its own once it is built.",
-    phases: [
-      {
-        phase: "",
-        window: "",
-        objective:
-          "Close the capture and response gaps, in the order the dollar figures in this report put them.",
-        deployActions: [
-          "Stand up your GoHighLevel sub-account, port a tracked number and turn on call recording.",
-          "Deploy missed-call text-back on the published line.",
-          "Put instant auto-reply behind the site form and connect it to the qualification screen the monthly service runs and tunes for you.",
-          "Turn on after-hours auto-response covering evenings and weekends.",
-          "Install the webchat widget and connect the Facebook page inbox to the same queue.",
-          "Build the booking page against real technician availability and put it behind every call to action.",
-        ],
-        owner: "us",
-        doneDefinition: [
-          "Median first response to a new enquiry is under five minutes during business hours.",
-          "Every inbound channel lands in one queue with a timestamp attached.",
-          "A customer can hold a slot at 11pm without speaking to anybody.",
-        ],
-        isRetainerPhase: false,
-      },
-      {
-        phase: "",
-        window: "",
-        objective:
-          "Turn the build on in one pass, in an order that means no enquiry falls between the old setup and the new one.",
-        deployActions: [
-          "Point the tracked number at the phone you already answer and start recording.",
-          "Open the booking calendar to real bookings against the availability you confirmed.",
-          "Move every workflow from draft to live in one pass.",
-          "Switch the pipeline on so new enquiries start landing at New Lead.",
-        ],
-        owner: "us",
-        doneDefinition: [
-          "A real enquiry through your own number gets an answer inside about a minute.",
-          "Nothing arrives in a channel that has no automation behind it.",
-        ],
-        isRetainerPhase: false,
-        goLive: {
-          whatSwitchesOn: [
-            "The tracked number starts taking calls and forwarding to the phone you already answer.",
-            "The booking calendar starts accepting real bookings.",
-            "Every workflow moves from draft to live.",
-            "The pipeline starts receiving, and new enquiries land at New Lead.",
-            "The chat box goes onto the site if whoever runs it can place the snippet.",
-          ],
-          whatWeNeedFromYou: [
-            "Approve the copy — one pass, and say what you would not put your name to.",
-            "Confirm the hours and the technician availability the calendar books against.",
-            "Forward your existing number, or publish the new one.",
-            "Get the chat snippet onto your site, or tell us who can.",
-            "Confirm who controls the Google listing.",
-            "Hand over the past-customer list if there is one.",
-          ],
-          whatLiveMeans:
-            "A real enquiry arriving through your own number or your own form gets an answer inside about a minute, appears in the pipeline at New Lead, and is followed up without anybody at your end doing anything.",
-        },
-      },
-      {
-        phase: "",
-        window: "",
-        objective:
-          "Run the qualification engine, keep the sequences honest, and report on what changed.",
-        deployActions: [
-          "Run LeadGate qualification and routing on every enquiry, every day.",
-          "Review scoring accuracy monthly and adjust the thresholds against booked outcomes.",
-          "Rotate follow-up and reactivation copy each season so it stays relevant to the weather.",
-          "Load the past-customer list and run the first seasonal reactivation batch.",
-          "Deliver a monthly report covering answered, missed and after-hours volume, response times and booked outcomes.",
-        ],
-        owner: "us",
-        doneDefinition: [
-          "Median first response stays under five minutes month over month.",
-          "Share of quoted jobs booking within ninety days is trending up.",
-          "Every month starts with a written read on what moved and what did not.",
-        ],
-        isRetainerPhase: true,
-      },
-    ],
-  },
-  workflowResolutions
-);
 
 /* ── Deliverable 3 · supporting assets ────────────────────────────────────── */
 // Law 2 allows exactly one review touch: a single request after a completed job.
@@ -2529,7 +2440,6 @@ const pack: AssetPack = {
   intelligence,
   infrastructure,
   supportingAssets,
-  roadmap,
   surfaces,
   workflowCopy,
 };

@@ -75,6 +75,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── THE SAME PLACE, TWICE ──────────────────────────────────────────────
+    // This is how the one duplicate in the data got there: a business generated
+    // into a batch, declined, and later hand-saved again under a different niche
+    // — same Google place, two rows, and at 10k dials that is a second call to
+    // someone who already said no.
+    //
+    // The generator dedups against everything the operator has seen; this path
+    // never did. It now returns the EXISTING row rather than erroring, because
+    // "save this business" and "you already have it" have the same right answer
+    // from the caller's point of view: here is the record.
+    //
+    // A soft-deleted row is deliberately revived rather than duplicated — the
+    // history on it (declines, dial status, call logs) is the reason not to
+    // start a fresh row beside it.
+    if (parsed.data.googlePlaceId) {
+      const existing = await prisma.business.findFirst({
+        where: { userId: session.user.id, googlePlaceId: parsed.data.googlePlaceId },
+      });
+      if (existing) {
+        if (!existing.deletedAt) {
+          return NextResponse.json({ business: existing, alreadySaved: true }, { status: 200 });
+        }
+        const revived = await prisma.business.update({
+          where: { id: existing.id },
+          data: { deletedAt: null },
+        });
+        return NextResponse.json({ business: revived, revived: true }, { status: 200 });
+      }
+    }
+
     const business = await prisma.business.create({
       data: {
         ...parsed.data,

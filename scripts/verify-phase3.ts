@@ -880,16 +880,17 @@ check("D3 · the D2 blueprint renders the canonical six, from the constant (real
   show("all six columns present in rendered D2", true);
 });
 
-check("D4 · LeadGate is the MONTHLY half — named in the retainer stage and the retainer phase", () => {
+check("D4 · LeadGate is the MONTHLY half — named in the retainer funnel stage", () => {
+  // NARROWED (Phase 5): this also asserted the retainer ROADMAP PHASE. The roadmap
+  // is retired, so that half is gone with it. The funnel half — which is what
+  // actually reaches a client, in the Build Plan's pipeline — is unchanged, and
+  // the retainer's position in the SCHEDULE is now asserted deterministically by
+  // verify-build-plan section C rather than against model-authored phases.
   const retainerStages = (goldenPack.infrastructure?.funnel?.stages ?? []).filter((s) => s.isRetainer);
-  const retainerPhases = (goldenPack.roadmap?.phases ?? []).filter((p) => p.isRetainerPhase);
   show("funnel stages flagged isRetainer", retainerStages.map((s) => s.stage));
-  show("roadmap phases flagged isRetainerPhase", retainerPhases.map((p) => `${p.phase} (${p.window})`));
   assert.equal(retainerStages.length, 1, `${retainerStages.length} funnel stages are flagged as the retainer, expected exactly 1`);
-  assert.equal(retainerPhases.length, 1, `${retainerPhases.length} roadmap phases are flagged as the retainer, expected exactly 1`);
-  const retainerText = collectStrings([retainerStages, retainerPhases]).join("\n");
-  assert(/LeadGate/i.test(retainerText), "LeadGate is not named anywhere in the retainer stage or the retainer phase");
-  show("retainer phase investment", retainerPhases[0]?.investment ?? "(none)");
+  const retainerText = collectStrings([retainerStages]).join("\n");
+  assert(/LeadGate/i.test(retainerText), "LeadGate is not named anywhere in the retainer funnel stage");
 });
 
 check("D5 · LeadGate is NOT sold inside the one-time build (every non-retainer phase and stage)", () => {
@@ -1271,30 +1272,21 @@ const D4_SHAPE = [
   },
 ];
 
-check("F1 · exactly three phases, in the order the engagement runs", () => {
-  const phases = goldenPack.roadmap?.phases ?? [];
-  show("phases", phases.map((p) => `${p.phase} — ${p.window}`));
-  assert.equal(phases.length, 3, `the roadmap has ${phases.length} phases, expected 3`);
-  phases.forEach((p, i) => {
-    const want = D4_SHAPE[i];
-    assert(
-      want.window.test(p.window ?? ""),
-      `phase ${i + 1} reads "${p.window}" but must be the ${want.name} window`
-    );
-  });
-});
-
-check("F2 · the retainer flag is on the LAST phase and nowhere else", () => {
-  const phases = goldenPack.roadmap?.phases ?? [];
-  show("isRetainerPhase", phases.map((p) => `${p.phase}=${p.isRetainerPhase}`));
-  phases.forEach((p, i) =>
-    assert.equal(
-      Boolean(p.isRetainerPhase),
-      D4_SHAPE[i].isRetainerPhase,
-      `phase "${p.phase}" has isRetainerPhase=${p.isRetainerPhase}`
-    )
-  );
-});
+/* F1 · F2 · F4 — RETIRED (Phase 5, 2026-08-06).
+ *
+ * All three asserted the SHAPE of a model-authored roadmap on the pack: three
+ * phases in order, the retainer flag on the last one only, and exactly one
+ * go-live block. They existed because the schedule was generated and could
+ * therefore come back wrong.
+ *
+ * The schedule is no longer generated. src/lib/build-plan.ts derives all four
+ * windows from one kickoff date and a fixed BUILD_DAYS, so there is no shape left
+ * to get wrong — and a check over a constant only ever passes. What replaced
+ * them, asserting the same promises against the RENDERED document instead of the
+ * pack: verify-build-plan section C (windows booked and unbooked, go-live exactly
+ * BUILD_DAYS after kickoff, no invented date) and F3/F5 below (both prices on the
+ * right windows, in the document a client opens).
+ */
 
 check("F3 · CAD $6,500 sits on the BUILD window and CAD $1,000/month on the ONGOING one", () => {
   const phases = goldenPack.roadmap?.phases ?? [];
@@ -1314,21 +1306,6 @@ check("F3 · CAD $6,500 sits on the BUILD window and CAD $1,000/month on the ONG
     assert.equal(bare.length, 0, `phase "${p.phase}" prints an unmarked dollar figure: ${bare.join(", ")}`);
   }
   show("every figure carries the CAD marker before it", true);
-});
-
-check("F4 · the go-live phase is the ONLY one carrying the go-live definition", () => {
-  const phases = goldenPack.roadmap?.phases ?? [];
-  const withGoLive = phases.filter((p) => p.goLive);
-  show("phases carrying goLive", withGoLive.map((p) => p.phase));
-  assert.equal(withGoLive.length, 1, `${withGoLive.length} phases carry a goLive block, expected exactly 1`);
-  assert.equal(phases.indexOf(withGoLive[0]), 1, "the goLive block is not on the middle phase");
-  const g = withGoLive[0].goLive!;
-  show("whatSwitchesOn   ", g.whatSwitchesOn?.length ?? 0);
-  show("whatWeNeedFromYou", g.whatWeNeedFromYou?.length ?? 0);
-  show("whatLiveMeans    ", g.whatLiveMeans);
-  assert((g.whatSwitchesOn ?? []).length, "go-live says nothing about what switches on");
-  assert((g.whatWeNeedFromYou ?? []).length, "go-live names nothing the owner has to do — there is always a short honest list");
-  assert(g.whatLiveMeans?.trim(), "go-live has no test that settles whether it is live");
 });
 
 check("F5 · the Build Plan prints every window and both prices, booked or not", () => {
@@ -1521,8 +1498,28 @@ check("G2 · the invariant is not vacuous — it FAILS on a part that is present
 
 check("G3 · the retired roadmap does not leak into the Build Plan, and the schedule replaces it", () => {
   const html = renderDeliverableHtml(goldenPack, "build-plan", ctxFor(null, null));
-  const phases = goldenPack.roadmap?.phases ?? [];
-  assert(phases.length, "the golden pack has no roadmap phases — this check is aiming at nothing");
+
+  // SYNTHETIC, not read off the fixture. The roadmap generator is deleted, so the
+  // fixtures no longer carry one — and a check that depended on the fixture
+  // carrying retired data would have quietly stopped checking anything the moment
+  // the fixture was rebuilt. This is the shape stampRoadmapWindows() used to
+  // produce, written out here, so the scan below has real prose to hunt for.
+  const phases = [
+    {
+      phase: "Build",
+      window: "Days 1-14",
+      objective:
+        "Close the capture and response gaps, in the order the dollar figures in this report put them.",
+      deployActions: [
+        "Stand up the sub-account, port a tracked number and turn on call recording.",
+        "Deploy missed-call text-back on the published line.",
+      ],
+      doneDefinition: [
+        "A test enquiry outside opening hours gets an answer within a minute.",
+      ],
+      workflowsInThisWindow: ["Instant Lead Response", "Missed Call Text-Back"],
+    },
+  ];
 
   const esc = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")

@@ -14,6 +14,27 @@
  *   node node_modules/.bin/tsx scripts/verify-intake.ts
  */
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * WHY THIS FILE STILL EXISTS, AND WHAT IT IS NOT TESTING
+ *
+ * It calls renderLeakAnalysis() to prove the EVIDENCE-GRADE VOICE LAWS at the
+ * render boundary: that a claim can only be phrased as strongly as the grade
+ * behind it allows, that a fact the client told us is attributed to them and
+ * never to our own detection, and that an ungraded item cannot slip through
+ * speaking with authority.
+ *
+ * SINCE PHASE 3, NO CLIENT DOCUMENT RENDERS leakAnalysis. The Diagnosis is the
+ * saved calculator and the Build Plan is the workflow catalogue, so the path
+ * exercised below is not currently on any client surface.
+ *
+ * IT IS KEPT DELIBERATELY (owner ruling, 2026-08-06), and this note exists so
+ * nobody later reads a green suite over a dormant path as an accident and
+ * deletes it. The guarantee it encodes — that a document cannot claim something
+ * the client never said — is the one that matters most, and deleting the only
+ * place it is proven would leave a rule nobody checks. If a future pass ever
+ * puts leaks back into a client document, the proof is already here.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import assert from "node:assert";
 
 import {

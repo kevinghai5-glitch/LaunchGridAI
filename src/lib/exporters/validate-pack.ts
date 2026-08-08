@@ -720,7 +720,6 @@ export function validatePack(
   // ── Structure (is this a v2 pack at all?) ────────────────────────────────────
   if (!intel) add("Structure", "fail", "Missing `intelligence` — this is a pre-v2 (stale) pack. Regenerate.");
   if (!infra) add("Structure", "fail", "Missing `infrastructure` — pre-v2 (stale) pack. Regenerate.");
-  if (!roadmap) add("Structure", "fail", "Missing `roadmap` — pre-v2 (stale) pack. Regenerate.");
 
   const metrics = intel?.scorecard?.metrics ?? [];
   if (intel) {
@@ -781,55 +780,27 @@ export function validatePack(
       );
   }
 
-  // ── E1 · Structure · the roadmap matches the offer ───────────────────────────
-  // D4 is the schedule the client is buying: two weeks of build, a go-live, then
-  // the retainer running to day 90. Each window is checked by position, and the
-  // retainer flag is checked with it — "which phase is the monthly one" is the
-  // single most expensive thing for a deliverable to get wrong.
+  // ── E1 · the roadmap shape check — RETIRED (Phase 5, 2026-08-06) ───────────
+  // It checked that a MODEL-AUTHORED phase list matched the engagement: Build
+  // (Days 1–14) → go-live → Ongoing (Days 15–90), with the retainer flag on the
+  // last phase only. That check existed because the schedule was generated and
+  // could therefore be wrong.
+  //
+  // The schedule is no longer generated. src/lib/build-plan.ts derives all four
+  // windows from one kickoff date and a fixed BUILD_DAYS, so the shape cannot
+  // drift and there is nothing left to validate — a check over a constant is a
+  // check that can only ever pass. What replaced it: verify-build-plan section C
+  // asserts the windows directly, including the unbooked case.
+  //
+  // `pack.roadmap` survives as an OPTIONAL field for packs saved before this, and
+  // nothing renders it (verify-phase3 G3 asserts it cannot reach a document).
+  //
+  // `phases` stays bound because three laws below still walk it — owner framing
+  // (Law 3), retainer positioning (Law 4) and retainer misplacement (E3). On a
+  // newly generated pack it is EMPTY, so those loops are no-ops; on a pack saved
+  // before the retirement they still hold the roadmap to the same rules. That is
+  // the point of keeping it: a legacy pack does not get a free pass.
   const phases = roadmap?.phases ?? [];
-  if (roadmap) {
-    if (phases.length !== ROADMAP_SHAPE.length)
-      add(
-        "Structure · roadmap shape",
-        phases.length ? "warn" : "fail",
-        `The D4 roadmap has ${phases.length} phases, expected ${ROADMAP_SHAPE.length}: ${ROADMAP_SHAPE.map(
-          (p) => `${p.name} (${p.window})`
-        ).join(" → ")}. Regenerate D4 against the engagement we actually sell.`
-      );
-    else {
-      const wrongShape: string[] = [];
-      phases.forEach((p, i) => {
-        const spec = ROADMAP_SHAPE[i];
-        const naming = `${p.phase ?? ""} ${p.window ?? ""}`.trim();
-        if (!spec.match.test(naming))
-          wrongShape.push(
-            `phase ${i + 1} reads "${naming || "(unnamed)"}" but must be the ${spec.name} window (${spec.window})`
-          );
-        if (Boolean(p.isRetainerPhase) !== spec.isRetainerPhase)
-          wrongShape.push(
-            `phase ${i + 1} ("${p.phase}") has isRetainerPhase=${Boolean(p.isRetainerPhase)}; ${
-              spec.isRetainerPhase
-                ? "the Days 15–90 phase IS the monthly retainer and must be true"
-                : "this phase is inside the one-time build and must be false"
-            }`
-          );
-      });
-      if (wrongShape.length)
-        add(
-          "Structure · roadmap shape",
-          "fail",
-          `The D4 roadmap does not match the engagement: ${wrongShape.join(
-            "; "
-          )}. Fix the phase window (and the retainer flag) so the schedule reads Build Days 1–14 → go-live → Ongoing Days 15–90.`
-        );
-      else
-        add(
-          "Structure · roadmap shape",
-          "pass",
-          "D4 runs Build (Days 1–14) → go-live → Ongoing (Days 15–90), with the retainer on the last phase only."
-        );
-    }
-  }
 
   // ── Law 2 · conversion-only scope ────────────────────────────────────────────
   // WIDENED (E3). This used to scan only infrastructure + roadmap + intelligence,
@@ -1396,8 +1367,8 @@ export function validatePack(
   const retainerPhases = phases.filter((p) => p.isRetainerPhase);
   if (infra && retainerStages.length !== 1)
     add("Law 4 · retainer", "fail", `Expected exactly 1 retainer funnel stage, found ${retainerStages.length}.`);
-  if (roadmap && retainerPhases.length !== 1)
-    add("Law 4 · retainer", "fail", `Expected exactly 1 retainer roadmap phase, found ${retainerPhases.length}.`);
+  // The roadmap half of this is retired with the roadmap (see E1 above); the
+  // FUNNEL half below still runs and is where the retainer is now positioned.
   if (!allText.includes(PRODUCT_NAME))
     add("Law 4 · retainer", "fail", `Product name "${PRODUCT_NAME}" is never mentioned anywhere in the pack.`);
   else if ((infra && retainerStages.length === 1) || (roadmap && retainerPhases.length === 1))
