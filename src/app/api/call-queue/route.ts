@@ -9,6 +9,7 @@
 //         attempt + advance the lead per the deterministic mapping in call-queue.ts.
 
 import { NextResponse } from "next/server";
+import { callWindowForCity } from "@/lib/call-timing";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -71,6 +72,9 @@ export async function GET(req: Request) {
         // capped the list, so at most one page of leads pays the (cached,
         // pure-CPU) compute per request.
         observedFacts: observedFactsFor(b),
+        // What time it is where THEY are, right now. Read-only — the queue
+        // shows it, the operator decides. Nothing is filtered or blocked on it.
+        callWindow: callWindowForCity(b.city, now),
         enrichment: {
           rating: b.rating,
           reviewCount: b.reviewCount,

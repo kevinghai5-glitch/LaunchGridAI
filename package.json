@@ -31,13 +31,14 @@
     "verify:calculator": "tsx scripts/verify-calculator.ts",
     "verify:offer": "tsx scripts/verify-offer-page.ts",
     "verify:build-plan": "tsx scripts/verify-build-plan.ts",
+    "verify:metros": "tsx scripts/verify-metros.ts",
     "verify:intake-screen": "tsx scripts/verify-intake-screen.ts",
     "verify:screenshots": "tsx scripts/verify-screenshots.ts",
     "verify:finding": "tsx scripts/verify-finding.ts",
     "verify:owner-name": "tsx scripts/verify-owner-name.ts",
     "verify:theme": "tsx scripts/verify-theme.ts",
     "scan:baseline": "tsx scripts/scan-baseline.ts",
-    "verify:all": "npm run typecheck && npm run test && npm run verify:phase05 && npm run verify:phase06 && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:fabrication && npm run verify:facts && npm run verify:intake && npm run check:pack:sample && npm run verify:call-timing && npm run verify:export && npm run verify:dial-status && npm run verify:calculator && npm run verify:intake-screen && npm run verify:offer && npm run verify:build-plan && npm run verify:screenshots && npm run verify:finding && npm run verify:owner-name && npm run verify:theme",
+    "verify:all": "npm run typecheck && npm run test && npm run verify:phase05 && npm run verify:phase06 && npm run verify:phase1 && npm run verify:phase2 && npm run verify:phase3 && npm run verify:phase4 && npm run verify:fabrication && npm run verify:facts && npm run verify:intake && npm run check:pack:sample && npm run verify:call-timing && npm run verify:export && npm run verify:dial-status && npm run verify:calculator && npm run verify:intake-screen && npm run verify:offer && npm run verify:build-plan && npm run verify:metros && npm run verify:screenshots && npm run verify:finding && npm run verify:owner-name && npm run verify:theme",
     "postinstall": "prisma generate"
   },
   "dependencies": {

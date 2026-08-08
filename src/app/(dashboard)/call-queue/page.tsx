@@ -6,6 +6,7 @@ import {
   Phone,
   Star,
   Gauge,
+  Clock,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
@@ -53,6 +54,9 @@ interface QueueLead {
   /** The four measured pre-dial values, computed server-side by the route.
    *  Replaced the cold-audit peek (owner ruling, 2026-08-01). */
   observedFacts: ObservedFacts;
+  /** What time it is in THEIR city right now, and whether that is a good hour
+   *  to dial. Read-only — nothing is filtered or blocked on it. */
+  callWindow: { localHour: number | null; window: "peak" | "open" | "closed" | "unknown" };
   enrichment: {
     rating: number | null;
     reviewCount: number | null;
@@ -605,6 +609,7 @@ export default function CallQueuePage() {
                           )}
                         </span>
                       )}
+                      <LocalWindow w={lead.callWindow} />
                       {lead.observedFacts.mobileSpeed.score != null && (
                         <span className="flex items-center" style={{ gap: 3 }}>
                           <Gauge size={11} strokeWidth={1.9} /> {lead.observedFacts.mobileSpeed.score}
@@ -1369,6 +1374,39 @@ function Kbd({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+    </span>
+  );
+}
+
+/** THEIR local time, and whether it is a good hour to dial them.
+ *
+ *  This is a read, not a rule. The queue never hides a lead or blocks a call on
+ *  it — a schedule that varies day to day needs to see the window, not be
+ *  governed by it. Sit down at 2pm and the peak chips tell you who to work.
+ *
+ *  "unknown" renders as nothing at all rather than a guess: a lead labelled
+ *  callable on an assumed time zone is worse than one labelled nothing, because
+ *  it looks authoritative. */
+function LocalWindow({
+  w,
+}: {
+  w: { localHour: number | null; window: "peak" | "open" | "closed" | "unknown" };
+}) {
+  if (w.window === "unknown" || w.localHour == null) return null;
+  const h12 = w.localHour % 12 === 0 ? 12 : w.localHour % 12;
+  const label = `${h12}${w.localHour < 12 ? "am" : "pm"} local`;
+  const tone =
+    w.window === "peak"
+      ? { color: "var(--money)", weight: 700 }
+      : w.window === "open"
+        ? { color: "var(--text-3)", weight: 500 }
+        : { color: "var(--text-4)", weight: 500 };
+  return (
+    <span className="flex items-center" style={{ gap: 3, color: tone.color, fontWeight: tone.weight }}>
+      <Clock size={11} strokeWidth={1.9} />
+      {label}
+      {w.window === "peak" && " · peak"}
+      {w.window === "closed" && " · closed"}
     </span>
   );
 }

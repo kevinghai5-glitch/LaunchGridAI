@@ -200,7 +200,11 @@ check(
 eq("G1 short city resolves", timezoneForCity("Toronto"), "America/Toronto");
 eq("G2 full metro resolves", timezoneForCity("Los Angeles, CA"), "America/Los_Angeles");
 eq("G3 case-insensitive", timezoneForCity("PHOENIX"), "America/Phoenix");
-eq("G4 unknown city → blank, never a guess", timezoneForCity("Saskatoon"), "");
+// "Saskatoon" used to be the fictional city here. It became a real metro when the
+// rotation expanded to 128, and the check started failing — correctly. The
+// replacement cannot become real: it is not a place.
+eq("G4 unknown city → blank, never a guess", timezoneForCity("Zzyzx Prime"), "");
+eq("G4b …and an empty city is blank too", timezoneForCity(""), "");
 eq("G5 null → blank", timezoneForCity(null), "");
 eq("G6 empty → blank", timezoneForCity(""), "");
 check(

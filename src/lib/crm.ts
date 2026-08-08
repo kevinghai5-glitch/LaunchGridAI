@@ -226,28 +226,20 @@ export function sampleNiches(count = NICHE_VISIBLE_COUNT, categoryId?: string): 
 // Major North-American metros the generator rotates through under the hood.
 // Google Places Text Search is local + caps at 60/query, so "best in NA" is
 // achieved by aggregating across metros and serving the next unseen batch.
-export const NA_METROS: string[] = [
-  "New York, NY",
-  "Los Angeles, CA",
-  "Chicago, IL",
-  "Houston, TX",
-  "Phoenix, AZ",
-  "Toronto, ON",
-  "Dallas, TX",
-  "Miami, FL",
-  "Atlanta, GA",
-  "Denver, CO",
-  "Seattle, WA",
-  "Boston, MA",
-  "San Diego, CA",
-  "Vancouver, BC",
-  "Austin, TX",
-  "Calgary, AB",
-  "Philadelphia, PA",
-  "Charlotte, NC",
-  "Nashville, TN",
-  "Las Vegas, NV",
-];
+/** The metro rotation — DERIVED from the verified timezone map.
+ *
+ *  It used to be a second hand-written list of the same twenty cities. Two lists
+ *  of the same thing drift: a metro added here and not there would be searched
+ *  and then sourced with no time zone, and timezoneForCity() returns "" for an
+ *  unknown city — so its leads would carry a blank zone into the dialer CSV and
+ *  be called at whatever hour happened to come up.
+ *
+ *  Deriving it makes that unrepresentable: a metro cannot be in the rotation
+ *  without a zone, because the zone map IS the rotation.
+ */
+import { METRO_TIMEZONES } from "./call-timing";
+
+export const NA_METROS: string[] = Object.keys(METRO_TIMEZONES);
 
 // Default batch size — the number pre-filled in the Opportunities count box.
 // The operator types over it; a run is whatever he asks for, within the bounds

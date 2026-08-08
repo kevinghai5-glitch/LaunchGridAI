@@ -104,9 +104,15 @@ function fallback() {
   // how the caller ends up with nobody to dial.
   if (metros.length !== NA_METROS.length)
     fail(`fallback: returned ${metros.length} metros, expected all ${NA_METROS.length}`);
-  // Eastern opens first, so the soonest-to-open metro must be an Eastern one.
-  if (localHourInMetro(metros[0], now) !== 4)
-    fail(`fallback: first metro "${metros[0]}" is not the soonest to open (local hour ${localHourInMetro(metros[0], now)}, expected 4)`);
+  // The soonest-to-open metro is whichever is FURTHEST into its own day. This
+  // used to hardcode "local hour 4", i.e. Eastern — which stopped being true the
+  // moment Halifax joined the rotation, because Atlantic is an hour ahead of
+  // Eastern. Derived now, so the next zone added cannot silently break it.
+  const latestLocalHour = Math.max(
+    ...NA_METROS.map((m) => localHourInMetro(m, now) ?? -1)
+  );
+  if (localHourInMetro(metros[0], now) !== latestLocalHour)
+    fail(`fallback: first metro "${metros[0]}" is not the soonest to open (local hour ${localHourInMetro(metros[0], now)}, expected ${latestLocalHour})`);
 }
 
 invariantSweep();

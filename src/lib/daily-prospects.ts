@@ -14,6 +14,7 @@ import {
 } from "@/lib/google-places";
 import { openai, DEFAULT_MODEL } from "@/lib/openai";
 import { opportunityScore, NA_METROS, DAILY_BATCH_SIZE } from "@/lib/crm";
+import { queriesForNiche } from "@/lib/niche-variants";
 import { orderMetrosByCallTime } from "@/lib/call-timing";
 import {
   selectFinding,
@@ -115,15 +116,29 @@ export async function gatherProspects(
   for (let i = 0; i < orderedMetros.length && collected.length < target; i += METRO_WAVE) {
     const wave = orderedMetros.slice(i, i + METRO_WAVE);
     const batches = await Promise.all(
-      wave.map((metro) =>
-        // One metro failing (rate limit etc.) shouldn't sink the whole run.
+      wave.map(async (metro) => {
+        // Each PHRASING of the niche gets its own Google query, because each one
+        // gets its own fresh 60-result window — that is how a niche reaches past
+        // the per-query cap. Most niches have exactly one phrasing; only the ones
+        // with measured, ICP-verified variants have more (see niche-variants.ts).
+        //
+        // One metro (or one phrasing) failing — rate limit, transient 5xx —
+        // shouldn't sink the whole run.
+        //
         // Photos are NOT resolved here: Place Photo is billed per place and most
         // of these rows are about to lose the scoring cut. The survivors get
         // hydrated once, below.
-        searchBusinesses(niche, metro, perMetro, { resolvePhotos: false }).catch(
-          () => [] as PlaceResult[]
-        )
-      )
+        const perQuery = await Promise.all(
+          queriesForNiche(niche).map((q) =>
+            searchBusinesses(q, metro, perMetro, { resolvePhotos: false }).catch(
+              () => [] as PlaceResult[]
+            )
+          )
+        );
+        // Flatten in phrasing order. Cross-phrasing duplicates are dropped by the
+        // `seen` placeId set below, same as cross-metro ones.
+        return perQuery.flat();
+      })
     );
     metrosSearched += wave.length;
 
