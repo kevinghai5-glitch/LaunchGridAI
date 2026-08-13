@@ -4,6 +4,12 @@
 // pack for the same business so the Library shows one entry per business.
 
 import { NextRequest, NextResponse } from "next/server";
+import {
+  DELIVERABLES,
+  deliverableContext,
+  renderDeliverableHtml,
+} from "@/lib/exporters/deliverables";
+import { readComputed } from "@/lib/client-offer";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -39,7 +45,14 @@ export async function POST(req: NextRequest) {
 
   const business = await prisma.business.findFirst({
     where: { id: businessId, userId: session.user.id, deletedAt: null },
-    select: { id: true },
+    // The three document inputs ride along so the gate below can render the
+    // deliverables and judge THOSE rather than the raw pack.
+    select: {
+      id: true,
+      workflowToggles: true,
+      kickoffAt: true,
+      leakAssessment: { select: { computed: true } },
+    },
   });
   if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
@@ -58,7 +71,29 @@ export async function POST(req: NextRequest) {
   // does not survive into the persisted pack, so the dollar-determinism guard runs
   // in its always-on form (every stamped figure must appear verbatim in its own
   // mathFrame). Generation runs the strict form; this is the floor, not a relaxation.
-  const verdict = assertPackValid(assetPack);
+  // THE LAWS JUDGE THE RENDERED DOCUMENTS, not the raw pack — the same rule the
+  // generation and export gates follow. The pack still carries sections nothing
+  // prints (the generated leak analysis, the old blueprint, the retired
+  // roadmap); scanning those blocked a save over copy no client could read.
+  //
+  // Re-validating here is still the point of this route: a pack off the wire can
+  // be stale, hand-posted, or client-edited. What changed is only WHICH text the
+  // text laws read.
+  const docCtx = deliverableContext({
+    assessment: readComputed(business?.leakAssessment?.computed ?? null),
+    workflowToggles: business?.workflowToggles ?? null,
+    kickoffAt: business?.kickoffAt ?? null,
+  });
+  const renderedText = DELIVERABLES.map((d) => renderDeliverableHtml(assetPack, d.id, docCtx))
+    .join("\n")
+    .replace(/<script[\s\S]*?<\/script>/g, " ")
+    .replace(/<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ");
+  const verdict = assertPackValid(assetPack, undefined, { renderedText });
 
   // ── The escape hatch (Phase 0.6) ────────────────────────────────────────────
   // Default behaviour is unchanged: no `override` in the body → a fatal check
