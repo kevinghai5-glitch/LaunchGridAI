@@ -41,6 +41,7 @@ import {
   ChevronRight,
   ChevronDown,
   ClipboardList,
+  Trash2,
 } from "lucide-react";
 
 type LibraryMode = "workspaces" | "saved";
@@ -571,6 +572,7 @@ function BusinessPanel({
   // Per-column generation state. Each generator runs IN PLACE and, on success,
   // patches this business's item so the new artifact appears without a reload.
   const [packRunning, setPackRunning] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [packProgress, setPackProgress] = useState<{ pct: number; label: string } | null>(null);
   // The questions, the sixteen intake fields and the fourteen build switches used
   // to be toggles that appended themselves BELOW this panel — which is what made
@@ -799,6 +801,35 @@ function BusinessPanel({
     }
   };
 
+  // Clear the saved deliverables so the next run starts from nothing.
+  //
+  // Regenerate overwrites in place, which is the wrong tool when the answers the
+  // pack was built from have changed — the operator wants an empty column, not a
+  // pack quietly rewritten around old inputs. The rows are soft-deleted server
+  // side and keep their content; this only stops them being shown.
+  const clearPack = async () => {
+    if (clearing || packRunning) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/assets/clear", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ businessId: b.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Could not clear the deliverables");
+        return;
+      }
+      onChange({ ...item, hasPack: false, packDate: null, lastActivity: new Date().toISOString() });
+      toast.success("Deliverables cleared");
+    } catch {
+      toast.error("Could not clear the deliverables");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   // Arriving from a "Generate asset pack" button (CRM modal / Opportunities card)
   // routes here as /library?businessId=…&generate=1. When that flag targets this
   // panel, open it and immediately kick off the pack — the whole point is to land
@@ -974,7 +1005,10 @@ function BusinessPanel({
           <SectionHead
             icon={Layers}
             label="Deliverables"
-            count={item.hasPack ? 4 : 0}
+            // DERIVED. This was hardcoded to 4 and the set became three when the
+            // four deliverables merged, so an open business claimed a document it
+            // does not have.
+            count={item.hasPack ? DELIVERABLE_META.length : 0}
             action={
               <div style={{ display: "inline-flex", gap: 6 }}>
                 {/* BOTH WORKING SCREENS LIVE HERE, in call order: the calculator
@@ -992,6 +1026,19 @@ function BusinessPanel({
                   icon={ClipboardList}
                   title="Intake & build — their numbers, the six answers, the five decisions"
                 />
+                {/* CLEAR sits BEFORE regenerate because it is the destructive-
+                    looking one and should not be the button next to the mouse
+                    after a generation finishes. It only appears when there is
+                    something to clear. Nothing is destroyed — the rows are
+                    soft-deleted and keep their content forever. */}
+                {item.hasPack && (
+                  <MiniButton
+                    onClick={clearPack}
+                    icon={Trash2}
+                    label="Clear"
+                    busy={clearing}
+                  />
+                )}
                 <MiniButton
                   onClick={runPack}
                   icon={item.hasPack ? Sparkles : Plus}
