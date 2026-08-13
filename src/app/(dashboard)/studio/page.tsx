@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DELIVERABLES } from "@/lib/exporters/deliverables";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Sparkles, Check, ChevronDown, History } from "lucide-react";
@@ -83,7 +84,15 @@ export default function StudioPage() {
   const params = useSearchParams();
   const businessId = params.get("businessId");
   const restoreParam = params.get("restore"); // "pack" → auto-open the saved pack (from Library)
-  const deliverableParam = params.get("deliverable") as DeliverableId | null; // d1..d4 deep-link
+  // VALIDATED, not cast. A bookmark or a stale link can carry any string, and
+  // casting it straight to DeliverableId is what crashed the preview when the
+  // ids changed from d1..d4 — the tab lookup found nothing and dereferenced it.
+  // An unrecognised value now falls back to the default tab.
+  const rawDeliverable = params.get("deliverable");
+  const deliverableParam: DeliverableId | null =
+    rawDeliverable && DELIVERABLES.some((d) => d.id === rawDeliverable)
+      ? (rawDeliverable as DeliverableId)
+      : null;
 
   const [businesses, setBusinesses] = useState<SavedBusiness[]>([]);
   const [selected, setSelected] = useState<SavedBusiness | null>(null);

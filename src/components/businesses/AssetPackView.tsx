@@ -69,7 +69,9 @@ export function AssetPackView({
   governance?: PackGovernance | null;
 }) {
   const [pack, setPack] = useState<AssetPack>(initialPack);
-  const [tab, setTab] = useState<DeliverableId>(initialTab);
+  const [tab, setTab] = useState<DeliverableId>(
+    DELIVERABLES.some((d) => d.id === initialTab) ? initialTab : DELIVERABLES[0].id
+  );
   const [regenerating, setRegenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   // The governance gate's full report, when one blocked. Rendering it is what
@@ -311,7 +313,12 @@ export function AssetPackView({
     void exportZip(payload);
   };
 
-  const activeTab = TABS.find((t) => t.id === tab)!;
+  // NO NON-NULL ASSERTION. `tab` can hold an id that no longer exists — a stale
+  // deep link, a bookmark, a saved value from before the documents were renamed —
+  // and `TABS.find(...)!` turned that into a white-screen crash on
+  // `activeTab.subtitle`. Falling back to the first tab keeps the pack readable;
+  // the id is validated upstream too, and this is the backstop.
+  const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
   // Three sources, all true when set; the freshest wins, because that is the one
   // the operator just caused. `pack.governance` is the persisted record and the
   // only one that survives a reload.

@@ -8,6 +8,8 @@ import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
 import type { SavedBusiness } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { offerPath, offerShareUrl, SHARE_URL_UNSET } from "@/lib/share-link";
+import { DELIVERABLES } from "@/lib/exporters/deliverables";
+import type { DeliverableId } from "@/types";
 import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
 // Type-only: the compute lives server-side (the feed ships the small object);
 // importing VALUES from the lib here would drag the detection layer into the
@@ -112,17 +114,33 @@ interface LibraryItem {
 
 // The four flagship deliverables, rendered from a single asset pack. Kept local
 // so the Library page doesn't pull the full HTML renderer into the client bundle.
-const DELIVERABLE_META: {
-  id: "d1" | "d2" | "d3" | "d4";
-  label: string;
-  short: string;
-  icon: typeof Activity;
-}[] = [
-  { id: "d1", label: "Growth Leak Intelligence Report", short: "Diagnosis", icon: Activity },
-  { id: "d2", label: "Client Acquisition Infrastructure", short: "Architecture", icon: Network },
-  { id: "d3", label: "Conversion Asset Pack", short: "Assets", icon: FileText },
-  { id: "d4", label: "Implementation & Optimization Timeline", short: "Execution", icon: CalendarRange },
-];
+// DERIVED from the deliverables module, not hand-written.
+//
+// This was a third copy of the document list, and it went stale the moment four
+// deliverables became two plus one internal: it kept linking ?deliverable=d1,
+// Studio cast that straight to a DeliverableId, and the preview crashed on
+// `activeTab.subtitle` because no tab with that id exists any more. A list of
+// the documents that is not the list of the documents will always drift.
+//
+// Only the icon and the short label are local — those are presentation, and the
+// ids, titles and audience come from the one definition.
+const DELIVERABLE_ICON: Record<DeliverableId, typeof Activity> = {
+  "diagnosis": Activity,
+  "build-plan": Network,
+  "asset-pack": FileText,
+};
+const DELIVERABLE_SHORT: Record<DeliverableId, string> = {
+  "diagnosis": "Diagnosis",
+  "build-plan": "Build Plan",
+  "asset-pack": "Assets",
+};
+const DELIVERABLE_META = DELIVERABLES.map((d) => ({
+  id: d.id,
+  label: d.title,
+  short: DELIVERABLE_SHORT[d.id],
+  icon: DELIVERABLE_ICON[d.id],
+  internal: d.audience === "internal",
+}));
 
 function nicheKey(item: LibraryItem): string {
   return (item.business.industry ?? item.business.category ?? "").toLowerCase();

@@ -269,6 +269,45 @@ if (!goldenPack) {
     "the Asset Pack reaches the client at go-live, so it is held to the same laws");
 }
 
+// ── E · NO STALE DOCUMENT ID CAN CRASH A VIEW ───────────────────────────────
+// The bug this section exists for, because it actually happened: renaming the
+// deliverable ids (d1..d4 -> diagnosis/build-plan/asset-pack) left a third
+// hand-written copy of the document list in the Library, which kept linking
+// ?deliverable=d1. Studio cast that string straight to a DeliverableId, the tab
+// lookup found nothing, and the preview died on `activeTab.subtitle`.
+{
+  // Comments stripped FIRST. The doc comment above the fix quotes the broken
+  // expression verbatim ("TABS.find(...)! turned that into a crash"), and a scan
+  // that reads it flags the fix as the bug — a check must not fail on its own
+  // documentation.
+  const view = strip(read("src/components/businesses/AssetPackView.tsx"));
+  const lib = strip(read("src/app/(dashboard)/library/page.tsx"));
+  const studio = strip(read("src/app/(dashboard)/studio/page.tsx"));
+
+  // Line-based, not a paren regex: `TABS.find((t) => t.id === tab)` contains a
+  // nested ")" so `[^)]*` stops at the arrow's own paren and matches nothing.
+  const tabLine = view.split("\n").find((l) => l.includes("TABS.find(")) ?? "";
+  check("E1 the tab lookup cannot dereference undefined",
+    tabLine.length > 0 && !tabLine.includes(")!") && tabLine.includes("??"),
+    `a stale id must fall back to a tab, not crash the pack view — found: ${tabLine.trim() || "(no TABS.find at all)"}`);
+
+  check("E2 the Library's document list is DERIVED, not hand-written",
+    /DELIVERABLES\.map\(/.test(lib) && !/id: "d1"/.test(lib),
+    "a second list of the documents will drift from the first");
+
+  check("E3 the deep-link param is validated before it is used as an id",
+    /DELIVERABLES\.some\(\(d\) => d\.id === rawDeliverable\)/.test(studio),
+    "casting a URL string to DeliverableId is what crashed the preview");
+
+  // And no old id survives anywhere a link or a tab could carry it.
+  const stale: string[] = [];
+  for (const [rel, src] of [["library", lib], ["studio", studio], ["AssetPackView", view]] as const) {
+    if (/["'`](d1|d2|d3|d4)["'`]/.test(src)) stale.push(rel);
+  }
+  check("E4 no d1..d4 id remains in the three surfaces that carry one",
+    stale.length === 0, stale.join(", "));
+}
+
 // ── Report ──────────────────────────────────────────────────────────────────
 if (failures.length > 0) {
   console.error(`\n✗ verify-build-plan: ${failures.length} FAILED, ${pass} passed\n`);
