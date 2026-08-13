@@ -17,6 +17,7 @@ import {
   assertPackValid,
   checkId,
   evaluateOverride,
+  validateRenderedMarkup,
   withGovernance,
   type OverrideRejectionCode,
   type ValidationCheck,
@@ -112,6 +113,18 @@ export function validateRenderedDeliverables(
     if (hasInventedOffer(doc))
       renderViolations.push(`${id} HTML contains a fabricated discount amount.`);
   }
+
+  // ── THE LAWS THAT ARE ONLY VISIBLE IN THE HTML ────────────────────────────
+  // P0-1 (a class reaches the DOM with no CSS rule), P0-2 (a leak card prints a
+  // price with nothing under it) and P1-1 (an observation renders with no
+  // measurement behind it). These ran only from scripts/verify-deliverable-ui.ts
+  // against the committed fixture, which proves the FIXTURE is clean and says
+  // nothing about the pack an operator is about to send. They run here because
+  // this is the boundary that blocks. Warnings are dropped on purpose: dead CSS
+  // is a housekeeping fact for the verify script, not something to put in front
+  // of an operator mid-export.
+  for (const c of validateRenderedMarkup(html, pack))
+    if (c.level === "fail") renderViolations.push(`${c.law} — ${c.message}`);
 
   // THE LAWS JUDGE WHAT SHIPS. The visible words of all three rendered
   // documents, handed to the validator so a text law reads the client-facing

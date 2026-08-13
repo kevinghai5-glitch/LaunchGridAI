@@ -1504,7 +1504,7 @@ function buildClient(s: ClientSpec): BuiltClient {
   /* ── D3 · supporting assets ────────────────────────────────────────────── */
   const supportingAssets: AssetPack["supportingAssets"] = {
     reviewAssets: {
-      postJobRequest: `Hi [First name], thanks for having ${s.shortName} out today. If the work was up to standard, a short Google review helps other ${s.city} homeowners work out who to call. Here is the link: [Google review link]. If anything was not right, reply to this message and we will sort it out first.`,
+      postJobRequest: `Hi {{contact.first_name}}, thanks for having ${s.shortName} out today. If the work was up to standard, a short Google review helps other ${s.city} homeowners work out who to call. Here is the link: {{custom_values.review_link}}. If anything was not right, reply to this message and we will sort it out first. Reply STOP to opt out.`,
     },
     thankYouAssets: {
       thankYouPageCopy: `Thanks — that is booked. You will get a confirmation text within a minute with your time slot and the name of the ${s.trade.worker} coming out. If you need to move it, reply to that text and we will find another slot.`,
@@ -1556,8 +1556,12 @@ function buildClient(s: ClientSpec): BuiltClient {
         },
         {
           name: "Proof",
-          purpose: "Let real customers do the persuading.",
-          copy: `${s.shortName} has been working in ${s.region} since ${s.founded}, licensed and insured in ${s.province}. The rating is ${s.rating} across ${s.reviewCount} Google reviews. [Paste three real Google reviews here, first name and neighbourhood only — never write one that nobody left.]`,
+          // The slot ships without the reviews and without a bracketed note
+          // asking somebody to paste some in — an instruction left where proof
+          // should be is the defect that killed the proposal generator. The
+          // reviews are the owner's to pick; what stays is already on the record.
+          purpose: "State what is already on the record, and leave the reviews to the owner.",
+          copy: `${s.shortName} has been working in ${s.region} since ${s.founded}, licensed and insured in ${s.province}. The rating is ${s.rating} across ${s.reviewCount} Google reviews.`,
         },
         {
           name: "Book a time",
@@ -1629,7 +1633,7 @@ function buildClient(s: ClientSpec): BuiltClient {
       greeting: `Hi — this is ${s.shortName}. Ask away and somebody will answer. If you have ${s.trade.emergency}, say so and it goes to the on-call ${s.trade.worker}.`,
       detailsAsk:
         "Can I take a name and a mobile number? That way we can carry on by text if you have to close the tab, and nothing gets lost.",
-      awayMessage: `The office is closed but this is monitored. Send it through and you will get a real reply first thing. If it is urgent, call ${s.phone} and it routes straight to the on-call ${s.trade.worker}. You can also grab a slot now: [booking link]`,
+      awayMessage: `The office is closed but this is monitored. Send it through and you will get a real reply first thing. If it is urgent, call ${s.phone} and it routes straight to the on-call ${s.trade.worker}. You can also grab a slot now: {{custom_values.booking_link}}`,
     },
     siteAdvisory: {
       where: "",
@@ -1819,7 +1823,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Step 1 · text, within a minute",
         channel: "Text",
         timing: "Within about a minute of the form arriving, day or night",
-        body: `Hi [First name], it is ${B}. We have your message about [Job type] and somebody will call you back. If it cannot wait, reply URGENT and it goes to the on-call ${w}.`,
+        body: `Hi {{contact.first_name}}, it is ${B}. We have your message about {{contact.service_requested}} and somebody will call you back. If it cannot wait, reply URGENT and it goes to the on-call ${w}.`,
         mergeFields: ["First name", "Job type"],
       },
       {
@@ -1827,7 +1831,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         channel: "Email",
         timing: "Sent in the same minute as the text above",
         subject: `We have your message — ${B}`,
-        body: `Hi [First name],\n\nThanks for getting in touch. We have your message about [Job type] and it is in the queue with a real person's name against it.\n\nDuring office hours somebody will call you back within the hour. Outside them you will hear from us first thing.\n\nIf you would rather just hold a slot, you can pick one here: [booking link]\n\n— The team at ${B}`,
+        body: `Hi {{contact.first_name}},\n\nThanks for getting in touch. We have your message about {{contact.service_requested}} and it is in the queue with a real person's name against it.\n\nDuring office hours somebody will call you back within the hour. Outside them you will hear from us first thing.\n\nIf you would rather just hold a slot, you can pick one here: {{custom_values.booking_link}}\n\n— The team at ${B}`,
         mergeFields: ["First name", "Job type"],
       },
     ],
@@ -1853,7 +1857,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         channel: "Email",
         timing: "Sent alongside the text above",
         subject: `We have it — ${B}`,
-        body: `Hi [First name],\n\nYour message came in outside office hours and we have it. Somebody will be back to you first thing.\n\nIf you would rather hold a slot now, the calendar is open: [booking link]\n\n— The team at ${B}`,
+        body: `Hi {{contact.first_name}},\n\nYour message came in outside office hours and we have it. Somebody will be back to you first thing.\n\nIf you would rather hold a slot now, the calendar is open: {{custom_values.booking_link}}\n\n— The team at ${B}`,
         mergeFields: ["First name"],
       },
     ],
@@ -1862,7 +1866,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Step 1 · text, on cancellation",
         channel: "Text",
         timing: "The moment an appointment is cancelled",
-        body: `That is cancelled and no more reminders will come through. Whenever it suits, you can pick a new slot here: [booking link] — ${B}`,
+        body: `That is cancelled and no more reminders will come through. Whenever it suits, you can pick a new slot here: {{custom_values.booking_link}} — ${B}`,
         mergeFields: [],
       },
     ],
@@ -1871,8 +1875,12 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Step 1 · internal text to the owner",
         channel: "Text",
         timing: "Within seconds of a priority-scored enquiry arriving",
-        body: `Priority lead: [First name], [Job type], [Postal area]. Scored [Score]. Nobody has called them yet. Full record in the pipeline.`,
-        mergeFields: ["First name", "Job type", "Postal area", "Score"],
+        // stampWorkflowCopy() overwrites this one with OWNER_HOT_LEAD_MESSAGE, so
+        // what it says never reaches a pack. It is written correctly anyway: a
+        // slot that only survives because something downstream replaces it is a
+        // slot that ships the day the replacement moves.
+        body: `New hot lead — {{contact.name}}, {{contact.phone}}. Wants: {{contact.service_requested}}. Scored hot on {{contact.hot_reason}}.`,
+        mergeFields: ["{{contact.name}}", "{{contact.phone}}", "{{contact.service_requested}}", "{{contact.hot_reason}}"],
       },
     ],
     "social-dm-capture": [
@@ -1880,7 +1888,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Step 1 · reply in the social inbox",
         channel: "Direct message",
         timing: "Within a minute of the message arriving",
-        body: `Hi [First name] — this is ${B}. Happy to help. Can I take a mobile number so we can carry this on by text and get somebody out to you? If it is urgent, say so and it goes to the on-call ${w}.`,
+        body: `Hi {{contact.first_name}} — this is ${B}. Happy to help. Can I take a mobile number so we can carry this on by text and get somebody out to you? If it is urgent, say so and it goes to the on-call ${w}.`,
         mergeFields: ["First name"],
       },
     ],
@@ -1889,8 +1897,8 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Step 1 · text with the deposit link",
         channel: "Text",
         timing: "Once the slot is agreed and the job is written up",
-        body: `Hi [First name], that is [Date] between [Window]. The deposit link is here: [payment link]. Once it is paid the slot is held and you will get the confirmation. — ${B}`,
-        mergeFields: ["First name", "Date", "Window"],
+        body: `Hi {{contact.first_name}}, that is {{appointment.start_time}}, inside the arrival window we agreed. The deposit link is here: {{custom_values.payment_link}}. Once it is paid the slot is held and you will get the confirmation. — ${B}`,
+        mergeFields: ["{{contact.first_name}}", "{{appointment.start_time}}", "{{custom_values.payment_link}}"],
       },
     ],
     "database-reactivation": [
@@ -1899,14 +1907,14 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         channel: "Email",
         timing: `Sent ahead of ${s.trade.peak}`,
         subject: `Worth a look before ${s.trade.peak}`,
-        body: `Hi [First name],\n\nIt has been a while since we were out. Ahead of ${s.trade.peak} it is worth a look at the ${s.trade.kit} before it becomes an emergency call.\n\nIf you want one booked in, the calendar is here: [booking link]\n\n— The team at ${B}`,
+        body: `Hi {{contact.first_name}},\n\nIt has been a while since we were out. Ahead of ${s.trade.peak} it is worth a look at the ${s.trade.kit} before it becomes an emergency call.\n\nIf you want one booked in, the calendar is here: {{custom_values.booking_link}}\n\n— The team at ${B}`,
         mergeFields: ["First name"],
       },
       {
         step: "Step 2 · text, four days later",
         channel: "Text",
         timing: "Four days after the email, only to those who did not book",
-        body: `Hi [First name], it is ${B}. Still worth getting the ${s.trade.kit} looked at before ${s.trade.peak}? Slots are here: [booking link]`,
+        body: `Hi {{contact.first_name}}, it is ${B}. Still worth getting the ${s.trade.kit} looked at before ${s.trade.peak}? Slots are here: {{custom_values.booking_link}}`,
         mergeFields: ["First name"],
       },
       {
@@ -1914,7 +1922,7 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         channel: "Email",
         timing: "Ten days after step 1, and the last message in the run",
         subject: "Last one from us this season",
-        body: `Hi [First name],\n\nLast message from us on this. If you would rather we checked back next year instead, reply LATER and we will leave you be until then.\n\n— The team at ${B}`,
+        body: `Hi {{contact.first_name}},\n\nLast message from us on this. If you would rather we checked back next year instead, reply LATER and we will leave you be until then.\n\n— The team at ${B}`,
         mergeFields: ["First name"],
       },
     ],
@@ -1923,21 +1931,21 @@ function workflowMessagesFor(s: ClientSpec): Record<string, WorkflowMessage[]> {
         step: "Reply · a five-star review",
         channel: "Public review reply",
         timing: "Drafted the same day the review lands, sent once you approve it",
-        body: `Thanks [First name] — glad we got that sorted for you. If anything else comes up, you know where we are. — ${B}`,
+        body: `Thanks {{contact.first_name}} — glad we got that sorted for you. If anything else comes up, you know where we are. — ${B}`,
         mergeFields: ["First name"],
       },
       {
         step: "Reply · a middling review",
         channel: "Public review reply",
         timing: "Drafted the same day, sent once you approve it",
-        body: `Thanks for taking the time, [First name]. Sounds like the work was fine but getting hold of us was not. That is the part we are fixing. — ${B}`,
+        body: `Thanks for taking the time, {{contact.first_name}}. Sounds like the work was fine but getting hold of us was not. That is the part we are fixing. — ${B}`,
         mergeFields: ["First name"],
       },
       {
         step: "Reply · a negative review",
         channel: "Public review reply",
         timing: "Drafted the same day, sent once you approve it",
-        body: `[First name], that is not the standard we hold ourselves to and we would like to put it right. Call the office on ${s.phone} and ask for whoever is on today. — ${B}`,
+        body: `{{contact.first_name}}, that is not the standard we hold ourselves to and we would like to put it right. Call the office on ${s.phone} and ask for whoever is on today. — ${B}`,
         mergeFields: ["First name"],
       },
     ],
@@ -2360,7 +2368,7 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         `Your quote from ${B}`,
         "The numbers we talked about",
         "Everything in one place, plus what happens next.",
-        `Hi [First name],\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at [booking link] without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.${sign}`,
+        `Hi {{contact.first_name}},\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at {{custom_values.booking_link}} without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.${sign}`,
         "See available times"
       ),
       email(
@@ -2368,15 +2376,19 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         "What the visit actually looks like",
         "How the day runs",
         "Access, timing, and what happens while we are there.",
-        `Hi [First name],\n\nIn case it helps to picture it: we arrive inside a two-hour window, the work takes most of the day, and everything is cleared out before we leave.\n\nNothing is needed from you on the day beyond access.${sign}`,
+        `Hi {{contact.first_name}},\n\nIn case it helps to picture it: we arrive inside a two-hour window, the work takes most of the day, and everything is cleared out before we leave.\n\nNothing is needed from you on the day beyond access.${sign}`,
         "See available times"
       ),
       email(
         3,
-        "From a customer in [Neighbourhood]",
-        "What other homeowners said",
-        "Their words, not ours.",
-        `Hi [First name],\n\nRather than tell you we are good at this, here is what a customer wrote after a job like yours:\n\n[Paste a real Google review verbatim — never write one that nobody left.]\n\nThe quote is still open if you want to move on it.${sign}`,
+        // WAS a "social proof" email built around a quoted review and a bracketed
+        // note asking somebody to paste a second one in. Step 6 of
+        // NURTURE_SEQUENCE no longer asks for proof, so this answers the brief it
+        // does ask for — and needs no review nobody wrote.
+        "Two questions worth asking before you book anyone",
+        "What to ask any firm quoting this work",
+        "The two that tell you the most.",
+        `Hi {{contact.first_name}},\n\nWhichever firm you go with, two questions tell you most of what you need to know.\n\nFirst: is the price in writing before the work starts, or worked out afterwards? Second: who is licensed and insured for this work in ${s.province}, and can they show it?\n\nOurs are on the quote and on our licence. Worth asking the same of anyone else you are considering.${sign}`,
         "See available times"
       ),
       email(
@@ -2384,7 +2396,7 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         "What actually drives the price",
         "Where the money goes on a job like this",
         "No mystery, just the things that move the number.",
-        `Hi [First name],\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the job, what can be kept and what has to be replaced, access, and how long we are on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.${sign}`,
+        `Hi {{contact.first_name}},\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the job, what can be kept and what has to be replaced, access, and how long we are on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.${sign}`,
         "Reply with your questions"
       ),
       email(
@@ -2392,7 +2404,7 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         `Before ${s.trade.peak}`,
         "Worth doing before the weather turns",
         "Timing, and why it matters on this job.",
-        `Hi [First name],\n\nThis is the point in the year where the calendar starts filling. If the work is happening at all, before ${s.trade.peak} is the easy time to do it rather than the expensive one.\n\nNo pressure either way — the quote holds.${sign}`,
+        `Hi {{contact.first_name}},\n\nThis is the point in the year where the calendar starts filling. If the work is happening at all, before ${s.trade.peak} is the easy time to do it rather than the expensive one.\n\nNo pressure either way — the quote holds.${sign}`,
         "See available times"
       ),
       email(
@@ -2400,7 +2412,7 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         "Anything holding this up?",
         "One question",
         "Tell me the real blocker and I will answer it straight.",
-        `Hi [First name],\n\nIf this has stalled, it is usually one specific thing rather than the whole quote. Tell me which and I will answer it straight rather than guessing.\n\nIf it has simply moved to next year, that is a fine answer too.${sign}`,
+        `Hi {{contact.first_name}},\n\nIf this has stalled, it is usually one specific thing rather than the whole quote. Tell me which and I will answer it straight rather than guessing.\n\nIf it has simply moved to next year, that is a fine answer too.${sign}`,
         "Reply and tell me"
       ),
       email(
@@ -2408,7 +2420,7 @@ function file3For(s: ClientSpec): AssetPack["file3"] {
         "Closing this one off",
         "Last one from me",
         "Nothing further unless you want it.",
-        `Hi [First name],\n\nI will stop here. The quote stays on file and the price holds for thirty days from the date on it.\n\nIf anything changes, the calendar is always open at [booking link], and you can reply to this email any time.${sign}`,
+        `Hi {{contact.first_name}},\n\nI will stop here. The quote stays on file and the price holds for thirty days from the date on it.\n\nIf anything changes, the calendar is always open at {{custom_values.booking_link}}, and you can reply to this email any time.${sign}`,
         "See available times"
       ),
     ],
@@ -2448,37 +2460,39 @@ function file4For(s: ClientSpec): AssetPack["file4"] {
     messages: [
       sms(
         1,
-        `Hi [First name], it is ${B}. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: [booking link]`,
+        // The opt-out opens the sequence because withOptOut() appends it on a real
+        // run; this slot stands in for that stamp's output.
+        `Hi {{contact.first_name}}, it is ${B}. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: {{custom_values.booking_link}} Reply STOP to opt out.`,
         "Picks the conversation back up the day after, while it is still the thing they were thinking about.",
         "Replies route to the office queue; a booking closes the sequence automatically."
       ),
       sms(
         2,
-        `Quick one [First name] — is it still doing the same thing, or has it got worse? Changes what I would suggest doing first.`,
+        `Quick one {{contact.first_name}} — is it still doing the same thing, or has it got worse? Changes what I would suggest doing first.`,
         "One question that takes four words to answer, which is what restarts a thread that has gone quiet.",
         "Any reply reopens the conversation with the office; the word URGENT pages the on-call number."
       ),
       sms(
         3,
-        "Hi [First name], is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
+        "Hi {{contact.first_name}}, is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
         "Names the real blocker instead of asking for a decision they have not made yet.",
         "Replies go to the office; a booking or a reply stops the rest of the sequence."
       ),
       sms(
         4,
-        "Hi [First name], still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
+        "Hi {{contact.first_name}}, still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
         "A genuine permission check that also sorts the list into now and later.",
         "Later parks the record until the seasonal run; done stops everything."
       ),
       sms(
         5,
-        `Hi [First name], we have space in the calendar over the next fortnight if you want it done before ${s.trade.peak}. Slots are here: [booking link]`,
+        `Hi {{contact.first_name}}, we have space in the calendar over the next fortnight if you want it done before ${s.trade.peak}. Slots are here: {{custom_values.booking_link}}`,
         "Real availability stated plainly, with no invented deadline attached to it.",
         "A booking closes the sequence; anything else leaves the last two steps to run."
       ),
       sms(
         6,
-        "Last one from me [First name] — do you want this booked in? One word back and I will either sort it or leave you to it.",
+        "Last one from me {{contact.first_name}} — do you want this booked in? One word back and I will either sort it or leave you to it.",
         "A direct, warm ask at the point where anything less direct gets ignored.",
         "Yes routes straight to the office to book; anything else lets the final email close it out."
       ),
@@ -2522,23 +2536,26 @@ function file5For(s: ClientSpec): AssetPack["file5"] {
       `Rated ${s.rating} across ${s.reviewCount} Google reviews from ${s.city} and ${s.region}.`,
       `Licensed and insured in ${s.province}, working in ${s.region} since ${s.founded}.`,
     ],
+    // THE ARRIVAL WINDOW IS WRITTEN OUT, NOT TOKENISED — there is no field behind
+    // it in GHL_MERGE_FIELDS, and an invented token renders as empty text in a
+    // customer's inbox, which is worse than the bracket because nobody notices.
     confirmationEmail: {
-      subject: "Booked: [date] between [window]",
-      body: `Hi [First name],\n\nThat is confirmed. [Technician] will be with you on [date] between [window].\n\nBefore they arrive, please clear access — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.${sign}`,
+      subject: "Booked: {{appointment.start_time}}",
+      body: `Hi {{contact.first_name}},\n\nThat is confirmed. {{user.first_name}} will be with you at {{appointment.start_time}}, inside the two-hour arrival window shown on this confirmation.\n\nBefore they arrive, please clear access — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.${sign}`,
     },
     reminderEmail24h: {
-      subject: "Tomorrow between [window]",
-      body: `Hi [First name],\n\nA quick reminder that [Technician] is booked to visit tomorrow between [window].\n\nTwo things that help: clear access, and a note of anything that has changed since you booked.\n\nIf tomorrow no longer works, reply and we will move it.${sign}`,
+      subject: "Your visit tomorrow — {{appointment.start_time}}",
+      body: `Hi {{contact.first_name}},\n\nA quick reminder that {{user.first_name}} is booked to visit you at {{appointment.start_time}}, inside the arrival window on your confirmation.\n\nTwo things that help: clear access, and a note of anything that has changed since you booked.\n\nIf tomorrow no longer works, reply and we will move it.${sign}`,
     },
-    dayOfReminderSms: `${B} here — [Technician] is on the way and should reach you inside your [window] slot. Reply if anything has changed.`,
+    dayOfReminderSms: `${B} here — {{user.first_name}} is on the way and should reach you inside your arrival window. Reply if anything has changed. Reply STOP to opt out.`,
     noShowRecoveryEmail: {
       subject: "We came by today",
-      body: `Hi [First name],\n\n[Technician] came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at [booking link], and we will get you back in the calendar.${sign}`,
+      body: `Hi {{contact.first_name}},\n\n{{user.first_name}} came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at {{custom_values.booking_link}}, and we will get you back in the calendar.${sign}`,
     },
     noShowRecoverySms1:
-      "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week.",
+      "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week. Reply STOP to opt out.",
     noShowRecoverySms2:
-      "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: [booking link]",
+      "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: {{custom_values.booking_link}}",
     rescheduleFraming:
       "Rescheduling is offered as a one-word reply on every message, because a customer who cannot easily move an appointment tends to simply not be home for it.",
     showUpQualityNotes:

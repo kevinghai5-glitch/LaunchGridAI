@@ -177,7 +177,7 @@ const PACK_FIXTURES = [
  * supplied, by hand, and section D asserts globals.css agrees with them.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-/** The CLIENT brand. Eleven values in the paid deliverables. */
+/** The CLIENT brand. Fourteen values in the paid deliverables. */
 const BRAND = {
   paper: "#fbfaf7", //   --bg        the cream page
   surface: "#ffffff", // --surface   the card
@@ -190,6 +190,14 @@ const BRAND = {
   good: "#3f7d5a", //    --good / --low
   warn: "#b5862f", //    --warn / --med
   critical: "#a8443b", // --critical / --high
+  // The text-weight twins, added 2026-08-13 for AA. They are not new brand
+  // colours by choice — each one exists because the semantic colour above it
+  // fails 4.5:1 as body text on a ground it actually lands on. A3b holds them
+  // to that: a twin must clear AA everywhere, and its original must fail
+  // somewhere, or the twin has no reason to be in the palette.
+  goldText: "#7e6229", // --accent-text  reads where --accent only rules/fills
+  warnText: "#8a5a18", //  --warn-text
+  goodText: "#356b4c", //  --good-text
 } as const;
 const BRAND_VALUES = Object.values(BRAND).map((v) => v.toLowerCase());
 
@@ -875,7 +883,7 @@ check("A3 · the client colour set is EXACTLY the brand set — nothing added, n
     if (extra.length) offenders.push(`${doc.label}: ${extra.join(" ")}`);
   }
   const deliverableHexes = hexesIn(DELIVERABLE_DOCS[0].html);
-  show("brand palette (11 values)", BRAND_VALUES.join(" "));
+  show(`brand palette (${BRAND_VALUES.length} values)`, BRAND_VALUES.join(" "));
   show(`deliverable colours (${deliverableHexes.length})`, deliverableHexes.join(" "));
   show("documents checked", CLIENT_DOCS.length);
   show("off-brand colours", offenders.length ? offenders : "(none)");
@@ -884,7 +892,71 @@ check("A3 · the client colour set is EXACTLY the brand set — nothing added, n
     0,
     `a colour that is not in the client brand reached a client document:\n  ${offenders.join("\n  ")}`
   );
-  assert.equal(deliverableHexes.length, 11, `the deliverables should carry 11 colours, found ${deliverableHexes.length}`);
+  // "Nothing dropped" is the other half of the law, and it is the half that
+  // catches a token being deleted rather than added. Counted against the
+  // transcription so the two move together or the check fails.
+  assert.equal(
+    deliverableHexes.length,
+    BRAND_VALUES.length,
+    `the deliverables should carry ${BRAND_VALUES.length} colours, found ${deliverableHexes.length}`
+  );
+});
+
+/**
+ * The three -text twins are the only colours ever added to this palette, and
+ * they were added for one reason: their originals are unreadable as text. A
+ * check that only counted them would pass just as happily on three arbitrary
+ * hexes. This asserts the REASON — which is also the rule that decides whether
+ * a fourth twin should exist (--critical's answer is no, and that is asserted
+ * here too, so a twin added for symmetry rather than for contrast fails).
+ */
+check("A3b · each -text twin clears AA where its original does not — the reason they were added", () => {
+  // The grounds a deliverable actually paints text on. Anything else is a
+  // border or a fill, which is what the untwinned original is FOR.
+  const GROUNDS: Array<[string, string]> = [
+    ["--bg", BRAND.paper],
+    ["--surface", BRAND.surface],
+    ["--surface-2", BRAND.surface2],
+    ["--accent-tint", BRAND.goldTint],
+  ];
+  const TWINNED: Array<[string, string, string, string]> = [
+    ["--accent", BRAND.gold, "--accent-text", BRAND.goldText],
+    ["--warn", BRAND.warn, "--warn-text", BRAND.warnText],
+    ["--good", BRAND.good, "--good-text", BRAND.goodText],
+  ];
+
+  const problems: string[] = [];
+  const on = (hex: string, ground: string): number =>
+    contrast(parseHex(hex)!, parseHex(ground)!);
+
+  for (const [origName, orig, twinName, twin] of TWINNED) {
+    const failing = GROUNDS.filter(([, g]) => on(orig, g) < AA_BODY);
+    const twinFails = GROUNDS.filter(([, g]) => on(twin, g) < AA_BODY);
+    show(
+      `${origName} → ${twinName}`,
+      GROUNDS.map(([gn, g]) => `${gn} ${ratioText(on(orig, g))} → ${ratioText(on(twin, g))}`).join("  ·  ")
+    );
+    if (!failing.length) {
+      problems.push(`${twinName} has no job: ${origName} already clears ${AA_BODY} on every ground`);
+    }
+    for (const [gn, g] of twinFails) {
+      problems.push(`${twinName} is ${ratioText(on(twin, g))} on ${gn} — below ${AA_BODY}, so it does not fix what it was added for`);
+    }
+  }
+
+  // The untwinned one, stated as a claim rather than left implicit: --critical
+  // is in the palette without a twin, and that is only correct while it reads.
+  const critFails = GROUNDS.filter(([, g]) => on(BRAND.critical, g) < AA_BODY);
+  show(
+    "--critical (no twin)",
+    GROUNDS.map(([gn, g]) => `${gn} ${ratioText(on(BRAND.critical, g))}`).join("  ·  ")
+  );
+  for (const [gn, g] of critFails) {
+    problems.push(`--critical is ${ratioText(on(BRAND.critical, g))} on ${gn} and has no -text twin — it needs one`);
+  }
+
+  show("problems", problems.length ? problems : "(none)");
+  assert.equal(problems.length, 0, `the -text twins do not do what they exist to do:\n  ${problems.join("\n  ")}`);
 });
 
 check("A4 · not one dark-palette value appears in any client document", () => {

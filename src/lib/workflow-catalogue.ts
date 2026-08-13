@@ -114,7 +114,9 @@ export interface PipelineStageDef {
   howALeadLeaves: string;
 }
 
-/** The same six stages with the wording a deliverable renders. */
+/** The same six stages with the wording a deliverable renders. The three prose
+ *  fields take the same [job] token the workflows do — "The job is yours" told a
+ *  clinic about its own pipeline in trade words — and the composer resolves it. */
 export const PIPELINE: readonly PipelineStageDef[] = [
   {
     stage: "New Lead",
@@ -141,13 +143,13 @@ export const PIPELINE: readonly PipelineStageDef[] = [
   },
   {
     stage: "Showed",
-    whatItMeans: "They turned up, and the conversation about the job has happened.",
+    whatItMeans: "They turned up, and the conversation about the [job] has happened.",
     howALeadArrives: "The appointment is marked as attended.",
     howALeadLeaves: "They go ahead, or they decide against it.",
   },
   {
     stage: "Won",
-    whatItMeans: "The job is yours.",
+    whatItMeans: "The [job] is yours.",
     howALeadArrives: "They say yes — or a deposit lands, which says yes for them.",
     howALeadLeaves:
       "It does not. This is the end of the line, and reaching it is what asks the customer for a review.",
@@ -354,6 +356,42 @@ export interface WorkflowOffSuggestion {
  * SECTION 4 — THE WORKFLOW DEFINITION
  * ==========================================================================*/
 
+/**
+ * THE SQUARE-BRACKET TOKENS, AND THE TWO FIELDS THEY ARE ALLOWED IN.
+ *
+ * `trigger` and `whatTheClientSees` are rendered ONLY by the deliverable
+ * composer, which resolves every token before the string reaches a page:
+ *
+ *   [job] [jobs]   the unit of work in this vertical, from INDUSTRY_NOUNS below
+ *   [thanks]       "Thanks for coming in" / "Thanks for having us out",
+ *                  decided by customerComesToUs
+ *   [Business]     the business name
+ *   [name] [time] [booking link] [review link]
+ *                  per-recipient values — they become merge-field chips
+ *
+ * NOT IN `whatItDoes`. That field is also rendered raw by the client offer page
+ * and the operator's toggles screen, neither of which resolves anything, so a
+ * token in it ships as literal "[job]" to a client. Where whatItDoes would need
+ * a vertical's noun, write the sentence so it does not need one — "every
+ * customer is asked for a review" says the same thing in every trade.
+ *
+ * Both halves of that are checked by verifyWorkflowCatalogue() below, so the
+ * list has to stay in step with resolveBracketTokens() in exporters/deliverables.ts
+ * — adding a token there without adding it here fails the catalogue check, which
+ * is the cheaper of the two ways to find out.
+ */
+const BRACKET_TOKEN = /\[[^\]]+\]/g;
+const RESOLVED_TOKENS = new Set([
+  "[job]",
+  "[jobs]",
+  "[thanks]",
+  "[Business]",
+  "[name]",
+  "[time]",
+  "[booking link]",
+  "[review link]",
+]);
+
 export interface WorkflowDefinition {
   /**
    * Stable slug. Written into Business.workflowToggles when the operator makes a
@@ -365,7 +403,7 @@ export interface WorkflowDefinition {
   name: string;
 
   /** One or two sentences an owner understands with no explanation. No product
-   *  menu names, no automation jargon. */
+   *  menu names, no automation jargon. NO BRACKET TOKENS — see above. */
   whatItDoes: string;
 
   /** What fires it, in owner language — "a form is submitted", "a call rings out
@@ -531,7 +569,7 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
       "The moment an appointment is cancelled or moved, the reminders for the old slot stop. Nobody gets a cheerful reminder for a visit they already cancelled.",
     trigger: "An appointment is cancelled or rescheduled, by the customer or by you.",
     whatTheClientSees:
-      "Silence about the old slot — that is the whole job. What they do get is one short note confirming the cancellation with a link to pick a new time, and if they rebook, the reminders start again against the new appointment.",
+      "Silence about the old slot — that is the whole point. What they do get is one short note confirming the cancellation with a link to pick a new time, and if they rebook, the reminders start again against the new appointment.",
     justifyingLeaks: [],
     gatedOnALeak: false,
     applicability: { kind: "every_build" },
@@ -565,10 +603,12 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
     id: "review-request",
     name: "Review Request",
     whatItDoes:
-      "Every finished job asks the customer for a Google review at the moment they are happiest with you, without anyone having to remember to do it.",
-    trigger: "A job is marked complete — the deal reaches Won in your pipeline.",
+      "Every customer is asked for a Google review at the moment they are happiest with you, without anyone having to remember to do it.",
+    trigger: "A [job] is marked complete — the deal reaches Won in your pipeline.",
+    // [thanks] is the customerComesToUs branch: a clinic never went out to
+    // anybody, and this was the line that thanked its patients for having it out.
     whatTheClientSees:
-      "\"Thanks for having us out, [name]. If we did right by you, a quick review helps us more than you would think: [review link]\". One polite reminder follows if nothing happens, and then it stops asking.",
+      "\"[thanks], [name]. If we did right by you, a quick review helps us more than you would think: [review link]\". One polite reminder follows if nothing happens, and then it stops asking.",
     justifyingLeaks: ["low_review_velocity"],
     gatedOnALeak: false,
     applicability: { kind: "every_build" },
@@ -589,7 +629,7 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
       "A lead who never booked keeps hearing from you for 60 days — a handful of texts and emails spread out, not a barrage. If they book or reply it stops on its own; if the 60 days run out, the deal moves to Lost so your pipeline shows what is real.",
     trigger: "A new lead passes a set number of days without booking anything.",
     whatTheClientSees:
-      "A short run of texts and emails over 60 days — a nudge, a reminder of what you do, a straight \"do you still want that quote?\" — each with a booking link, each stopping the moment they reply or book.",
+      "A short run of texts and emails over 60 days — a nudge, a reminder of what you do, a straight \"are you still thinking about it?\" — each with a booking link, each stopping the moment they reply or book.",
     justifyingLeaks: ["no_follow_up_sequence", "no_long_cycle_nurture"],
     gatedOnALeak: false,
     applicability: { kind: "every_build" },
@@ -605,9 +645,9 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
     id: "owner-hot-lead-notification",
     name: "Owner Hot-Lead Notification",
     whatItDoes:
-      "The enquiries worth dropping everything for reach you the second they land, separately from everything else, so a big job never sits in the queue behind ten small ones.",
+      "The enquiries worth dropping everything for reach you the second they land, separately from everything else, so the big ones never sit in the queue behind ten small ones.",
     trigger:
-      "A new enquiry scores as high intent — the job type, the urgency or the size crosses the line you set with us.",
+      "A new enquiry scores as high intent — the [job] type, the urgency or the size crosses the line you set with us.",
     whatTheClientSees:
       "A text and a phone notification: who it is, what they asked for, why it scored hot, and their number ready to tap and call. The lead sits at the top of your pipeline until somebody touches it.",
     justifyingLeaks: ["no_lead_qualification"],
@@ -670,7 +710,7 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
       "Messages sent to your Facebook page or Instagram account land in the same place as your calls and forms, get the same quick first reply, and become contacts you can follow up like any other enquiry.",
     trigger: "Somebody sends a message to your Facebook page or your Instagram account.",
     whatTheClientSees:
-      "The sender gets a reply in the app within a minute with a link to book, and you see their message alongside your texts and emails instead of in a separate phone app nobody opens between jobs.",
+      "The sender gets a reply in the app within a minute with a link to book, and you see their message alongside your texts and emails instead of in a separate phone app nobody opens between [jobs].",
     justifyingLeaks: ["social_dm_unmanaged"],
     gatedOnALeak: false,
     applicability: {
@@ -763,7 +803,7 @@ export const WORKFLOWS: readonly WorkflowDefinition[] = [
     id: "database-reactivation",
     name: "Database Reactivation",
     whatItDoes:
-      "Your past customers and old quotes hear from you again — a short, polite campaign that brings some of them back for work they were already going to need.",
+      "Your past customers, and anyone who asked and never booked, hear from you again — a short, polite campaign that brings some of them back for work they were already going to need.",
     trigger:
       "You hand the list over once and we send it in batches, then it runs again on whatever rhythm you agree — usually seasonal.",
     whatTheClientSees:
@@ -976,6 +1016,183 @@ export function workflowOffSuggestion(
 }
 
 /* ============================================================================
+ * SECTION 6b — THE JOURNEY: FOURTEEN WORKFLOWS AS FIVE MOMENTS
+ * ==========================================================================*/
+
+export type JourneyStageNumber = 1 | 2 | 3 | 4 | 5;
+
+export interface JourneyStage {
+  n: JourneyStageNumber;
+  /** The moment, named the way the client would name it. */
+  title: string;
+  /** One sentence: what happens to a customer here. */
+  description: string;
+  /** Catalogue-ordered ids. DERIVED — never hand-written. */
+  workflowIds: readonly string[];
+}
+
+/**
+ * Which moment each workflow belongs to. THIS IS THE ONLY PART WRITTEN BY HAND.
+ *
+ * `workflowIds` below is FILTERED out of WORKFLOWS rather than listed here, so
+ * an id in a rendered Build Plan can only ever be an id that exists, in
+ * catalogue order. A typo in this map therefore produces a workflow with no
+ * moment — which the integrity check reports — instead of a phantom id the
+ * composer silently skips.
+ *
+ * ONE NAME IN THE OWNER'S LIST IS NOT A WORKFLOW. "LeadGate qualifying
+ * questions" is the qualifying form the notification reads from, not one of the
+ * fourteen, so moment 2 carries the notification alone. Do not invent an id for
+ * it: nothing would resolve, and the pack validator would fail on a workflow
+ * that is in nobody's build.
+ */
+const STAGE_OF: Record<string, JourneyStageNumber> = {
+  "instant-lead-response": 1,
+  "missed-call-text-back": 1,
+  "after-hours-auto-reply": 1,
+  "social-dm-capture": 1,
+  "webchat-capture": 1,
+
+  "owner-hot-lead-notification": 2,
+
+  "booking-confirmation-reminders": 3,
+  "appointment-cancelled-stop-reminders": 3,
+  "text-to-pay": 3,
+
+  "no-show-recovery": 4,
+  "review-request": 4,
+
+  "lead-nurture-no-booking": 5,
+  "database-reactivation": 5,
+  "review-response": 5,
+};
+
+const STAGE_COPY: readonly Omit<JourneyStage, "workflowIds">[] = [
+  {
+    n: 1,
+    title: "They reach out",
+    description:
+      "Somebody gets in touch — a call, a form, a chat, a message on Facebook or Instagram — and hears back within about a minute, whatever time of day it is.",
+  },
+  {
+    n: 2,
+    title: "We qualify",
+    description:
+      "You find out what they want and how urgent it is, and the ones worth dropping everything for reach you separately from the rest.",
+  },
+  {
+    n: 3,
+    title: "They book",
+    description:
+      "A time goes on the calendar, and everything that keeps it there happens without anyone having to chase it.",
+  },
+  {
+    n: 4,
+    title: "They show, or don't",
+    description:
+      "They turn up and get asked for a review, or they do not and get an easy way back onto the calendar.",
+  },
+  {
+    n: 5,
+    title: "They go quiet",
+    description:
+      "Nothing is dropped for going cold — the lead who never booked, the customer you have not seen in a while, and the review nobody replied to.",
+  },
+];
+
+/** The five moments, each carrying its workflows in catalogue order. */
+export const JOURNEY_STAGES: readonly JourneyStage[] = STAGE_COPY.map((stage) => ({
+  ...stage,
+  workflowIds: WORKFLOWS.filter((w) => STAGE_OF[w.id] === stage.n).map((w) => w.id),
+}));
+
+/* ============================================================================
+ * SECTION 6c — WHAT THIS CLIENT CALLS A JOB
+ * ==========================================================================*/
+
+/**
+ * The copy in this build was written for a trade and it shows the moment it is
+ * generated for anybody else: a med spa does not quote, it does not send anyone
+ * out, and "Thanks for having us out" is addressed to a customer who drove to
+ * the clinic. Four nouns and one fact carry that difference; the rest of a
+ * deliverable is already industry-neutral.
+ *
+ * LOOKED UP, NOT GENERATED. A model asked for "the right word for this industry"
+ * reaches for the marketing one.
+ */
+export interface IndustryNouns {
+  /** The unit of work. Replaces "job". */
+  job: string;
+  jobPlural: string;
+  /** The appointment itself. Replaces "visit". */
+  visit: string;
+  /** Fills "In your ___". */
+  tradeWord: string;
+  /**
+   * Does the customer travel to them? What it actually decides is whether copy
+   * may say we came out to them — the review request thanking somebody for
+   * "having us out" is the line this flag exists to stop.
+   */
+  customerComesToUs: boolean;
+}
+
+export type IndustryKey = "trades" | "med_spa" | "dental" | "legal";
+
+export const INDUSTRY_NOUNS: Record<IndustryKey, IndustryNouns> = {
+  // The default, and the shape every other entry is a departure from.
+  trades: { job: "job", jobPlural: "jobs", visit: "visit", tradeWord: "trade", customerComesToUs: false },
+  med_spa: {
+    job: "treatment",
+    jobPlural: "treatments",
+    visit: "appointment",
+    tradeWord: "field",
+    customerComesToUs: true,
+  },
+  dental: {
+    job: "appointment",
+    jobPlural: "appointments",
+    visit: "appointment",
+    tradeWord: "practice",
+    customerComesToUs: true,
+  },
+  // customerComesToUs is TRUE even though a first meeting is as often a call:
+  // the flag decides whether copy may claim we came out to them, and a firm
+  // never does.
+  legal: {
+    job: "matter",
+    jobPlural: "matters",
+    visit: "consultation",
+    tradeWord: "practice",
+    customerComesToUs: true,
+  },
+};
+
+/**
+ * Ordered, and the order is load-bearing twice:
+ *   · dental sits ahead of med_spa so "Cosmetic Dentistry" resolves to dental —
+ *     "cosmetic" is a med spa word and would otherwise win;
+ *   · "law" is deliberately not a legal substring. "Lawn Care" contains it, and
+ *     telling a lawn crew they have matters instead of jobs is exactly the
+ *     failure this map exists to prevent.
+ */
+const INDUSTRY_MATCHES: readonly { key: IndustryKey; substrings: readonly string[] }[] = [
+  { key: "dental", substrings: ["dent", "orthodont"] },
+  {
+    key: "med_spa",
+    substrings: ["med spa", "medspa", "medical spa", "aesthetic", "dermatolog", "botox", "cosmetic", "skin", "plastic surgery"],
+  },
+  { key: "legal", substrings: ["law firm", "lawyer", "attorney", "legal", "litigation"] },
+];
+
+/** The nouns for a resolved industry — trades for anything unrecognised, which
+ *  is the same answer a missing industry gets. */
+export function nounsFor(industry: string | null): IndustryNouns {
+  const hay = (industry ?? "").toLowerCase();
+  const match = INDUSTRY_MATCHES.find((m) => m.substrings.some((s) => hay.includes(s)));
+  return INDUSTRY_NOUNS[match?.key ?? "trades"];
+}
+
+/* ============================================================================
  * SECTION 7 — INTEGRITY CHECK
  * ==========================================================================*/
 
@@ -1084,6 +1301,49 @@ export function verifyWorkflowCatalogue(): string[] {
         `Workflow "${w.id}" has BOTH an applicability rule and a suggestion on "${String(s.field)}". One answer cannot both decide the build and merely hint at it — pick which one this field is.`
       );
   }
+
+  // Every workflow lands in exactly ONE journey moment. The Build Plan renders
+  // from JOURNEY_STAGES, not from WORKFLOWS, so a workflow nobody assigned is a
+  // workflow the client pays for and never sees — and a fifteenth added later
+  // vanishes from that document with nothing else in this file noticing. Only
+  // this direction needs checking: the ids are filtered out of WORKFLOWS, so a
+  // moment cannot name a workflow that does not exist.
+  if (JOURNEY_STAGES.length !== 5)
+    problems.push(`Expected 5 journey stages, found ${JOURNEY_STAGES.length}.`);
+  const staged = new Map<string, number>();
+  for (const stage of JOURNEY_STAGES)
+    for (const id of stage.workflowIds) staged.set(id, (staged.get(id) ?? 0) + 1);
+  for (const w of WORKFLOWS) {
+    const n = staged.get(w.id) ?? 0;
+    if (n !== 1)
+      problems.push(
+        n === 0
+          ? `Workflow "${w.id}" is in no journey stage, so the Build Plan would not render it.`
+          : `Workflow "${w.id}" is in ${n} journey stages.`
+      );
+  }
+
+  // The bracket vocabulary, both ways round. An unknown token ships to a client
+  // as literal "[job]", and a token in whatItDoes ships that way even when it is
+  // spelled right, because the client offer page renders that field raw.
+  for (const w of WORKFLOWS) {
+    for (const token of w.whatItDoes.match(BRACKET_TOKEN) ?? [])
+      problems.push(
+        `Workflow "${w.id}" has ${token} in whatItDoes, which is rendered without resolving tokens. Write the sentence so it needs no vertical's noun.`
+      );
+    for (const [field, text] of [
+      ["trigger", w.trigger],
+      ["whatTheClientSees", w.whatTheClientSees],
+    ] as const)
+      for (const token of text.match(BRACKET_TOKEN) ?? [])
+        if (!RESOLVED_TOKENS.has(token))
+          problems.push(`Workflow "${w.id}" uses ${token} in ${field}, which nothing resolves.`);
+  }
+  for (const s of PIPELINE)
+    for (const text of [s.whatItMeans, s.howALeadArrives, s.howALeadLeaves])
+      for (const token of text.match(BRACKET_TOKEN) ?? [])
+        if (!RESOLVED_TOKENS.has(token))
+          problems.push(`Pipeline stage "${s.stage}" uses ${token}, which nothing resolves.`);
 
   // Six pipeline stages, ending at Lost — the stage workflow 8 needs somewhere to
   // put a lead that never booked.

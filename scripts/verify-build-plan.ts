@@ -196,20 +196,81 @@ if (!goldenPack) {
 
   if (goldenPack) {
     // THE RENDERED PAGE — all three states must be visible, in words.
-    const allOn = text(renderDeliverableHtml(goldenPack, "build-plan",
-      deliverableContext({ assessment: null, workflowToggles: null, kickoffAt: null })));
-    check("B14 'nothing left out' is SAID when nothing is off",
-      /Nothing has been left out/i.test(allOn));
-    check("B15 …and states the whole count",
-      new RegExp(`All ${WORKFLOWS.length} workflows are installed`).test(allOn), allOn.slice(0, 0));
+    const render = (toggles: Record<string, boolean> | null): string =>
+      renderDeliverableHtml(goldenPack, "build-plan",
+        deliverableContext({ assessment: null, workflowToggles: toggles, kickoffAt: null }));
+    const titles = (html: string): string[] =>
+      Array.from(html.matchAll(/<h2>([^<]+)<\/h2>/g), (m) => m[1]);
+
+    const allOn = text(render(null));
+    const allOnTitles = titles(render(null));
+
+    // B14/B15 REWRITTEN 2026-08-13 (P3-1). They used to assert an unconditional
+    // block reading "Nothing has been left out. All 14 workflows are installed"
+    // — a completeness claim printed even when the page underneath it showed a
+    // workflow that was NOT installed. P3-1 deleted the block and made the
+    // exclusion section conditional, so there is no fixed sentence left to look
+    // for. What replaces it is the rule the block was a bad proxy for: the
+    // document may only claim an exclusion when it HAS one, and every count it
+    // prints must come off the same resolved set.
+    //
+    // The audit words the title rule in three states. Two of them ship as
+    // written; the third does not, and the deviation is deliberate:
+    //   off > 0                 → "What Is Not Installed, and Why"
+    //   off = 0, pending > 0    → no exclusion section. The audit's title for
+    //                             this state, "One Thing We Confirm During the
+    //                             Build", was written when §02 WAS the workflow
+    //                             list. §01 now carries every in-build workflow,
+    //                             so a section here would print the pending card
+    //                             a second time (P3-4's defect). The state's
+    //                             content ships instead as §01's caveat
+    //                             paragraph and the card's own "Confirmed during
+    //                             the build" marker — both asserted below, so
+    //                             moving it did not lose it.
+    //   off = 0, pending = 0    → no section. Unreachable today and asserted as
+    //                             unreachable, because webchat is always in one
+    //                             of the two states above.
+    const EXCLUSION_TITLE = "What Is Not Installed, and Why";
+    check("B14 no exclusion section when nothing is excluded",
+      !allOnTitles.includes(EXCLUSION_TITLE), allOnTitles.join(" | "));
+    check("B14b …and the state is the one the audit calls pending-only",
+      all.off.length === 0 && all.pending.length > 0);
+    check("B14c …so the caveat is said in §01 instead of being dropped",
+      /confirmed during the build/i.test(allOn));
+    check("B14d 'nothing left out' is never claimed, in any state",
+      !/Nothing has been left out/i.test(allOn));
+    check("B14e the third state — nothing off AND nothing pending — cannot be reached",
+      all.pending.length + all.off.filter((i) => i.id === PENDING_WORKFLOW_ID).length === 1,
+      "webchat is pending or off; a build with neither would suppress the section untested");
+
+    // B15 · every count printed on the page comes off the resolved set. The old
+    // check pinned one sentence; this pins all of them, which is the thing that
+    // actually went wrong (13 in one section, 14 in another).
+    const printedCounts = Array.from(
+      allOn.matchAll(/(\d+) of (?:the )?(\d+)\b/g),
+      (m) => `${m[1]}/${m[2]}`
+    );
+    const inBuildCount = all.installed.length + all.pending.length;
+    check("B15 the count on the page is installed+pending out of the whole catalogue",
+      printedCounts.length > 0 &&
+        printedCounts.every((c) => c === `${inBuildCount}/${WORKFLOWS.length}`),
+      `printed ${JSON.stringify(printedCounts)}, resolved ${inBuildCount}/${WORKFLOWS.length}`);
+    check("B15b …and the pending one is inside that count, not excluded from it",
+      inBuildCount === WORKFLOWS.length);
+
     check("B16 the pending one is named on the page",
       allOn.includes(WORKFLOWS.find((w) => w.id === PENDING_WORKFLOW_ID)!.name));
     check("B17 …with its reason", /needs a small snippet/i.test(allOn));
 
-    const someOff = text(renderDeliverableHtml(goldenPack, "build-plan",
-      deliverableContext({ assessment: null, workflowToggles: offAll, kickoffAt: null })));
+    const someOff = text(render(offAll));
+    const someOffTitles = titles(render(offAll));
     check("B18 the not-installed heading appears when something IS off",
       /Not installed for you/i.test(someOff));
+    check("B18b …under the conditional section title, which only this state gets",
+      someOffTitles.includes(EXCLUSION_TITLE), someOffTitles.join(" | "));
+    check("B18c …and its counts come off the same resolved set",
+      someOff.includes(`${stripped.installed.length + stripped.pending.length} of ${WORKFLOWS.length}`) &&
+        someOff.includes(`${stripped.off.length} of the ${WORKFLOWS.length}`));
     check("B19 'nothing left out' is NOT claimed when something is off",
       !/Nothing has been left out/i.test(someOff));
     for (const w of stripped.off) {

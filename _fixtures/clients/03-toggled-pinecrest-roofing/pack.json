@@ -415,7 +415,7 @@
         "subject": "Your quote from Pinecrest",
         "subjectB": "The numbers we talked about",
         "previewText": "Everything in one place, plus what happens next.",
-        "body": "Hi [First name],\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at [booking link] without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at {{custom_values.booking_link}} without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.\n\n— The team at Pinecrest",
         "cta": "See available times",
         "purpose": "What you do and what happens next, with the booking link"
       },
@@ -426,20 +426,20 @@
         "subject": "What the visit actually looks like",
         "subjectB": "How the day runs",
         "previewText": "Access, timing, and what happens while we are there.",
-        "body": "Hi [First name],\n\nIn case it helps to picture it: we arrive inside a two-hour window, the work takes most of the day, and everything is cleared out before we leave.\n\nNothing is needed from you on the day beyond access.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nIn case it helps to picture it: we arrive inside a two-hour window, the work takes most of the day, and everything is cleared out before we leave.\n\nNothing is needed from you on the day beyond access.\n\n— The team at Pinecrest",
         "cta": "See available times",
-        "purpose": "How the job actually runs — remove the uncertainty that stalls people"
+        "purpose": "How the work actually runs — remove the uncertainty that stalls people"
       },
       {
         "step": 6,
         "day": 16,
         "timing": "Day 16 — step 6 of the 60-day sequence on an unbooked quote",
-        "subject": "From a customer in [Neighbourhood]",
-        "subjectB": "What other homeowners said",
-        "previewText": "Their words, not ours.",
-        "body": "Hi [First name],\n\nRather than tell you we are good at this, here is what a customer wrote after a job like yours:\n\n[Paste a real Google review verbatim — never write one that nobody left.]\n\nThe quote is still open if you want to move on it.\n\n— The team at Pinecrest",
+        "subject": "Two questions worth asking before you book anyone",
+        "subjectB": "What to ask any firm quoting this work",
+        "previewText": "The two that tell you the most.",
+        "body": "Hi {{contact.first_name}},\n\nWhichever firm you go with, two questions tell you most of what you need to know.\n\nFirst: is the price in writing before the work starts, or worked out afterwards? Second: who is licensed and insured for this work in Ontario, and can they show it?\n\nOurs are on the quote and on our licence. Worth asking the same of anyone else you are considering.\n\n— The team at Pinecrest",
         "cta": "See available times",
-        "purpose": "Local proof — real reviews and real work, no invented names"
+        "purpose": "The two questions worth asking anyone before booking work like this"
       },
       {
         "step": 8,
@@ -448,9 +448,9 @@
         "subject": "What actually drives the price",
         "subjectB": "Where the money goes on a job like this",
         "previewText": "No mystery, just the things that move the number.",
-        "body": "Hi [First name],\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the job, what can be kept and what has to be replaced, access, and how long we are on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the job, what can be kept and what has to be replaced, access, and how long we are on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.\n\n— The team at Pinecrest",
         "cta": "Reply with your questions",
-        "purpose": "What drives the price, honestly, so cost stops being a mystery"
+        "purpose": "What actually moves the price up or down on work like this, named plainly"
       },
       {
         "step": 10,
@@ -459,7 +459,7 @@
         "subject": "Before the spring thaw",
         "subjectB": "Worth doing before the weather turns",
         "previewText": "Timing, and why it matters on this job.",
-        "body": "Hi [First name],\n\nThis is the point in the year where the calendar starts filling. If the work is happening at all, before the spring thaw is the easy time to do it rather than the expensive one.\n\nNo pressure either way — the quote holds.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nThis is the point in the year where the calendar starts filling. If the work is happening at all, before the spring thaw is the easy time to do it rather than the expensive one.\n\nNo pressure either way — the quote holds.\n\n— The team at Pinecrest",
         "cta": "See available times",
         "purpose": "The usual reason people wait, answered straight"
       },
@@ -470,7 +470,7 @@
         "subject": "Anything holding this up?",
         "subjectB": "One question",
         "previewText": "Tell me the real blocker and I will answer it straight.",
-        "body": "Hi [First name],\n\nIf this has stalled, it is usually one specific thing rather than the whole quote. Tell me which and I will answer it straight rather than guessing.\n\nIf it has simply moved to next year, that is a fine answer too.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nIf this has stalled, it is usually one specific thing rather than the whole quote. Tell me which and I will answer it straight rather than guessing.\n\nIf it has simply moved to next year, that is a fine answer too.\n\n— The team at Pinecrest",
         "cta": "Reply and tell me",
         "purpose": "Final email — the straight ask with the booking link"
       },
@@ -481,7 +481,7 @@
         "subject": "Closing this one off",
         "subjectB": "Last one from me",
         "previewText": "Nothing further unless you want it.",
-        "body": "Hi [First name],\n\nI will stop here. The quote stays on file and the price holds for thirty days from the date on it.\n\nIf anything changes, the calendar is always open at [booking link], and you can reply to this email any time.\n\n— The team at Pinecrest",
+        "body": "Hi {{contact.first_name}},\n\nI will stop here. The quote stays on file and the price holds for thirty days from the date on it.\n\nIf anything changes, the calendar is always open at {{custom_values.booking_link}}, and you can reply to this email any time.\n\n— The team at Pinecrest",
         "cta": "See available times",
         "purpose": "Close-out — we stop here, the door stays open, and the deal moves to Lost"
       }
@@ -516,8 +516,8 @@
         "order": 1,
         "day": 1,
         "timing": "Day 1 — step 1 of the 60-day sequence on an unbooked quote",
-        "message": "Hi [First name], it is Pinecrest. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: [booking link]",
-        "charCount": 154,
+        "message": "Hi {{contact.first_name}}, it is Pinecrest. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: {{custom_values.booking_link}} Reply STOP to opt out.",
+        "charCount": 203,
         "psychology": "Picks the conversation back up the day after, while it is still the thing they were thinking about.",
         "replyStrategy": "Replies route to the office queue; a booking closes the sequence automatically."
       },
@@ -526,8 +526,8 @@
         "order": 2,
         "day": 4,
         "timing": "Day 4 — step 3 of the 60-day sequence on an unbooked quote",
-        "message": "Quick one [First name] — is it still doing the same thing, or has it got worse? Changes what I would suggest doing first.",
-        "charCount": 121,
+        "message": "Quick one {{contact.first_name}} — is it still doing the same thing, or has it got worse? Changes what I would suggest doing first.",
+        "charCount": 131,
         "psychology": "One question that takes four words to answer, which is what restarts a thread that has gone quiet.",
         "replyStrategy": "Any reply reopens the conversation with the office; the word URGENT pages the on-call number."
       },
@@ -536,8 +536,8 @@
         "order": 3,
         "day": 11,
         "timing": "Day 11 — step 5 of the 60-day sequence on an unbooked quote",
-        "message": "Hi [First name], is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
-        "charCount": 134,
+        "message": "Hi {{contact.first_name}}, is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
+        "charCount": 144,
         "psychology": "Names the real blocker instead of asking for a decision they have not made yet.",
         "replyStrategy": "Replies go to the office; a booking or a reply stops the rest of the sequence."
       },
@@ -546,8 +546,8 @@
         "order": 4,
         "day": 23,
         "timing": "Day 23 — step 7 of the 60-day sequence on an unbooked quote",
-        "message": "Hi [First name], still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
-        "charCount": 144,
+        "message": "Hi {{contact.first_name}}, still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
+        "charCount": 154,
         "psychology": "A genuine permission check that also sorts the list into now and later.",
         "replyStrategy": "Later parks the record until the seasonal run; done stops everything."
       },
@@ -556,8 +556,8 @@
         "order": 5,
         "day": 38,
         "timing": "Day 38 — step 9 of the 60-day sequence on an unbooked quote",
-        "message": "Hi [First name], we have space in the calendar over the next fortnight if you want it done before the spring thaw. Slots are here: [booking link]",
-        "charCount": 145,
+        "message": "Hi {{contact.first_name}}, we have space in the calendar over the next fortnight if you want it done before the spring thaw. Slots are here: {{custom_values.booking_link}}",
+        "charCount": 171,
         "psychology": "Real availability stated plainly, with no invented deadline attached to it.",
         "replyStrategy": "A booking closes the sequence; anything else leaves the last two steps to run."
       },
@@ -566,8 +566,8 @@
         "order": 6,
         "day": 52,
         "timing": "Day 52 — step 11 of the 60-day sequence on an unbooked quote",
-        "message": "Last one from me [First name] — do you want this booked in? One word back and I will either sort it or leave you to it.",
-        "charCount": 119,
+        "message": "Last one from me {{contact.first_name}} — do you want this booked in? One word back and I will either sort it or leave you to it.",
+        "charCount": 129,
         "psychology": "A direct, warm ask at the point where anything less direct gets ignored.",
         "replyStrategy": "Yes routes straight to the office to book; anything else lets the final email close it out."
       }
@@ -614,20 +614,20 @@
       "Licensed and insured in Ontario, working in the Sudbury basin since 2014."
     ],
     "confirmationEmail": {
-      "subject": "Booked: [date] between [window]",
-      "body": "Hi [First name],\n\nThat is confirmed. [Technician] will be with you on [date] between [window].\n\nBefore they arrive, please clear access — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.\n\n— The team at Pinecrest"
+      "subject": "Booked: {{appointment.start_time}}",
+      "body": "Hi {{contact.first_name}},\n\nThat is confirmed. {{user.first_name}} will be with you at {{appointment.start_time}}, inside the two-hour arrival window shown on this confirmation.\n\nBefore they arrive, please clear access — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.\n\n— The team at Pinecrest"
     },
     "reminderEmail24h": {
-      "subject": "Tomorrow between [window]",
-      "body": "Hi [First name],\n\nA quick reminder that [Technician] is booked to visit tomorrow between [window].\n\nTwo things that help: clear access, and a note of anything that has changed since you booked.\n\nIf tomorrow no longer works, reply and we will move it.\n\n— The team at Pinecrest"
+      "subject": "Your visit tomorrow — {{appointment.start_time}}",
+      "body": "Hi {{contact.first_name}},\n\nA quick reminder that {{user.first_name}} is booked to visit you at {{appointment.start_time}}, inside the arrival window on your confirmation.\n\nTwo things that help: clear access, and a note of anything that has changed since you booked.\n\nIf tomorrow no longer works, reply and we will move it.\n\n— The team at Pinecrest"
     },
-    "dayOfReminderSms": "Pinecrest here — [Technician] is on the way and should reach you inside your [window] slot. Reply if anything has changed.",
+    "dayOfReminderSms": "Pinecrest here — {{user.first_name}} is on the way and should reach you inside your arrival window. Reply if anything has changed. Reply STOP to opt out.",
     "noShowRecoveryEmail": {
       "subject": "We came by today",
-      "body": "Hi [First name],\n\n[Technician] came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at [booking link], and we will get you back in the calendar.\n\n— The team at Pinecrest"
+      "body": "Hi {{contact.first_name}},\n\n{{user.first_name}} came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at {{custom_values.booking_link}}, and we will get you back in the calendar.\n\n— The team at Pinecrest"
     },
-    "noShowRecoverySms1": "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week.",
-    "noShowRecoverySms2": "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: [booking link]",
+    "noShowRecoverySms1": "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week. Reply STOP to opt out.",
+    "noShowRecoverySms2": "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: {{custom_values.booking_link}}",
     "rescheduleFraming": "Rescheduling is offered as a one-word reply on every message, because a customer who cannot easily move an appointment tends to simply not be home for it.",
     "showUpQualityNotes": "The reminders exist to keep attendance where it is as booking volume moves online and the wait between booking and visit gets longer.",
     "implementation": [
@@ -1210,7 +1210,7 @@
   },
   "supportingAssets": {
     "reviewAssets": {
-      "postJobRequest": "Hi [First name], thanks for having Pinecrest out today. If the work was up to standard, a short Google review helps other Sudbury homeowners work out who to call. Here is the link: [Google review link]. If anything was not right, reply to this message and we will sort it out first."
+      "postJobRequest": "Hi {{contact.first_name}}, thanks for having Pinecrest out today. If the work was up to standard, a short Google review helps other Sudbury homeowners work out who to call. Here is the link: {{custom_values.review_link}}. If anything was not right, reply to this message and we will sort it out first. Reply STOP to opt out."
     },
     "thankYouAssets": {
       "thankYouPageCopy": "Thanks — that is booked. You will get a confirmation text within a minute with your time slot and the name of the roofer coming out. If you need to move it, reply to that text and we will find another slot.",
@@ -1260,8 +1260,8 @@
         },
         {
           "name": "Proof",
-          "purpose": "Let real customers do the persuading.",
-          "copy": "Pinecrest has been working in the Sudbury basin since 2014, licensed and insured in Ontario. The rating is 4.6 across 64 Google reviews. [Paste three real Google reviews here, first name and neighbourhood only — never write one that nobody left.]"
+          "purpose": "State what is already on the record, and leave the reviews to the owner.",
+          "copy": "Pinecrest has been working in the Sudbury basin since 2014, licensed and insured in Ontario. The rating is 4.6 across 64 Google reviews."
         },
         {
           "name": "Book a time",
@@ -1327,7 +1327,7 @@
       "launcherLabel": "Ask a quick question",
       "greeting": "Hi — this is Pinecrest. Ask away and somebody will answer. If you have an active leak, say so and it goes to the on-call roofer.",
       "detailsAsk": "Can I take a name and a mobile number? That way we can carry on by text if you have to close the tab, and nothing gets lost.",
-      "awayMessage": "The office is closed but this is monitored. Send it through and you will get a real reply first thing. If it is urgent, call 705-555-0166 and it routes straight to the on-call roofer. You can also grab a slot now: [booking link]"
+      "awayMessage": "The office is closed but this is monitored. Send it through and you will get a real reply first thing. If it is urgent, call 705-555-0166 and it routes straight to the on-call roofer. You can also grab a slot now: {{custom_values.booking_link}}"
     },
     "siteAdvisory": {
       "where": "Hand this to whoever looks after your website — it is advice, not work we do",
@@ -1391,7 +1391,7 @@
             "step": "Step 1 · text, within a minute",
             "channel": "Text",
             "timing": "Within about a minute of the form arriving, day or night",
-            "body": "Hi [First name], it is Pinecrest. We have your message about [Job type] and somebody will call you back. If it cannot wait, reply URGENT and it goes to the on-call roofer.",
+            "body": "Hi {{contact.first_name}}, it is Pinecrest. We have your message about {{contact.service_requested}} and somebody will call you back. If it cannot wait, reply URGENT and it goes to the on-call roofer. Reply STOP to opt out.",
             "mergeFields": [
               "First name",
               "Job type"
@@ -1402,7 +1402,7 @@
             "channel": "Email",
             "timing": "Sent in the same minute as the text above",
             "subject": "We have your message — Pinecrest",
-            "body": "Hi [First name],\n\nThanks for getting in touch. We have your message about [Job type] and it is in the queue with a real person's name against it.\n\nDuring office hours somebody will call you back within the hour. Outside them you will hear from us first thing.\n\nIf you would rather just hold a slot, you can pick one here: [booking link]\n\n— The team at Pinecrest",
+            "body": "Hi {{contact.first_name}},\n\nThanks for getting in touch. We have your message about {{contact.service_requested}} and it is in the queue with a real person's name against it.\n\nDuring office hours somebody will call you back within the hour. Outside them you will hear from us first thing.\n\nIf you would rather just hold a slot, you can pick one here: {{custom_values.booking_link}}\n\n— The team at Pinecrest",
             "mergeFields": [
               "First name",
               "Job type"
@@ -1420,7 +1420,7 @@
             "step": "Step 1 · text, within seconds of the missed call",
             "channel": "Text",
             "timing": "Fires the moment a call is not answered",
-            "body": "Sorry we missed you — this is Pinecrest. Tell us what is happening and we will call you straight back. If it is urgent, reply URGENT and it pages the on-call roofer.",
+            "body": "Sorry we missed you — this is Pinecrest. Tell us what is happening and we will call you straight back. If it is urgent, reply URGENT and it pages the on-call roofer. Reply STOP to opt out.",
             "mergeFields": []
           }
         ]
@@ -1435,7 +1435,7 @@
             "step": "Step 1 · text, immediately",
             "channel": "Text",
             "timing": "Any enquiry between 4:30pm and 8am, or at a weekend",
-            "body": "Thanks — this is Pinecrest. The office is shut but this is monitored. You will get a real reply first thing. If it cannot wait until then, reply URGENT.",
+            "body": "Thanks — this is Pinecrest. The office is shut but this is monitored. You will get a real reply first thing. If it cannot wait until then, reply URGENT. Reply STOP to opt out.",
             "mergeFields": []
           },
           {
@@ -1443,7 +1443,7 @@
             "channel": "Email",
             "timing": "Sent alongside the text above",
             "subject": "We have it — Pinecrest",
-            "body": "Hi [First name],\n\nYour message came in outside office hours and we have it. Somebody will be back to you first thing.\n\nIf you would rather hold a slot now, the calendar is open: [booking link]\n\n— The team at Pinecrest",
+            "body": "Hi {{contact.first_name}},\n\nYour message came in outside office hours and we have it. Somebody will be back to you first thing.\n\nIf you would rather hold a slot now, the calendar is open: {{custom_values.booking_link}}\n\n— The team at Pinecrest",
             "mergeFields": [
               "First name"
             ]
@@ -1460,7 +1460,7 @@
             "step": "Step 1 · text, on cancellation",
             "channel": "Text",
             "timing": "The moment an appointment is cancelled",
-            "body": "That is cancelled and no more reminders will come through. Whenever it suits, you can pick a new slot here: [booking link] — Pinecrest",
+            "body": "That is cancelled and no more reminders will come through. Whenever it suits, you can pick a new slot here: {{custom_values.booking_link}} — Pinecrest Reply STOP to opt out.",
             "mergeFields": []
           }
         ]
@@ -1468,19 +1468,19 @@
       {
         "workflowId": "owner-hot-lead-notification",
         "workflowName": "Owner Hot-Lead Notification",
-        "trigger": "A new enquiry scores as high intent — the job type, the urgency or the size crosses the line you set with us.",
+        "trigger": "A new enquiry scores as high intent — the [job] type, the urgency or the size crosses the line you set with us.",
         "where": "GoHighLevel → Automation → Workflows → Owner Hot-Lead Notification — this one goes to the owner's phone, never to the customer",
         "messages": [
           {
-            "step": "Step 1 · internal text to the owner",
-            "channel": "Text",
-            "timing": "Within seconds of a priority-scored enquiry arriving",
-            "body": "Priority lead: [First name], [Job type], [Postal area]. Scored [Score]. Nobody has called them yet. Full record in the pipeline.",
+            "step": "The alert, the moment a lead scores hot",
+            "channel": "Owner notification",
+            "timing": "Within about a minute of the lead scoring hot",
+            "body": "New hot lead — {{contact.name}}, {{contact.phone}}. Wants: {{contact.service_requested}}. Scored hot on {{contact.hot_reason}}.",
             "mergeFields": [
-              "First name",
-              "Job type",
-              "Postal area",
-              "Score"
+              "{{contact.name}}",
+              "{{contact.phone}}",
+              "{{contact.service_requested}}",
+              "{{contact.hot_reason}}"
             ]
           }
         ]
@@ -1495,7 +1495,7 @@
             "step": "Step 1 · reply in the social inbox",
             "channel": "Direct message",
             "timing": "Within a minute of the message arriving",
-            "body": "Hi [First name] — this is Pinecrest. Happy to help. Can I take a mobile number so we can carry this on by text and get somebody out to you? If it is urgent, say so and it goes to the on-call roofer.",
+            "body": "Hi {{contact.first_name}} — this is Pinecrest. Happy to help. Can I take a mobile number so we can carry this on by text and get somebody out to you? If it is urgent, say so and it goes to the on-call roofer. Reply STOP to opt out.",
             "mergeFields": [
               "First name"
             ]

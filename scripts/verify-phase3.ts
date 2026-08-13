@@ -683,32 +683,59 @@ check("C1 · the overlapping leak is EXCLUDED from the total and NAMED in the di
   assert(total.disclosure.includes(OVERLAP_NOTE), "the disclosure does not carry the leak's own overlap sentence");
 });
 
-check("C2 · the disclosure RENDERS beside the total, in the document the client reads", () => {
-  // SAME LAW, NEW HOME (Phase 3). This used to read the pack's own dollar-callout
-  // in D1, which was assembled from generated leak analysis. The Diagnosis is now
-  // the saved assessment, so the total and its disclosure both come from
-  // computeAssessment — and the law is unchanged: a reader who adds the itemised
-  // figures himself and finds they do not match has already decided the report is
-  // padded, so the explanation has to be beside the number.
+check("C2 · a rendered total is never rendered without its derivation, and the derivation reads forwards", () => {
+  // SAME LAW, THIRD HOME. The reader who adds the itemised figures himself and
+  // finds they do not match has already decided the report is padded, so the
+  // document may never print the total without explaining it. What changed is
+  // WHERE the explanation sits, twice:
   //
-  // The old pack-side mechanism (reconcileLeakTotal) is still asserted by C1 and
-  // C3 below — it is the math, and it did not move.
+  //   · Phase 3 moved it off the pack's dollar-callout onto computeAssessment.
+  //   · P2-2/P2-3 (this round) inverted the Diagnosis. The total leads in §01
+  //     `.sec--key` as the `.headline` panel; the derivation, the overlap
+  //     discount and the cap disclosure are §03 `.sec--method` at the end,
+  //     because "nobody opens a $6,500 deliverable by explaining what they
+  //     couldn't see". So "directly beneath the band" is no longer the law and
+  //     `.total-band` is no longer emitted at all.
+  //
+  // The law that survives the move is the implication: total ⇒ derivation, in
+  // the same document. That is asserted below in the direction that matters —
+  // if the headline renders, the method section must too.
+  //
+  // P3-3 also found the overlap sentence stated BACKWARDS (overlap is the reason
+  // the rows would not sum, not the reason they do). The corrected wording is
+  // asserted, and the backwards wording is asserted absent — a repair that only
+  // adds the new sentence while the old one still ships is not a repair.
+  //
+  // The pack-side mechanism (reconcileLeakTotal) is still asserted by C1 and C3
+  // below — it is the math, and it did not move.
   const html = renderDeliverableHtml(goldenPack, "diagnosis", ctxFor(SAMPLE_ASSESSMENT));
-  const band = html.match(/<div class="total-band">[\s\S]*?<\/div>\s*<\/div>/)?.[0];
-  assert(band, "the Diagnosis no longer renders a total band at all");
-  show("total band", band!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120));
+  const total = html.match(/<div class="hl-amount">([^<]+)<\/div>/)?.[1];
+  assert(total, "the Diagnosis no longer renders a total at all");
+  show("total (headline panel)", total!);
+  assert(/^CAD \$/.test(total!), `the total renders as "${total}" — the money law is CAD-marker-first`);
 
-  // The derivation is the disclosure, and it sits directly under the band.
-  const afterBand = html.slice(html.indexOf(band!));
-  const disclosureWindow = afterBand.slice(0, 1400);
-  show("states the overlap cut", /already cut \d+%/.test(disclosureWindow));
+  const method = html.match(/<section class="sec sec--method"[^>]*>([\s\S]*?)<\/section>/)?.[0];
   assert(
-    /already cut \d+%/.test(disclosureWindow),
-    "the overlap disclosure is not directly beneath the total. It must be beside the number, not further down the page."
+    method,
+    "the Diagnosis prints a total and no .sec--method section. The derivation is the only thing standing between the number and a reader who thinks it was padded — it may move down the page, it may not leave it."
+  );
+  const methodText = method!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  show("method section", methodText.slice(0, 150));
+
+  show("states the overlap cut", /already reduced by \d+%/.test(methodText));
+  assert(
+    /already reduced by \d+%/.test(methodText),
+    "the overlap disclosure is not in the method section — the total is now unexplained anywhere in the document"
   );
   assert(
-    /rows add up to the total/.test(disclosureWindow),
+    /rows sum to the total/.test(methodText),
     "the disclosure no longer says the column reconciles with the bottom line"
+  );
+  // The defect P3-3 named, asserted gone rather than assumed gone.
+  show("backwards wording still shipping", /already cut \d+%|rows add up to the total/.test(html));
+  assert(
+    !/already cut \d+%|rows add up to the total/.test(html),
+    "the backwards overlap sentence still reaches the page — it claims overlap is the reason the rows sum, which is the opposite of true"
   );
 });
 
@@ -1010,20 +1037,72 @@ check("E4 · the two halves reassemble into ONE workflow — thirteen steps, end
   );
 });
 
-check("E5 · EVERY nurture asset renders a destination, and it names the workflow that sends it", () => {
+check("E5 · EVERY nurture asset renders under the workflow that sends it, on its own day", () => {
+  // THE SAME FEAR, RE-AIMED AT THE NEW LAYOUT. The failure this guards is a
+  // day-45 email landing in the missed-call flow, and it used to be guarded by
+  // counting destination lines: thirteen assets, thirteen lines naming the
+  // nurture workflow.
+  //
+  // P0-4/P2-4 dissolved the per-asset sections into one block per workflow, so
+  // there is now exactly ONE destination line for the nurture workflow with all
+  // thirteen messages in a table beneath it. Counting lines against assets would
+  // now fail on a document that is strictly easier to paste from — but the
+  // literal count was never the law, it was a proxy for "the operator can tell
+  // which message this is and where it goes".
+  //
+  // So the proxy is replaced by the thing itself, and it is a stronger claim
+  // than the count was: every message is under the destination that names its
+  // workflow, and every message carries its own day, off the pack's own numbers
+  // rather than a transcription.
   const html = renderDeliverableHtml(goldenPack, "asset-pack");
   const nurtureName = workflowById("lead-nurture-no-booking")?.name ?? "Lead Nurture — No Booking";
   const dests = Array.from(html.matchAll(/Where this goes<\/span>([^<]*)/g), (m) => m[1]);
   const nurtureDests = dests.filter((d) => d.includes(nurtureName));
-  const assets = (goldenPack.file3?.emails ?? []).length + (goldenPack.file4?.messages ?? []).length;
   show("destination lines rendered in D3", dests.length);
   show("naming the nurture workflow     ", nurtureDests.length);
-  show("nurture assets in the pack      ", assets);
-  for (const d of nurtureDests.slice(0, 3)) show("  e.g.", d);
+  for (const d of nurtureDests) show("  ", d);
   assert.equal(
     nurtureDests.length,
-    assets,
-    `${assets} nurture assets but ${nurtureDests.length} of them name the workflow that sends them. A message with no destination is a message the operator has to guess a home for, and a guess is how a day-45 email ends up in the missed-call flow.`
+    1,
+    `the nurture messages are spread across ${nurtureDests.length} destinations. They are one workflow — more than one home for them is how a day-45 email ends up in the missed-call flow.`
+  );
+
+  // The block is everything from that destination line to the next label, which
+  // is where the next workflow starts.
+  const at = html.indexOf(nurtureDests[0]);
+  const nextLabel = html.indexOf('<div class="label">', at);
+  const block = html.slice(at, nextLabel > at ? nextLabel : html.length);
+  const rows = Array.from(block.matchAll(/<td class="msg-when">([\s\S]*?)<\/td>/g), (m) =>
+    m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+  );
+
+  // The days the pack itself says these messages run on. Not a transcription:
+  // E2/E3 above already pin these to the canvas, so this reads the same numbers
+  // one layer further along and proves they survived the render.
+  const packDays = [
+    ...(goldenPack.file3?.emails ?? []).map((e) => e.day),
+    ...(goldenPack.file4?.messages ?? []).map((m) => m.day),
+  ]
+    .filter((d): d is number => typeof d === "number")
+    .sort((a, b) => a - b);
+  const renderedDays = rows
+    .map((r) => Number(/Day (\d+)/.exec(r)?.[1]))
+    .filter((d) => Number.isFinite(d))
+    .sort((a, b) => a - b);
+
+  show("nurture assets in the pack      ", packDays.length);
+  show("message rows under that block   ", rows.length);
+  show("days on the pack                ", packDays.join(", "));
+  show("days rendered                   ", renderedDays.join(", "));
+  assert.equal(
+    rows.length,
+    packDays.length,
+    `${packDays.length} nurture assets on the pack but ${rows.length} rows under the workflow that sends them — the difference is copy that was generated and dropped at render`
+  );
+  assert.deepStrictEqual(
+    renderedDays,
+    packDays,
+    "a nurture message renders without its day, or on a day the pack does not have. The day is the only thing telling the operator which of thirteen boxes this one goes in."
   );
 });
 
@@ -1397,6 +1476,18 @@ check("G1 · every client-facing pack part that EXISTS reaches a rendered docume
     },
   ];
 
+  // P3-5 asked for genuinely per-recipient tokens to render as a styled chip
+  // rather than as raw brackets, so a message body that reads
+  //   "Hi {{contact.first_name}}, this is {{location.name}}."
+  // on the pack reaches the page as
+  //   "Hi <code class="mf">{{contact.first_name}}</code>, this is …"
+  // and stops being one contiguous string. Unwrapping the chip is the ONLY
+  // normalisation applied — the needle is still matched whole, so a renderer
+  // that prints half a message still fails. Written out rather than imported for
+  // the same reason the escaper below is: a proof that reuses the implementation
+  // it is checking proves less.
+  const unchip = (s: string): string => s.replace(/<code class="mf">|<\/code>/g, "");
+
   const missing: string[] = [];
   for (const p of parts) {
     if (!p.present) {
@@ -1414,7 +1505,8 @@ check("G1 · every client-facing pack part that EXISTS reaches a rendered docume
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
-    const rendered = raw !== "" && (all.includes(raw) || all.includes(escaped));
+    const flat = unchip(all);
+    const rendered = raw !== "" && (flat.includes(raw) || flat.includes(escaped));
     show(`${p.name.padEnd(26)}`, rendered ? "PRESENT and RENDERED" : "PRESENT but NOT RENDERED");
     if (!rendered) missing.push(p.name);
   }

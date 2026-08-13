@@ -25,6 +25,7 @@
 
 import type {
   AssetPack,
+  AssetPackMeta,
   DeliverableId,
   EvidenceGrade,
   ScorecardMetric,
@@ -47,13 +48,14 @@ import {
   reconcileLeakTotal,
   type LeakTotalInput,
 } from "../leak-narrative";
-import { workflowById, PIPELINE } from "../workflow-catalogue";
+import { workflowById, PIPELINE, JOURNEY_STAGES, nounsFor } from "../workflow-catalogue";
 import {
   buildPlan as assembleBuildPlan,
   type BuildPlan,
   type BuildPlanItem,
   type BuildDates,
 } from "../build-plan";
+import { OFF_WHEN } from "../build-decisions";
 import { markCurrency, type ComputedAssessment, type ComputedRow } from "../leak-calculator";
 // The two engagement prices, straight from the constants module.
 //
@@ -62,18 +64,7 @@ import { markCurrency, type ComputedAssessment, type ComputedRow } from "../leak
 // what the engagement costs. The proposal is being deleted; the price is not the
 // proposal's fact to own. constants.ts is the one definition and always was.
 import { SETUP_FEE_CAD, MONTHLY_RETAINER_CAD } from "../constants";
-import {
-  esc,
-  para,
-  list,
-  section,
-  shell,
-  pill,
-  renderTechnicalUx,
-  renderVisuals,
-  emailBlock,
-  type ShellOptions,
-} from "./_shell";
+import { esc, para, list, section, slugify, shell, pill, type ShellOptions } from "./_shell";
 
 // ── Small local presentation helpers ─────────────────────────────────────────
 
@@ -103,11 +94,6 @@ function kv(label: string, value: string | undefined): string {
   return `<div class="kv"><div class="k">${esc(label)}</div><div>${esc(value)}</div></div>`;
 }
 
-function checklist(items: string[] | undefined): string {
-  if (!items?.length) return "";
-  return `<ul class="checklist">${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
-}
-
 // Owner tag — done-for-you framing (Law 3). "us" → "Deployed by us",
 // "you" → "You (owner)". Never names the agency.
 function ownerLabel(owner: DeployOwner | undefined): string {
@@ -130,6 +116,83 @@ function ownerTag(owner: DeployOwner | undefined): string {
 function money(n: number): string {
   if (!Number.isFinite(n)) return "CAD $0";
   return "CAD $" + Math.round(n).toLocaleString("en-US");
+}
+
+// ── Section weight ───────────────────────────────────────────────────────────
+// A document with five identically-weighted sections tells the reader nothing
+// about which one matters. Three weights exist: the standard one section()
+// emits, the KEY section that carries the money, and the recessed METHOD
+// section that carries the basis and always comes last.
+//
+// THE WEIGHT RIDES ALONGSIDE `sec`, NEVER INSTEAD OF IT. buildToc() in _shell.ts
+// finds sections by `class="sec…"` and drops the whole rail below three entries,
+// so a weight that replaced the base class would take the section out of the
+// contents — and on a three-section Diagnosis carrying two of them, would take
+// the rail with it.
+type SectionWeight = "sec--key" | "sec--method";
+
+function weightedSection(
+  num: number,
+  title: string,
+  weight: SectionWeight,
+  inner: string
+): string {
+  if (!inner) return "";
+  const id = `sec-${num.toString().padStart(2, "0")}-${slugify(title)}`;
+  return `<section class="sec ${weight}" id="${id}"><div class="sec-head"><div class="sec-num">${num
+    .toString()
+    .padStart(2, "0")}</div><h2>${esc(title)}</h2></div><div class="sec-inner">${inner}</div></section>`;
+}
+
+// ── The methodology note (P2-3) ──────────────────────────────────────────────
+// shell() renders meta.assumptions directly under the cover on every document.
+// Every clause written today disclaims scraped material — no site URL, no
+// page-speed reading, no reviews — and none of the three documents carries a
+// finding of that kind any more. Nobody opens a deliverable by explaining what
+// they could not see, so the note is handed nothing to say: shell() reads
+// meta.assumptions, and the way to say "there is nothing here to disclaim" is to
+// pass a meta with none.
+function withoutAssumptions(meta: AssetPackMeta): AssetPackMeta {
+  return { ...meta, assumptions: [] };
+}
+
+// A clause earns its place only when the document contains the thing it
+// disclaims. The Diagnosis is built from the saved calculator alone, so anything
+// about the website, the landing page, page speed or the reviews is disclaiming
+// content that is not there — and today that empties the note completely, which
+// is the correct outcome rather than a missing feature.
+const DISCLAIMS_WHAT_THE_DIAGNOSIS_DOES_NOT_CONTAIN =
+  /web ?site|landing[- ]page|page ?speed|review/i;
+
+function diagnosisAssumptions(meta: AssetPackMeta): string[] {
+  return meta.assumptions.filter(
+    (a) => !DISCLAIMS_WHAT_THE_DIAGNOSIS_DOES_NOT_CONTAIN.test(a)
+  );
+}
+
+// ── Merge fields, rendered as merge fields ───────────────────────────────────
+// A GoHighLevel token is not prose and must not read like it. Wrapping each one
+// in a code chip is also the only thing that tells an operator, at a glance,
+// which parts of a message resolve at send time and which are literal text.
+//
+// Runs on ALREADY-ESCAPED text: esc() leaves {{ and }} alone, so escaping first
+// and wrapping second keeps the body safe without the wrapper being escaped away.
+function mergeChips(escaped: string): string {
+  return escaped.replace(/\{\{[^{}]+\}\}/g, (t) => `<code class="mf">${t}</code>`);
+}
+
+/** The channel chip. Four tones exist because four kinds of message behave
+ *  differently: one goes to the customer's phone, one to their inbox, one to the
+ *  owner and one is published in public where anybody can read it. */
+function chanChip(channel: string): string {
+  const c = channel.toLowerCase();
+  if (c.includes("owner") || c.includes("notification"))
+    return `<span class="chan is-alert">Owner</span>`;
+  if (c.includes("review") || c.includes("public"))
+    return `<span class="chan is-public">Review reply</span>`;
+  if (c.includes("email")) return `<span class="chan is-email">Email</span>`;
+  if (c.includes("direct") || c.includes("dm")) return `<span class="chan is-text">DM</span>`;
+  return `<span class="chan is-text">Text</span>`;
 }
 
 // Defect 4 / Law 11: prompt scaffolding sometimes leaks into copy as a
@@ -722,16 +785,6 @@ export function renderLeakAnalysis(items: LeakAnalysisItem[] | undefined): strin
 
 // ── Landing Page Conversion Intelligence (D1 diagnosis half) ──────────────────
 
-// THE SCOPE BAND. Everything in this D1 section is a recommendation about a
-// website we neither build nor host, and that has to be visible without reading a
-// paragraph first. Rendered deterministically at the top of the section rather
-// than relying on the model to have written the scope sentence into its prose —
-// a promise this important cannot be left to whether a generation remembered it.
-const SITE_ADVISORY_BAND =
-  `<div class="advisory-band"><span class="ab-tag">Advisory</span><div><strong>These are notes for whoever looks after your website — not work we are delivering.</strong> ` +
-  `We do not build or host websites. Hand this section to whoever runs your site; the fastest version of all of it is repointing your existing buttons at the booking page and leaving the rest alone. ` +
-  `The one page we build and brand for you is the booking page inside your GoHighLevel sub-account.</div></div>`;
-
 function diagPoint(
   title: string,
   p: LandingDiagnosisPoint | undefined,
@@ -900,16 +953,30 @@ function renderLandingIntelligenceFallback(
 // When there is no assessment the document says so and stops. It does not fall
 // back to generated prose — the fallback IS the failure this rewrite removes.
 
+/** The monthly range as it is printed: the marker once, at the front. */
+function rowFigure(r: ComputedRow): string {
+  if (r.monthlyLow === null || r.monthlyHigh === null) return "";
+  return `${money(r.monthlyLow)}–${money(r.monthlyHigh).replace("CAD $", "")}/mo`;
+}
+
+// COST DESCENDING, not catalogue order. The rows used to print in the order the
+// six questions are asked, which puts a CAD $200 row above a CAD $2,400 one and
+// leaves the reader to work out the ranking for himself.
+function byCostDescending(rows: ComputedRow[]): ComputedRow[] {
+  return [...rows].sort((a, b) => (b.monthlyHigh ?? 0) - (a.monthlyHigh ?? 0));
+}
+
 function renderAssessmentRows(rows: ComputedRow[]): string {
-  return rows
+  return byCostDescending(rows)
     .map((r) => {
-      const figure = r.monthlyLow !== null && r.monthlyHigh !== null
-        ? `${money(r.monthlyLow)}–${money(r.monthlyHigh).replace("CAD $", "")}/mo`
-        : "";
+      const figure = rowFigure(r);
+      // .lc-said carries the answer and NOTHING else — the stylesheet prints
+      // "In your words" above it, and a "You told us:" prefix inside it says the
+      // same thing twice.
       return `<div class="leak-card"><div class="lc-head"><span class="lc-title">${esc(r.label)}${
-        r.assumed ? `<span class="pill pill-medium" style="margin-left:8px">Assumed</span>` : ""
+        r.assumed ? `<span class="pill medium" style="margin-left:8px">Assumed</span>` : ""
       }</span>${figure ? `<span class="lc-cost">${esc(figure)}</span>` : ""}</div>${
-        r.answerText ? `<p class="lc-said">You told us: ${esc(r.answerText)}</p>` : ""
+        r.answerText ? `<p class="lc-said">${esc(r.answerText)}</p>` : ""
       }${r.consequence ? `<p>${esc(r.consequence)}</p>` : ""}${
         r.fix ? `<p class="lc-fix"><strong>What closes it.</strong> ${esc(r.fix)}</p>` : ""
       }</div>`;
@@ -917,18 +984,151 @@ function renderAssessmentRows(rows: ComputedRow[]): string {
     .join("");
 }
 
-function renderCleanRows(rows: ComputedRow[]): string {
-  if (!rows.length) return "";
-  return `<div class="clean-grid">${rows
+// ── The rows the client volunteered (P0-2) ───────────────────────────────────
+// A custom row is a thing the prospect raised that the six questions do not
+// cover, and CustomRowInput is `{ label, jobsPerMonth }` — nothing else. So
+// computeAssessment writes answerText: null, consequence: null and fix: "" for
+// every one of them, and this renderer has no disclosed answer, no consequence
+// and no fix to print, nor anything to derive one from.
+//
+// SO IT PRINTS NO PRICE EITHER. That is the whole decision. A title and a dollar
+// figure over an empty card is a priced claim with no reasoning under it, which
+// is the single most damaging thing this document can carry — worse than the row
+// reading as unpriced. The money is still inside the frozen total (the total is
+// the sum of the rounded rows, custom ones included) and the card says so out
+// loud rather than letting the arithmetic quietly disagree with the page.
+//
+// The real fix is upstream and is not the renderer's to make: give CustomRowInput
+// the same three strings a LEAKS row carries and collect them on the call.
+function renderVolunteeredRows(rows: ComputedRow[]): string {
+  return rows
     .map(
       (r) =>
-        `<div class="clean-card"><div class="cc-head"><span class="cc-title">${esc(
+        `<div class="leak-card"><div class="lc-head"><span class="lc-title">${esc(
           r.label
-        )}</span><span class="cc-flag">No leak</span></div>${
-          r.answerText ? `<p>${esc(r.answerText)}</p>` : ""
+        )}</span></div><p>You raised this one yourself on the call rather than it coming out of the six questions, and you put a rough size on it there and then. It is inside the total at that size. What closes it is something we agree with you at kickoff rather than assume here, so it carries no figure of its own on this page.</p></div>`
+    )
+    .join("");
+}
+
+// A covered area gets the generic card and the existing pill rather than a
+// vocabulary of its own. It had five classes — clean-grid, clean-card, cc-head,
+// cc-title, cc-flag — and not one of them had a rule in the stylesheet, so the
+// whole section rendered unstyled the first time a client answered all six.
+function renderCleanRows(rows: ComputedRow[]): string {
+  return rows
+    .map(
+      (r) =>
+        `<div class="card"><strong>${esc(r.label)}</strong> ${pill("low", "No leak")}${
+          r.answerText ? para(r.answerText) : ""
         }</div>`
     )
+    .join("");
+}
+
+// ── §01 · the headline panel (P2-2) ──────────────────────────────────────────
+// The client's only question is how much this is costing him, and the document
+// used to answer it in §02, under seven cards. It now opens with the answer.
+
+/** The three numbers the total was built from.
+ *
+ *  READ BACK OUT OF THE BASIS SENTENCE, because that is the only place they
+ *  survive: computeAssessment consumes monthlyEnquiries, avgJobValue and
+ *  closeRatePct and keeps none of them on ComputedAssessment, and threading the
+ *  raw inputs through DeliverableContext would mean touching every caller of it.
+ *  A tile that does not parse simply does not render — a headline missing an
+ *  input is honest, an invented one is not — which is also what keeps this safe
+ *  against a saved row whose sentence was written before today's wording. */
+function headlineInputs(derivation: string): { k: string; v: string }[] {
+  const out: { k: string; v: string }[] = [];
+  const vol = /([\d,]+)\s+(?:enquir|inquir)\w*\s+a month/i.exec(derivation);
+  if (vol) out.push({ k: "Enquiries a month", v: vol[1] });
+  const jv = /at\s+((?:CAD\s*)?\$[\d,]+)\s+a job/i.exec(derivation);
+  if (jv) out.push({ k: "What a job is worth", v: markCurrency(jv[1]) });
+  const close = /(\d+)%\s+close rate/i.exec(derivation);
+  if (close) out.push({ k: "Close rate", v: `${close[1]}%` });
+  return out;
+}
+
+function headlinePanel(a: ComputedAssessment): string {
+  const amount = `${money(a.totalLow)}–${money(a.totalHigh).replace("CAD $", "")}`;
+  const annual = `${money(a.annualLow)}–${money(a.annualHigh).replace("CAD $", "")} across a year`;
+  const inputs = headlineInputs(a.derivation);
+  const money_ = `<div><div class="hl-k">Estimated monthly recoverable</div><div class="hl-amount">${esc(
+    amount
+  )}</div><div class="hl-annual">${esc(annual)}</div></div>`;
+  if (!inputs.length) return money_;
+  return `<div class="headline">${money_}<div class="hl-inputs">${inputs
+    .map(
+      (i) =>
+        `<div class="hl-input"><div class="k">${esc(i.k)}</div><div class="v">${esc(i.v)}</div></div>`
+    )
+    .join("")}</div></div>`;
+}
+
+/** The three biggest leaks as a share of the total. No chart library: the bar is
+ *  a CSS pseudo-element sized from --share.
+ *
+ *  Only rows that PRINT a figure are ranked. A volunteered row is inside the
+ *  total but shows no cost of its own (see renderVolunteeredRows), and ranking a
+ *  figure the reader is never shown would put the contradiction back. */
+function rankRows(rows: ComputedRow[], totalHigh: number): string {
+  const top = byCostDescending(rows).slice(0, 3);
+  if (!top.length || totalHigh <= 0) return "";
+  return `<div class="rank">${top
+    .map((r, i) => {
+      const share = Math.round(((r.monthlyHigh ?? 0) / totalHigh) * 100);
+      return `<div class="rank-row"><div class="rank-n">${String(i + 1).padStart(
+        2,
+        "0"
+      )}</div><div><div class="rank-name">${esc(
+        r.label
+      )}</div><div class="rank-bar" style="--share:${share}"></div></div><div class="rank-cost">${esc(
+        rowFigure(r)
+      )}</div></div>`;
+    })
     .join("")}</div>`;
+}
+
+// ── §04 · how this was calculated (P2-2, P3-3) ───────────────────────────────
+
+// The basis sentence is computed once and FROZEN on the assessment row — a saved
+// assessment is never recomputed, so the client is shown the numbers he was
+// actually quoted. That makes the render boundary the only place a wording
+// defect in it can be corrected, which is the same reason markCurrency() repairs
+// a missing currency marker here rather than upstream.
+//
+// The defect: the sentence states the overlap discount backwards. Overlap is the
+// reason the rows would NOT sum, not the reason they do. The percentage is left
+// exactly as computed — it is derived (the overlap cut, plus the plausibility cap
+// when that binds), which is why it moves between generations — so it is read
+// back out of the sentence rather than restated here.
+const BACKWARDS_OVERLAP =
+  /Every row is already cut (\d+)% — the same lost lead can show up in more than one, so the rows add up to the total\./;
+
+function repairOverlapSentence(derivation: string): string {
+  return derivation.replace(
+    BACKWARDS_OVERLAP,
+    (_m, pct: string) =>
+      `Each row is already reduced by ${pct}% before it's counted, because the same lost lead can show up in more than one leak. That's why the rows sum to the total instead of double-counting it.`
+  );
+}
+
+function renderMethod(a: ComputedAssessment, meta: AssetPackMeta): string {
+  // The cap is disclosed only when it actually bound. Naming it otherwise
+  // implies a compression that never happened. The PRE-cap figure is not on the
+  // assessment — computeAssessment keeps the adjusted rows and nothing else — so
+  // it is not claimed either.
+  const cap = a.capped
+    ? para(
+        "The plausibility cap fired on this one: the figures were compressed so the total stays inside a conservative share of what your own numbers say you turn over. Every row above is already the capped figure, and the percentage in the line above includes that compression."
+      )
+    : "";
+  return `${para(markCurrency(repairOverlapSentence(a.derivation)))}${cap}${diagnosisAssumptions(
+    meta
+  )
+    .map((s) => para(s))
+    .join("")}`;
 }
 
 function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
@@ -951,7 +1151,12 @@ function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
         )
       )
     );
-    return shell(pack.meta, "The Diagnosis", parts.join("\n"), shellOpts("diagnosis"));
+    return shell(
+      withoutAssumptions(pack.meta),
+      "The Diagnosis",
+      parts.join("\n"),
+      shellOpts("diagnosis")
+    );
   }
 
   const answered = a.rows.filter((r) => r.answerText !== null);
@@ -962,6 +1167,8 @@ function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
   );
 
   if (a.allClean) {
+    // Nothing is priced, so there is no total to lead with and no basis to
+    // explain. One section says the whole of it.
     parts.push(
       section(
         next(),
@@ -974,25 +1181,24 @@ function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
       )
     );
   } else {
+    // THE ANSWER FIRST. The money, what it is a year, the three numbers it was
+    // built from, and the three biggest rows — before a single leak card.
     parts.push(
-      section(
+      weightedSection(
         next(),
-        "What We Found",
-        `${para(
-          "Each of these is an answer you gave on the call, priced against your own two numbers. Nothing here was measured from the outside or estimated on your behalf."
-        )}${renderAssessmentRows([...leakRows, ...customRows])}`
+        "What This Is Costing You",
+        "sec--key",
+        `${headlinePanel(a)}${rankRows(leakRows, a.totalHigh)}`
       )
     );
 
     parts.push(
       section(
         next(),
-        "What That Adds Up To",
-        `<div class="total-band"><div class="tb-k">Estimated monthly recoverable</div><div class="tb-v">${esc(
-          `${money(a.totalLow)}–${money(a.totalHigh).replace("CAD $", "")}`
-        )}</div><div class="tb-a">${esc(
-          `${money(a.annualLow)}–${money(a.annualHigh).replace("CAD $", "")} across a year`
-        )}${a.capped ? " · conservatively capped" : ""}</div></div>${para(markCurrency(a.derivation))}`
+        "What We Found",
+        `${para(
+          "Each of these is an answer you gave on the call, priced against your own two numbers — how many enquiries you get and what a job is worth. The percentages come from published benchmarks, not from guesses about your business."
+        )}${renderAssessmentRows(leakRows)}${renderVolunteeredRows(customRows)}`
       )
     );
 
@@ -1007,9 +1213,20 @@ function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
         )
       );
     }
+
+    // Recessed, and last. The basis belongs to the reader who wants to check the
+    // arithmetic; it is not what the document opens with.
+    parts.push(
+      weightedSection(next(), "How This Was Calculated", "sec--method", renderMethod(a, pack.meta))
+    );
   }
 
-  return shell(pack.meta, "The Diagnosis", parts.join("\n"), shellOpts("diagnosis"));
+  return shell(
+    withoutAssumptions(pack.meta),
+    "The Diagnosis",
+    parts.join("\n"),
+    shellOpts("diagnosis")
+  );
 }
 
 // ── THE BUILD PLAN · the Blueprint and the Roadmap, merged ───────────────────
@@ -1018,110 +1235,351 @@ function renderDiagnosis(pack: AssetPack, ctx: DeliverableContext): string {
 // described an architecture without saying when it arrived; the Roadmap gave a
 // schedule for something it never fully listed. A client had to hold both open.
 
-function renderWorkflowCards(items: BuildPlanItem[]): string {
-  return `<div class="wf-grid">${items
-    .map(
-      (w) =>
-        `<div class="wf-card${w.state === "off" ? " is-off" : ""}${
-          w.state === "pending" ? " is-pending" : ""
-        }"><div class="wf-name">${esc(w.name)}</div>${
-          w.state === "installed"
-            ? `<p>${esc(w.whatItDoes)}</p><p class="wf-sees"><strong>What you will see.</strong> ${esc(
-                w.whatTheClientSees
-              )}</p>`
-            : `<p>${esc(w.whatItDoes)}</p><p class="wf-why"><strong>${
-                w.state === "pending" ? "Pending." : "Not installed."
-              }</strong> ${esc(w.note ?? "")}</p>`
-        }</div>`
-    )
-    .join("")}</div>`;
+// ── Every workflow's copy, gathered from wherever it was generated ───────────
+// A workflow's messages are written in four different places: the dedicated
+// workflowCopy block, the 60-day nurture emails and texts (file3 / file4), the
+// booking and no-show messages (file5) and the thank-you / review copy
+// (supportingAssets). Only the first of those recorded WHICH workflow it belonged
+// to, so five of the fourteen had their copy filed under a different vocabulary
+// in a different section of the Asset Pack, and the Build Plan could not say what
+// channels a workflow even used.
+//
+// One shape, keyed by catalogue id. The Asset Pack renders one block per workflow
+// from it, and a Build Plan card derives its channel chips from exactly the
+// messages that will ship — not from a second list that can disagree.
+
+interface CopyLine {
+  /** When it fires, in the words the message itself carries. */
+  when: string;
+  /** The generator's own channel word; chanChip() maps it to a tone. */
+  channel: string;
+  subject?: string;
+  body: string;
 }
 
-function renderPipeline(): string {
+/** The 60-day sequence — emails and texts interleaved back into one order.
+ *  `step` is the position across both halves and is the only field that can put
+ *  a text between two emails; without it the two halves stay in their own order,
+ *  which is what a pack saved before `step` existed carries. */
+function nurtureLines(pack: AssetPack): CopyLine[] {
+  const emails = (pack.file3.emails ?? []).map((e) => ({
+    at: e.step ?? 100 + e.day,
+    line: { when: `Day ${e.day}`, channel: "Email", subject: e.subject, body: e.body },
+  }));
+  const texts = (pack.file4.messages ?? []).map((m) => ({
+    at: m.step ?? 200 + m.order,
+    line: { when: m.timing || `Text ${m.order}`, channel: "Text", body: m.message },
+  }));
+  return [...emails, ...texts].sort((a, b) => a.at - b.at).map((x) => x.line);
+}
+
+function bookingLines(pack: AssetPack): CopyLine[] {
+  const f5 = pack.file5;
+  const ty = pack.supportingAssets?.thankYouAssets;
+  const out: CopyLine[] = [];
+  if (f5.confirmationEmail?.body)
+    out.push({
+      when: "The moment they book",
+      channel: "Email",
+      subject: f5.confirmationEmail.subject,
+      body: f5.confirmationEmail.body,
+    });
+  if (ty?.nextStepMessaging)
+    out.push({ when: "Straight after the confirmation", channel: "Text", body: ty.nextStepMessaging });
+  for (const m of ty?.postPurchaseSequence ?? [])
+    out.push({ when: "In the run-up to the visit", channel: "Text", body: m });
+  if (f5.reminderEmail24h?.body)
+    out.push({
+      when: "24 hours before",
+      channel: "Email",
+      subject: f5.reminderEmail24h.subject,
+      body: f5.reminderEmail24h.body,
+    });
+  if (f5.dayOfReminderSms)
+    out.push({ when: "The morning of the visit", channel: "Text", body: f5.dayOfReminderSms });
+  return out;
+}
+
+// The two recovery texts carry no timing field of their own, so they are
+// described by their POSITION rather than by an hour nobody wrote down.
+function noShowLines(pack: AssetPack): CopyLine[] {
+  const f5 = pack.file5;
+  const out: CopyLine[] = [];
+  if (f5.noShowRecoveryEmail?.body)
+    out.push({
+      when: "After a missed visit",
+      channel: "Email",
+      subject: f5.noShowRecoveryEmail.subject,
+      body: f5.noShowRecoveryEmail.body,
+    });
+  if (f5.noShowRecoverySms1)
+    out.push({ when: "First text after the miss", channel: "Text", body: f5.noShowRecoverySms1 });
+  if (f5.noShowRecoverySms2)
+    out.push({
+      when: "Second text, if nothing comes back",
+      channel: "Text",
+      body: f5.noShowRecoverySms2,
+    });
+  return out;
+}
+
+function reviewLines(pack: AssetPack): CopyLine[] {
+  const msg = pack.supportingAssets?.reviewAssets?.postJobRequest;
+  // The trigger in this vertical's word for it, same as the card that describes
+  // the workflow — a clinic's own copy should not be filed under "the job".
+  const when = `Once the ${nounsFor(pack.meta.industry).job} is marked complete`;
+  return msg ? [{ when, channel: "Text", body: msg }] : [];
+}
+
+/** Copy that was generated OUTSIDE the workflowCopy block, filed under the
+ *  workflow that actually sends it. */
+const COPY_FILED_ELSEWHERE: Record<string, (pack: AssetPack) => CopyLine[]> = {
+  "lead-nurture-no-booking": nurtureLines,
+  "booking-confirmation-reminders": bookingLines,
+  "no-show-recovery": noShowLines,
+  "review-request": reviewLines,
+};
+
+function copyLinesFor(id: string, pack: AssetPack): CopyLine[] {
+  const stamped = (pack.workflowCopy?.assets ?? []).find((a) => a.workflowId === id);
+  const own: CopyLine[] = (stamped?.messages ?? []).map((m) => ({
+    when: m.timing || m.step,
+    channel: m.channel,
+    subject: m.subject,
+    body: m.body,
+  }));
+  return [...own, ...(COPY_FILED_ELSEWHERE[id]?.(pack) ?? [])];
+}
+
+// ── Build Plan cards ─────────────────────────────────────────────────────────
+
+/** The chips on a card header. Derived from the messages the workflow will
+ *  actually send, so a workflow whose copy is not in this pack shows none rather
+ *  than a guess. */
+function channelChips(id: string, pack: AssetPack): string {
+  const chips: string[] = [];
+  for (const line of copyLinesFor(id, pack)) {
+    const chip = chanChip(line.channel);
+    if (!chips.includes(chip)) chips.push(chip);
+  }
+  return chips.length ? `<div class="wf-ch">${chips.join("")}</div>` : "";
+}
+
+// P3-5 / P3-6 · THE BRACKET TOKENS IN THE CATALOGUE'S PROSE.
+// The catalogue writes its example messages with square-bracket shorthand because
+// they were written for a human reader. In a client's Build Plan they read as
+// unfinished text — and one of them, "since we [job] for you", is not even
+// grammatical. Three different things are hiding in that shorthand and they are
+// resolved three different ways: a fact we hold (the business name) is
+// substituted outright, a word that depends on the vertical comes from the noun
+// map, and a value that differs per recipient becomes the merge field that fills
+// it, rendered as a chip so it reads as a field rather than as a gap.
+//
+// [time] means two things across the fourteen — the hour a closed business opens
+// again, and the slot a customer missed — so it resolves per workflow rather than
+// to one token that would be wrong in the other place.
+//
+// NO ARTICLE EVER PRECEDES A WORD FROM THE NOUN MAP. The first pass at this wrote
+// `a ${nouns.visit}`, and med_spa.visit and dental.visit are both "appointment" —
+// so a clinic's Build Plan read "since we saw you for a appointment". Every branch
+// below is phrased so the noun follows a possessive and no a/an is ever needed;
+// adding one back reintroduces the defect the moment a vowel-initial noun does.
+function resolveBracketTokens(escaped: string, id: string, meta: AssetPackMeta): string {
+  const nouns = nounsFor(meta.industry);
+  const chip = (token: string) => `<code class="mf">${token}</code>`;
+  const timeToken =
+    id === "after-hours-auto-reply"
+      ? "{{custom_values.opening_time}}"
+      : "{{appointment.start_time}}";
+  return escaped
+    .replace(/\[Business\]/g, esc(meta.businessName))
+    .replace(
+      /we \[job\] for you/g,
+      nouns.customerComesToUs
+        ? `we saw you for your last ${nouns.visit}`
+        : `we did your last ${nouns.job}`
+    )
+    // The whole of what customerComesToUs decides, in one substitution: a clinic
+    // or a firm never went out to anybody, so it may not thank them for it.
+    .replace(
+      /\[thanks\]/g,
+      nouns.customerComesToUs ? "Thanks for coming in" : "Thanks for having us out"
+    )
+    .replace(/\[jobs\]/g, nouns.jobPlural)
+    .replace(/\[job\]/g, nouns.job)
+    .replace(/\[name\]/g, chip("{{contact.first_name}}"))
+    .replace(/\[booking link\]/g, chip("{{custom_values.booking_link}}"))
+    .replace(/\[review link\]/g, chip("{{custom_values.review_link}}"))
+    .replace(/\[time\]/g, chip(timeToken));
+}
+
+/** The one workflow-level fact that answers "when does this happen". It is
+ *  generated for the Asset Pack already; the client reads the Build Plan. */
+function firesLine(item: BuildPlanItem, meta: AssetPackMeta): string {
+  if (!item.trigger) return "";
+  return `<div class="wf-fires"><b>Fires when</b> ${resolveBracketTokens(
+    esc(item.trigger),
+    item.id,
+    meta
+  )}</div>`;
+}
+
+// FIVE OF THE FOURTEEN ARE DECISIONS, and the document gave the client no way to
+// tell which. OFF_WHEN carries the single fact that takes each of them out, so an
+// installed one can say that it was decided rather than defaulted — and quote the
+// fact, rather than claim an intake answer this renderer does not hold.
+function decisionMarker(item: BuildPlanItem): string {
+  const offWhen = OFF_WHEN[item.id];
+  if (item.state !== "installed" || !offWhen) return "";
+  // Quoted verbatim rather than reworded into the sentence: the five reasons are
+  // written as standalone facts, and bending them mid-clause is how one of them
+  // ends up ungrammatical the day a sixth is added.
+  return `<p><strong>Included by decision.</strong> This one is a choice rather than a default — it comes out when this is true: ${esc(
+    offWhen
+  )}. That is not you, so it is in.</p>`;
+}
+
+function workflowCard(item: BuildPlanItem, pack: AssetPack, meta: AssetPackMeta): string {
+  const body = resolveBracketTokens(esc(item.whatItDoes), item.id, meta);
+  const tail =
+    item.state === "installed"
+      ? `<p class="wf-sees"><strong>What you will see.</strong> ${resolveBracketTokens(
+          esc(item.whatTheClientSees),
+          item.id,
+          meta
+        )}</p>`
+      : `<p class="wf-why"><strong>${
+          item.state === "pending" ? "Confirmed during the build." : "Not installed."
+        }</strong> ${esc(item.note ?? "")}</p>`;
+  // No `is-off` marker class: it never had a rule, and .wf-why already carries
+  // the warn stripe with "Not installed." in words directly underneath it.
+  return `<div class="wf-card${
+    item.state === "pending" ? " is-pending" : ""
+  }"><div class="wf-head"><div class="wf-name">${esc(item.name)}</div>${channelChips(
+    item.id,
+    pack
+  )}</div>${firesLine(item, meta)}<p>${body}</p>${decisionMarker(item)}${tail}</div>`;
+}
+
+/** The strip that explains the purchase: five moments, and what fires at each.
+ *  Only workflows that are in THIS build are listed — naming one that was
+ *  switched off would show the client a journey he is not getting. */
+function renderFlow(inBuild: BuildPlanItem[]): string {
+  const present = new Set(inBuild.map((w) => w.id));
+  return `<div class="flow">${JOURNEY_STAGES.map((s) => {
+    const names = s.workflowIds
+      .filter((id) => present.has(id))
+      .map((id) => workflowById(id)?.name)
+      .filter((name): name is string => Boolean(name));
+    return `<div class="flow-node${names.length ? " is-live" : ""}"><div class="flow-n">${String(
+      s.n
+    ).padStart(2, "0")}</div><div class="flow-t">${esc(s.title)}</div><ul class="flow-wf">${names
+      .map((name) => `<li>${esc(name)}</li>`)
+      .join("")}</ul></div>`;
+  }).join("")}</div>`;
+}
+
+/** Fourteen near-identical cards in one grid read as a wall. The same fourteen
+ *  under the five moments read as a system. */
+function renderStageGroups(items: BuildPlanItem[], pack: AssetPack, meta: AssetPackMeta): string {
+  const byId = new Map(items.map((w) => [w.id, w]));
+  return JOURNEY_STAGES.map((s) => {
+    const cards = s.workflowIds
+      .map((id) => byId.get(id))
+      .filter((w): w is BuildPlanItem => Boolean(w))
+      .map((w) => workflowCard(w, pack, meta))
+      .join("");
+    if (!cards) return "";
+    return `<div class="wf-stage"><div class="wf-stage-h"><div class="wf-stage-n">${String(
+      s.n
+    ).padStart(2, "0")}</div><div class="wf-stage-t">${esc(
+      s.title
+    )}</div><p class="wf-stage-d">${esc(s.description)}</p></div><div class="wf-grid">${cards}</div></div>`;
+  }).join("");
+}
+
+// The six columns are catalogue prose too, and two of them named the unit of work
+// ("The job is yours"), so a clinic's own pipeline was described to it in trade
+// words. Same resolver as the cards — there is one place that knows what this
+// vertical calls a job. The workflow id is empty because no stage carries [time].
+function renderPipeline(meta: AssetPackMeta): string {
+  const cell = (s: string) => resolveBracketTokens(esc(s), "", meta);
   return `<table><thead><tr><th>Stage</th><th>What it means</th><th>A lead arrives when</th><th>A lead leaves when</th></tr></thead><tbody>${PIPELINE.map(
     (s) =>
-      `<tr><td><strong>${esc(s.stage)}</strong></td><td>${esc(s.whatItMeans)}</td><td>${esc(
+      `<tr><td><strong>${esc(s.stage)}</strong></td><td>${cell(s.whatItMeans)}</td><td>${cell(
         s.howALeadArrives
-      )}</td><td>${esc(s.howALeadLeaves)}</td></tr>`
+      )}</td><td>${cell(s.howALeadLeaves)}</td></tr>`
   ).join("")}</tbody></table>`;
 }
 
-function renderSchedule(dates: BuildDates): string {
-  const row = (when: string, title: string, body: string) =>
-    `<div class="sched-row"><div class="sr-when">${esc(when)}</div><div class="sr-main"><div class="sr-title">${esc(
-      title
-    )}</div><p>${esc(body)}</p></div></div>`;
-
-  // The note renders ONLY when there is no kickoff date. It is placed FIRST, so a
-  // reader meets the caveat before the schedule rather than after it.
+// ── The schedule and the money, as one object (P3-4) ─────────────────────────
+// They were two sections and three of the schedule's four rows restated a spine
+// band — the build paragraph twice, the go-live paragraph verbatim twice. The
+// spine bands already carry a WHEN, so the timeline and the price are the same
+// object and the only row the schedule owned outright was kickoff. That row stays
+// as a row; everything else is the spine.
+function renderScheduleAndCosts(dates: BuildDates): string {
+  // The note renders ONLY when there is no kickoff date, and it comes FIRST so a
+  // reader meets the caveat before the dates rather than after them.
   const caveat = dates.note
     ? `<div class="sched-note"><strong>Dates are not set yet.</strong> ${esc(dates.note)}</div>`
     : "";
-
-  return `${caveat}<div class="schedule">${row(
-    dates.kickoff,
-    "Kickoff",
-    "We take everything we need from you in one session — access, your numbers, how you want calls handled — and the build starts from there."
-  )}${row(
-    dates.buildWindow,
-    "The build",
-    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows: stood up, tested and handed over. Anything that slips gets told to you rather than absorbed quietly."
-  )}${row(
-    dates.goLive,
-    "Go-live",
-    "The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point."
-  )}${row(
-    dates.runningFrom,
-    "Running it",
-    "LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked."
-  )}</div>`;
+  const kickoff = `<div class="schedule"><div class="sched-row"><div class="sr-when">${esc(
+    dates.kickoff
+  )}</div><div class="sr-main"><div class="sr-title">Kickoff</div><p>We take everything we need from you in one session — access, your numbers, how you want calls handled — and the build starts from there.</p></div></div></div>`;
+  return `${caveat}${kickoff}${renderEngagementSpine(dates)}`;
 }
 
 function renderBuildPlan(pack: AssetPack, ctx: DeliverableContext): string {
   const plan = ctx.plan;
+  const meta = pack.meta;
   const parts: string[] = [];
   let n = 0;
   const next = () => ++n;
+
+  // ONE RESOLVED SET, ONE COUNT (P3-1). The document used to say "13 of 14" in
+  // §01 and "all 14 are installed" in §02, from two different fields of the same
+  // plan: installed.length ignored the pending one, nothingOff ignored it too.
+  // Everything below counts the workflows that are IN the build — installed plus
+  // pending — and the pending caveat is stated in the same breath as the number
+  // rather than contradicted two sections later.
+  const inBuild = [...plan.installed, ...plan.pending];
+
+  const pendingNote = plan.pending.length
+    ? para(
+        `${
+          plan.pending.length === 1 ? "One of them is" : `${plan.pending.length} of them are`
+        } marked below as confirmed during the build: in your build, and dependent on something on your side we cannot check from here. We tell you either way.`
+      )
+    : "";
 
   parts.push(
     section(
       next(),
       "What We Install",
       `${para(
-        `${plan.installed.length} of ${plan.totalWorkflows} automations are built into your account and handed over working. Each one runs on its own — none of them depends on somebody remembering.`
-      )}${renderWorkflowCards(plan.installed)}`
+        `${inBuild.length} of ${plan.totalWorkflows} automations are in your build, stood up, tested and live inside your account. Each one runs on its own — none of them depends on somebody remembering.`
+      )}${pendingNote}${renderFlow(inBuild)}${renderStageGroups(inBuild, pack, meta)}`
     )
   );
 
-  // ── THE SECTION THAT MUST NEVER GO SILENT ─────────────────────────────────
-  // Three states, all stated. An empty "not installed" section is not the same
-  // as no section: a client who cannot tell whether anything was left out will
-  // assume something was. When nothing is off, we say so in words.
-  const notInstalled: string[] = [];
-
-  if (plan.pending.length) {
-    notInstalled.push(
-      `<h3 class="sub-h">Confirmed during the build</h3>${para(
-        "This is in your build, but it depends on something on your side that we cannot check from here. We will tell you either way."
-      )}${renderWorkflowCards(plan.pending)}`
+  // NO SILENT OMISSION, WITHOUT SAYING IT TWICE. A client who cannot tell whether
+  // anything was left out will assume something was — so anything switched off is
+  // named here with its reason. When nothing is off there is nothing to name, and
+  // the section suppresses itself: §01 has already accounted for all fourteen.
+  if (plan.off.length) {
+    parts.push(
+      section(
+        next(),
+        "What Is Not Installed, and Why",
+        `${para(
+          `${plan.off.length} of the ${plan.totalWorkflows} workflows are not in your build, and each one is listed with the reason. They are named rather than quietly dropped so you can see exactly what was decided and tell us if we got it wrong.`
+        )}<h3 class="sub-h">Not installed for you</h3><div class="wf-grid">${plan.off
+          .map((w) => workflowCard(w, pack, meta))
+          .join("")}</div>`
+      )
     );
   }
-
-  if (plan.nothingOff) {
-    notInstalled.push(
-      `<h3 class="sub-h">Nothing has been left out</h3>${para(
-        `All ${plan.totalWorkflows} workflows are installed for you. Some builds leave one or two out — a client with no social accounts does not need the social capture, for instance — and none of those applied to you. You are getting the whole system.`
-      )}`
-    );
-  } else {
-    notInstalled.push(
-      `<h3 class="sub-h">Not installed for you</h3>${para(
-        `${plan.off.length} of the ${plan.totalWorkflows} workflows are not in your build, and each one is listed with the reason. They are named rather than quietly dropped so you can see exactly what was decided and tell us if we got it wrong.`
-      )}${renderWorkflowCards(plan.off)}`
-    );
-  }
-
-  parts.push(section(next(), "What Is Not Installed, and Why", notInstalled.join("")));
 
   parts.push(
     section(
@@ -1129,30 +1587,34 @@ function renderBuildPlan(pack: AssetPack, ctx: DeliverableContext): string {
       "Your Pipeline",
       `${para(
         "Every enquiry lands in one of six columns and moves through them as it progresses. This is the board you open to see where the work is."
-      )}${renderPipeline()}`
+      )}${renderPipeline(meta)}`
     )
   );
-
-  parts.push(section(next(), "The Schedule", renderSchedule(plan.dates)));
 
   parts.push(
-    section(
+    weightedSection(
       next(),
-      "What You Are Paying For, and When",
-      renderEngagementSpine(plan.dates)
+      "The Schedule, and What It Costs",
+      "sec--key",
+      renderScheduleAndCosts(plan.dates)
     )
   );
 
-  return shell(pack.meta, "The Build Plan", parts.join("\n"), shellOpts("build-plan"));
+  return shell(
+    withoutAssumptions(meta),
+    "The Build Plan",
+    parts.join("\n"),
+    shellOpts("build-plan")
+  );
 }
 
-// ── D3 · Conversion Asset Pack ────────────────────────────────────────────────
-
-function assetFrame(where: string, purpose: string): string {
-  return `<div class="asset-frame"><span class="chip where">Used: ${esc(
-    where
-  )}</span><span class="chip">Purpose: ${esc(purpose)}</span></div>`;
-}
+// ── D3 · Conversion Asset Pack · INTERNAL ─────────────────────────────────────
+//
+// The "Used: … / Purpose: …" frame that used to head each section is gone with
+// the client framing (P3-8). It was selling the section back to its reader —
+// "Purpose: reduce buyer's remorse" — on a document only an operator opens, and
+// every asset underneath already carries the one line that operator needs, which
+// is where it goes.
 
 // ── Where each asset actually goes (D4) ───────────────────────────────────────
 // D3 is the only deliverable a client is expected to ACT on, and until now it told
@@ -1172,13 +1634,11 @@ function destination(where: string): string {
   return `<div class="dest"><span class="dest-k">Where this goes</span>${esc(where)}</div>`;
 }
 
-/** A destination naming a real workflow from the build, plus which step of it.
- *  Falls back to the raw step text if the id is ever removed from the catalogue,
- *  so a catalogue edit degrades to a vaguer line rather than to "undefined". */
-function workflowStep(id: string, step: string): string {
-  const w = workflowById(id);
-  return w ? `${w.name} workflow · ${step}` : step;
-}
+/** The GoHighLevel path a workflow's copy is pasted into. It mirrors
+ *  WORKFLOW_WHERE_PREFIX in asset-generation.ts, which stamps the same string
+ *  onto a generated workflowCopy asset — this is the FALLBACK for a workflow
+ *  whose copy the pack filed somewhere else and therefore never stamped. */
+const GHL_WORKFLOW_PATH = "GoHighLevel → Automation → Workflows → ";
 
 /** The key names an asset may carry its own destination under. Deliberately the
  *  same vocabulary as EXPLICIT_SURFACE_KEYS in validate-pack.ts, so the field that
@@ -1230,13 +1690,6 @@ const SURFACE = {
   advisory: "Advisory — hand to whoever looks after your website",
 } as const;
 
-/** Route one SMS to the workflow that sends it, from the timing line the message
- *  already carries ("Within seconds of a missed call"). Keyword-matched against the
- *  trigger vocabulary the generator writes, most specific first.
- *
- *  The fallback names the sub-account rather than guessing a workflow: a message
- *  attributed to the wrong automation is worse than one attributed to none, because
- *  the operator would wire it there. */
 /** Route one call-to-action label to the surface it belongs on, from the `type`
  *  the generator already assigns it (Primary / Secondary / Phone / Booking /
  *  Low-friction / Final). These six are not six buttons on one page — they are
@@ -1251,23 +1704,6 @@ function ctaDestination(type: string | undefined): string {
     return `${SURFACE.bookingPage} — the closing block`;
   if (t.includes("primary")) return `${SURFACE.bookingPage} — primary button`;
   return SURFACE.bookingPage;
-}
-
-function smsDestination(timing: string): string {
-  const t = timing.toLowerCase();
-  if (/missed call|no answer|rings out|unanswered/.test(t))
-    return workflowStep("missed-call-text-back", "the text that goes back to the caller");
-  if (/after hours|out of hours|evening|weekend|overnight|closed/.test(t))
-    return workflowStep("after-hours-auto-reply", "the out-of-hours acknowledgement");
-  if (/no.?show|missed appointment|could not get access|couldn't get access|did not attend/.test(t))
-    return workflowStep("no-show-recovery", "the message after a missed visit");
-  if (/reminder|day before|before a booked|before the visit|day of|on the way/.test(t))
-    return workflowStep("booking-confirmation-reminders", "the reminder text");
-  if (/quote|proposal|estimate|unbooked|did not book|didn't book/.test(t))
-    return workflowStep("lead-nurture-no-booking", "the follow-up text on an unbooked quote");
-  if (/form|enquiry|inquiry|new lead|submission|web lead/.test(t))
-    return workflowStep("instant-lead-response", "the instant acknowledgement text");
-  return "Sent from your GoHighLevel sub-account on the trigger named above";
 }
 
 // ── Landing Page Conversion Assets (D3 assets half) ───────────────────────────
@@ -1311,16 +1747,23 @@ function renderLandingAssets(la: LandingPageAssets): string {
             h.trustMicrocopy
           )}</p>${destination(`${SURFACE.bookingPage} — the reassurance line directly under the button`)}</div>`
         : "",
+      // Same ban as the proof-line label further down: page geometry may not
+      // reach a document, and this legacy path emitted it twice. The pack FIELD
+      // keeps its name — renaming it would migrate every stored pack to fix a
+      // string nobody reads — but what renders names the neighbouring slot.
       h.aboveFoldProofLine
-        ? `<div class="diag-row"><div class="dk">Above-the-fold proof line</div><p>${esc(
+        ? `<div class="diag-row"><div class="dk">Proof line — under the trust line</div><p>${esc(
             h.aboveFoldProofLine
-          )}</p>${destination(`${SURFACE.bookingPage} — above the fold`)}</div>`
+          )}</p>${destination(`${SURFACE.bookingPage} — under the trust line`)}</div>`
         : "",
     ]
       .filter(Boolean)
       .join("");
     if (micro) hero += `<div class="diag-card">${micro}</div>`;
-    if (hero) parts.push(`<div class="label">Hero — first thing visitors see</div>${hero}`);
+    // "first thing visitors see" is the same forbidden claim in a heading: it
+    // describes a viewport we never rendered. The section is the hero; saying
+    // what is in it is enough.
+    if (hero) parts.push(`<div class="label">Hero — the headline and the buttons</div>${hero}`);
   }
 
   // The three long-form paragraphs have no slot on a short booking page, so they
@@ -1430,7 +1873,10 @@ function renderLandingAssets(la: LandingPageAssets): string {
  *
  *  Every group prints its own stamped `where`, because an operator pasting into
  *  GoHighLevel must never have to guess which box a string belongs in. */
-function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string {
+function renderConversionSurfaces(
+  s: NonNullable<AssetPack["surfaces"]>,
+  siteMeasured: boolean
+): string {
   const parts: string[] = [];
 
   const bp = s.bookingPage;
@@ -1458,7 +1904,29 @@ function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string
         bp.subheadlineOptions
       )}<p><strong>Primary button:</strong> ${esc(bp.primaryButton)}<br><strong>Secondary button:</strong> ${esc(
         bp.secondaryButton
-      )}</p>${para(bp.reassuranceLine)}${para(bp.proofLine)}${sections}${faq}${
+      )}</p>${
+        // Both of these used to render as floating paragraphs under the buttons —
+        // "5-star rating from happy clients." with nothing saying what it was or
+        // where it went. They are two different slots on the page and each says so.
+        bp.reassuranceLine
+          ? `<div class="label">Reassurance line — directly under the button</div>${para(
+              bp.reassuranceLine
+            )}`
+          : ""
+      }${
+        // This label read "Proof line — above the fold" until 2026-08-13, and page
+        // geometry is forbidden vocabulary in a document we ship. The ban is not
+        // about findings only: we render no page and measure no position, so a
+        // reader has no way to tell a placement instruction for OUR booking page
+        // from a claim about THEIRS. verify-fabrication C7 runs the shipped claim
+        // detector over every committed document and refuses the phrase wherever
+        // it lands. Naming the neighbouring slot — the way the reassurance line
+        // above already does — tells the operator the same thing and asserts
+        // nothing about anybody's page.
+        bp.proofLine
+          ? `<div class="label">Proof line — under the reassurance line</div>${para(bp.proofLine)}`
+          : ""
+      }${sections}${faq}${
         bp.honestyNote ? para(bp.honestyNote) : ""
       }`
     );
@@ -1476,6 +1944,9 @@ function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string
       )}${cf.emergencyRoute ? para(cf.emergencyRoute) : ""}`
     );
 
+  // "If it's urgent" pairs with the "Otherwise" under it, and what it labels is
+  // an URGENT LEAD rather than a kind of work — so it needs no trade noun and now
+  // has none. It read "If they're a priority job" in a clinic's document.
   const lg = s.leadGate;
   if (lg)
     parts.push(
@@ -1483,7 +1954,7 @@ function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string
         lg.where
       )}${para(lg.openingLine)}${
         lg.questionIntros?.length ? list(lg.questionIntros) : ""
-      }<p><strong>If they're a priority job:</strong> ${esc(
+      }<p><strong>If it's urgent:</strong> ${esc(
         lg.priorityAcknowledgement
       )}</p><p><strong>Otherwise:</strong> ${esc(lg.standardAcknowledgement)}</p>`
     );
@@ -1501,7 +1972,15 @@ function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string
   // ADVISORY, and it has to look advisory. These are notes the client hands to
   // whoever runs their website. We do not touch the site, and a reader must never
   // finish this section thinking we did.
-  const ad = s.siteAdvisory;
+  //
+  // AND IT ONLY EXISTS WHEN SOMEBODY LOOKED (P1-1). The generator writes these
+  // notes whether or not there was a site to look at, so for a business with no
+  // URL on record this block rendered a table headed "What we saw" with four
+  // specific observations about a page nobody opened — the cold-audit fabrication
+  // failure, with the pack's own "no website URL on record" note sitting above it.
+  // `siteMeasured` is the caller's answer to "was this site actually measured".
+  // When it is false the block does not render: not hedged, not disclaimed, gone.
+  const ad = siteMeasured ? s.siteAdvisory : undefined;
   if (ad) {
     const notes = ad.notes?.length
       ? `<table><thead><tr><th>Area</th><th>What we saw</th><th>What we'd suggest</th></tr></thead><tbody>${ad.notes
@@ -1527,28 +2006,70 @@ function renderConversionSurfaces(s: NonNullable<AssetPack["surfaces"]>): string
   return parts.join("");
 }
 
-/** Copy for every workflow in the build, so nothing has to be written by hand
- *  inside the client's account on go-live day with the client watching. */
-function renderWorkflowCopy(wc: NonNullable<AssetPack["workflowCopy"]>): string {
-  const assets = wc.assets ?? [];
-  if (!assets.length) return "";
-  return assets
-    .map((a) => {
-      const rows = (a.messages ?? [])
-        .map(
-          (m) =>
-            `<tr><td>${esc(m.step)}</td><td>${esc(m.channel)}</td><td>${esc(m.timing)}</td><td>${
-              m.subject ? `<strong>${esc(m.subject)}</strong><br>` : ""
-            }${esc(m.body)}${
-              m.mergeFields?.length
-                ? `<br><em>Merge fields: ${esc(m.mergeFields.join(", "))}</em>`
-                : ""
-            }</td></tr>`
-        )
-        .join("");
-      return `<div class="label">${esc(a.workflowName)}</div>${destination(a.where)}<p><em>Fires when: ${esc(
-        a.trigger
-      )}</em></p><table><thead><tr><th>Step</th><th>Channel</th><th>Timing</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
+// ── §02 · one block per workflow, and every workflow's copy in it (P0-4) ─────
+//
+// The section header said "every automation's messages" over nine of the
+// fourteen. The other five had their copy generated — it was in the same file —
+// filed under a different destination vocabulary in three other sections, so an
+// operator pasting the build into GoHighLevel had to reassemble it by reading.
+// Now the fourteen are the structure: one block each, in the same order the
+// Build Plan puts them, each naming its GoHighLevel path and what fires it.
+//
+// TWO COLUMNS, NOT FOUR. Step / Channel / Timing were three columns carrying one
+// fact between them, leaving a 40-word SMS and a merge-field list to share what
+// was left of the width. The channel is a chip on the WHEN, and the merge fields
+// are chips inside the message where they actually appear — so the trailing
+// "Merge fields: …" line is gone with the columns.
+
+function msgTable(lines: CopyLine[]): string {
+  if (!lines.length) return "";
+  const rows = lines
+    .map(
+      (l) =>
+        `<tr><td class="msg-when">${esc(l.when)}${chanChip(l.channel)}</td><td>${
+          l.subject ? `<span class="msg-subj">${mergeChips(esc(l.subject))}</span>` : ""
+        }${mergeChips(esc(l.body))}</td></tr>`
+    )
+    .join("");
+  return `<table class="msg-table"><thead><tr><th>When</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderWorkflowCopy(pack: AssetPack, plan: BuildPlan): string {
+  const stamped = pack.workflowCopy?.assets ?? [];
+  const coverage = pack.workflowCopy?.coverage ?? [];
+  const inBuild = [...plan.installed, ...plan.pending];
+  const order = new Map(inBuild.map((w) => [w.id, w]));
+
+  return JOURNEY_STAGES.flatMap((s) => s.workflowIds)
+    .map((id) => {
+      const item = order.get(id);
+      if (!item) return ""; // switched off for this client — no copy to paste
+      const asset = stamped.find((a) => a.workflowId === id);
+      const lines = copyLinesFor(id, pack);
+      const where = asset?.where || `${GHL_WORKFLOW_PATH}${item.name}`;
+      const fires = asset?.trigger || item.trigger;
+      // A workflow in the build with no copy anywhere is the failure this
+      // section exists to make impossible, so it is stated rather than skipped.
+      // coverage[] is the generation side's own record of where a workflow's
+      // words live; when it has an answer, print it instead of a bare gap.
+      const body = lines.length
+        ? msgTable(lines)
+        : para(
+            coverage.find((c) => c.workflowId === id)?.copyLivesIn ??
+              "No copy for this workflow in this pack — write it before go-live."
+          );
+      // Same resolver as the Build Plan card: the trigger is catalogue prose and
+      // carries the same [job] shorthand, so escaping it alone would print the
+      // brackets into the one document an operator pastes from.
+      return `<div class="label">${esc(item.name)}</div>${destination(where)}${
+        fires
+          ? `<div class="wf-fires"><b>Fires when</b> ${resolveBracketTokens(
+              esc(fires),
+              id,
+              pack.meta
+            )}</div>`
+          : ""
+      }${body}`;
     })
     .join("");
 }
@@ -1573,15 +2094,46 @@ function renderLandingAssetsFallback(lp: AssetPack["file1"]["landingPage"] | und
   }<div class="label">Final CTA</div>${para(lp.finalCta)}`;
 }
 
-function renderDeliverable3(pack: AssetPack): string {
+function renderDeliverable3(pack: AssetPack, ctx: DeliverableContext): string {
   const f1 = pack.file1;
-  const f3 = pack.file3;
-  const f4 = pack.file4;
-  const f5 = pack.file5;
-  const sa = pack.supportingAssets;
   const parts: string[] = [];
   let n = 0;
   const next = () => ++n;
+
+  // ── THE OPERATOR HEADER (P3-8) ────────────────────────────────────────────
+  // This document is read by one person, once, with GoHighLevel open beside it.
+  // It was built as a client deliverable, and none of that framing helps somebody
+  // pasting copy into a sub-account. What he needs is which account he is in and
+  // what order to work through.
+  //
+  // The cover above it still comes from shell() and still reads "Prepared for",
+  // with a confidentiality footer under it. Replacing those is a _shell.ts
+  // change, not one this file can make.
+  const generatedOn = new Date(pack.meta.generatedAt).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  parts.push(
+    section(
+      next(),
+      "Before You Paste Anything",
+      `<div class="dest"><span class="dest-k">Target sub-account</span>${esc(
+        pack.meta.businessName
+      )} — GoHighLevel</div><div class="dest"><span class="dest-k">Generated</span>${esc(
+        generatedOn
+      )}</div>${list(
+        [
+          "Open the sub-account above and confirm you are in the right one before pasting anything.",
+          "Surfaces first — the booking page, the lead-capture form, the qualifying questions and the webchat. Each block names the exact screen.",
+          "Then the workflows, in the order they are listed. Each block names its GoHighLevel path and what fires it.",
+          "Send one real lead through before go-live and confirm every merge field resolved to a value rather than to blank text.",
+        ],
+        true
+      )}`
+    )
+  );
 
   // Landing Page Conversion Assets — the actual recommended page copy/assets,
   // absorbed from the old Landing Page Growth Audit. Prefer the dedicated landing
@@ -1591,179 +2143,68 @@ function renderDeliverable3(pack: AssetPack): string {
   // before it went; `file1.landingPage` is older still. Packs are never deleted,
   // so a document made last month has to keep rendering exactly as it did — which
   // is why the two legacy readers stay rather than being cleaned away.
-  const surfacesBody = pack.surfaces ? renderConversionSurfaces(pack.surfaces) : "";
+  // BOTH FACTS, NOT EITHER (P1-1). `websiteScraped` is set from the analysis of
+  // HTML actually fetched from the business's own URL — no URL on the row means
+  // no fetch, means false — and `performanceMeasured` from a page-speed run
+  // against that same page. A site advisory needs both: without the fetch there
+  // is no page to describe, and without the timing there is no "how it performs".
+  // An older pack carries no signals at all, which is not evidence that anybody
+  // looked, so it reads as false and the block stays out.
+  const signals = pack.meta.signals;
+  const siteMeasured = Boolean(signals?.websiteScraped && signals?.performanceMeasured);
+  const surfacesBody = pack.surfaces
+    ? renderConversionSurfaces(pack.surfaces, siteMeasured)
+    : "";
   const landingBody =
     surfacesBody ||
     (pack.landing?.assets
       ? renderLandingAssets(pack.landing.assets)
       : renderLandingAssetsFallback(f1.landingPage));
-  if (landingBody) {
+
+  // The two screens that are page copy rather than workflow copy: the show-up
+  // framing carried on the booking page, and the confirmation screen a completed
+  // booking lands on. They belong with the surfaces, not with the messages.
+  const f5 = pack.file5;
+  const ty = pack.supportingAssets?.thankYouAssets;
+  const bookingScreens = `${
+    f5.headline
+      ? `<div class="label">Booking page — the show-up framing</div>${destination(
+          `${SURFACE.bookingPage} — the headline and the line under it`
+        )}<div class="hero-quote">${esc(f5.headline)}</div>${para(f5.subheadline)}`
+      : ""
+  }${
+    ty?.thankYouPageCopy
+      ? `<div class="label">Thank-you screen</div>${destination(
+          `${SURFACE.bookingPage} — the confirmation screen shown the moment somebody books`
+        )}${para(ty.thankYouPageCopy)}`
+      : ""
+  }`;
+
+  if (landingBody || bookingScreens) {
     parts.push(
       section(
         next(),
         surfacesBody ? "Conversion Surfaces — the copy that goes live" : "Landing Page Conversion Assets",
-        // Scope: this is the copy for the booking page WE build and brand inside
-        // GoHighLevel, plus advisory notes on their existing site. It is not a
-        // "paid-traffic destination" — we neither run nor manage traffic.
-        // The section is BOTH halves and says so: the copy for the page we build,
-        // and the copy that is only ever advice about the site we do not. Every
-        // asset below carries its own "Where this goes" line saying which it is.
-        `${assetFrame(
-          "Booking page copy we build for you, plus advisory copy for your own site",
-          "Turn the enquiries you already get into booked, qualified calls"
-        )}${landingBody}`
+        `${landingBody}${bookingScreens}`
       )
     );
   }
 
-  // Copy for every workflow in the build. Without this the operator writes the
-  // owner notification, the review replies and the reactivation campaign by hand
-  // inside the client's account on go-live day — unbilled work in an inconsistent
-  // voice, at the moment the client is watching.
-  const workflowBody = pack.workflowCopy ? renderWorkflowCopy(pack.workflowCopy) : "";
+  // Every workflow in the build, with its messages. Without this the operator
+  // writes the owner notification, the review replies and the reactivation
+  // campaign by hand inside the client's account on go-live day — unbilled work
+  // in an inconsistent voice, at the moment the client is watching.
+  const workflowBody = renderWorkflowCopy(pack, ctx.plan);
   if (workflowBody) {
-    parts.push(
-      section(
-        next(),
-        "Workflow Copy — every automation's messages",
-        `${assetFrame(
-          "The words each workflow sends, ready to paste",
-          "Nothing in the build goes live without its copy already written"
-        )}${workflowBody}`
-      )
-    );
+    parts.push(section(next(), "Workflow Copy — every automation's messages", workflowBody));
   }
 
-  // Email assets (file3).
-  if ((f3.emails ?? []).length) {
-    parts.push(
-      section(
-        next(),
-        "Email Nurture Assets",
-        `${assetFrame(
-          "Post-opt-in nurture sequence",
-          "Build trust and pull unconverted leads back to booking"
-        )}${(f3.emails ?? [])
-          .map(
-            (e) =>
-              `<div class="email"><div class="label">Day ${esc(e.day)} · ${esc(
-                e.purpose
-              )}</div>${destination(
-                carriedDestination(e) ??
-                  workflowStep(
-                    "lead-nurture-no-booking",
-                    `the email that sends on day ${String(e.day)}`
-                  )
-              )}<div class="subj">${esc(e.subject)}</div>${para(e.body)}</div>`
-          )
-          .join("")}`
-      )
-    );
-  }
-
-  // SMS assets (file4).
-  if ((f4.messages ?? []).length) {
-    parts.push(
-      section(
-        next(),
-        "SMS Follow-Up Assets",
-        `${assetFrame(
-          "Speed-to-lead and re-engagement texting",
-          "Recover no-responses with timely, human messages"
-        )}${(f4.messages ?? [])
-          .map(
-            (m) =>
-              `<div class="card"><div class="label">Send ${esc(m.timing)}</div>${destination(
-                carriedDestination(m) ?? smsDestination(m.timing)
-              )}<p><strong>${esc(m.message)}</strong></p></div>`
-          )
-          .join("")}`
-      )
-    );
-  }
-
-  // Booking assets (file5).
-  parts.push(
-    section(
-      next(),
-      "Booking & Reminder Assets",
-      `${assetFrame(
-        "Booking page + confirmation / reminder automations",
-        "Maximize show-up rate and reduce no-shows"
-      )}${destination(`${SURFACE.bookingPage} — the headline and the line under it`)}<div class="hero-quote">${esc(
-        f5.headline
-      )}</div>${para(f5.subheadline)}${emailBlock(
-        "Confirmation email",
-        f5.confirmationEmail,
-        destination(
-          workflowStep("booking-confirmation-reminders", "the confirmation that sends on booking")
-        )
-      )}${emailBlock(
-        "24-hour reminder email",
-        f5.reminderEmail24h,
-        destination(workflowStep("booking-confirmation-reminders", "the reminder 24 hours out"))
-      )}<div class="label">Day-of reminder SMS</div>${destination(
-        workflowStep("booking-confirmation-reminders", "the text on the morning of the visit")
-      )}<div class="card">${esc(f5.dayOfReminderSms)}</div>${emailBlock(
-        "No-show recovery email",
-        f5.noShowRecoveryEmail,
-        destination(workflowStep("no-show-recovery", "the email after a missed visit"))
-      )}`
-    )
+  return shell(
+    withoutAssumptions(pack.meta),
+    "Conversion Asset Pack",
+    parts.join("\n"),
+    shellOpts("asset-pack")
   );
-
-  // Thank-you & post-purchase assets (supportingAssets.thankYouAssets). The only
-  // permitted review touch (Law 2) is a single review-REQUEST automation fired
-  // after a completed job — folded in here, not a standalone review section.
-  const ty = sa?.thankYouAssets;
-  const reviewMsg = sa?.reviewAssets?.postJobRequest;
-  if (ty || reviewMsg) {
-    parts.push(
-      section(
-        next(),
-        "Thank-You & Post-Purchase Assets",
-        `${assetFrame(
-          "Confirmation / thank-you page and post-job messaging",
-          "Set next steps, reduce buyer's remorse, and confirm the win"
-        )}${
-          ty?.thankYouPageCopy
-            ? // The BOOKING confirmation, not the form confirmation — this copy is
-              // written for somebody who has just held a slot. The landing pack's
-              // own thank-you copy covers the form-submit screen, and pointing both
-              // at both surfaces would leave the operator installing the wrong one.
-              `<div class="label">Thank-you page copy</div>${destination(
-                `${SURFACE.bookingPage} — the confirmation screen shown the moment somebody books`
-              )}${para(ty.thankYouPageCopy)}`
-            : ""
-        }${
-          ty?.nextStepMessaging
-            ? `<div class="label">Next-step messaging</div>${destination(
-                workflowStep(
-                  "booking-confirmation-reminders",
-                  "the first message after a booking is taken"
-                )
-              )}${para(ty.nextStepMessaging)}`
-            : ""
-        }${
-          ty?.postPurchaseSequence?.length
-            ? `<div class="label">Post-purchase sequence</div>${destination(
-                `${workflowStep("booking-confirmation-reminders", "the run-up to the visit")}, then ${workflowStep("review-request", "the message once the job is marked complete")}`
-              )}${ty.postPurchaseSequence
-                .map((m) => `<div class="card">${esc(m)}</div>`)
-                .join("")}`
-            : ""
-        }${
-          reviewMsg
-            ? `<div class="label">Review request — sent automatically after a completed job</div>${destination(
-                workflowStep("review-request", "the message that asks for the review")
-              )}<div class="card">${esc(reviewMsg)}</div>`
-            : ""
-        }`
-      )
-    );
-  }
-
-  return shell(pack.meta, "Conversion Asset Pack", parts.join("\n"), shellOpts("asset-pack"));
 }
 
 // ── The engagement spine ─────────────────────────────────────────────────────
@@ -1777,6 +2218,12 @@ function renderDeliverable3(pack: AssetPack): string {
 // It reads the SAME BuildDates the schedule above does, so the money and the
 // calendar can never disagree — and when kickoff is unbooked both render
 // relative to it rather than one of them inventing a date.
+// Go-live prints its window in BOTH states. It used to render bare — "Go-live." —
+// whenever there was no kickoff date, which dropped the one thing the client is
+// reading this section to find out. buildDates() already writes an honest
+// unanchored form ("14 days after kickoff"): it invents no calendar date, so
+// there was nothing to protect the reader from. The two spine bands were already
+// printing their unanchored windows either side of it.
 function renderEngagementSpine(dates: BuildDates): string {
   const band = (
     cls: string,
@@ -1798,16 +2245,16 @@ function renderEngagementSpine(dates: BuildDates): string {
     "The build",
     money(SETUP_FEE_CAD),
     "one-time",
-    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows \u2014 stood up, tested and handed over. This document and the Diagnosis are part of it. This is the window we work to, and anything that slips gets told to you rather than absorbed quietly."
-  )}<div class="spine-golive"><span class="sg-dot"></span><div><strong>Go-live${
-    dates.anchored ? ` \u2014 ${esc(dates.goLive)}` : ""
-  }.</strong> The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point.</div></div>${band(
+    "Your GoHighLevel sub-account, the tracked number, the booking page, the lead-capture form, the pipeline and the workflows \u2014 stood up, tested and live. This document and the Diagnosis are part of it. This is the window we work to, and anything that slips gets told to you rather than absorbed quietly."
+  )}<div class="spine-golive"><span class="sg-dot"></span><div><strong>Go-live \u2014 ${esc(
+    dates.goLive
+  )}.</strong> The system is switched on and every enquiry from that moment runs through it. Nothing is charged monthly until this point.</div></div>${band(
     "is-run",
     dates.runningFrom,
     "Running it",
     `${money(MONTHLY_RETAINER_CAD)}/month`,
     "monthly, from go-live",
-    "LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked. It continues past the first ninety days on the same terms."
+    "LeadGate qualifying every enquiry, us running and tuning the system against what actually arrives, and a written monthly report on answered, missed and booked. It continues month to month on the same terms."
   )}</div>`;
 }
 
@@ -1910,6 +2357,6 @@ export function renderDeliverableHtml(
     case "build-plan":
       return renderBuildPlan(pack, ctx);
     case "asset-pack":
-      return renderDeliverable3(pack);
+      return renderDeliverable3(pack, ctx);
   }
 }

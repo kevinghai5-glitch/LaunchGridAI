@@ -29,6 +29,7 @@ import {
   neverObservedReason,
   DISCLOSURE_MARKERS,
   ASSUMPTION_CAVEAT,
+  OFFER_PLACEHOLDER,
   PERCENT_FIGURE,
   type EvidenceBinding,
   type FabricationHit,
@@ -39,7 +40,7 @@ import {
 // render from. Aliased on import for one reason: `src/lib/stages.ts` also exports
 // a `PIPELINE_STAGES`, and that one is ReclaimedHQ's OWN internal deal board.
 // Two different things with one name is exactly how they got confused before.
-import { PIPELINE_STAGES as CLIENT_CRM_PIPELINE_STAGES } from "../workflow-catalogue";
+import { PIPELINE_STAGES as CLIENT_CRM_PIPELINE_STAGES, WORKFLOWS } from "../workflow-catalogue";
 
 /** Aliases of the canonical declarations in src/types. They live there because a
  *  check has to be PERSISTED (in a pack's governance block and in the
@@ -692,6 +693,394 @@ function unlabelledPercentSentences(
     }
   }
   return out;
+}
+
+// ── AUDIT gen-2 · THE COPY THAT GETS PASTED INTO A GOHIGHLEVEL ACCOUNT ────────
+// Everything in this block judges the pack's COPY PAYLOADS, not the rendered
+// documents, and the split is deliberate. The laws above are about what a client
+// READS, so they read the rendered text (see ValidateOptions). These four are
+// about what an operator PASTES: `[Client Name]` and a hardcoded `9:00 AM` are
+// harmless as ink on a page and wrong the instant they are saved into a workflow
+// step and sent to a stranger. The artifact under test is the payload, so the
+// payload is what is scanned — and scoping it to the payload is also what keeps
+// these precise, since the diagnostic prose written FOR US is full of brackets
+// and clock times that are nobody's problem.
+
+interface CopyString {
+  /** Dotted path to the offending field, so a failure names it. */
+  where: string;
+  text: string;
+}
+
+/** Keys under the copy payloads whose strings are addressed to US, not to a
+ *  customer: the framing block, the implementation checklist, the "why this
+ *  message works" notes, the timing labels and the GoHighLevel destinations.
+ *  "The reminder sends at 9am" is an instruction to the operator, and a merge
+ *  field in its place would be nonsense. asset-generation.ts exempts the same
+ *  keys when it sweeps generated copy — one rule, read from the generation end
+ *  and from the validation end. */
+const OPERATOR_NOTE_KEYS: ReadonlySet<string> = new Set([
+  "framing",
+  "implementation",
+  "implementationGuide",
+  "showUpQualityNotes",
+  "psychology",
+  "replyStrategy",
+  "purpose",
+  "coverage",
+  "where",
+  "timing",
+  "mergeFields",
+  "sequence",
+]);
+
+function walkCopy(value: unknown, path: string, out: CopyString[]): CopyString[] {
+  if (typeof value === "string") {
+    if (value.trim()) out.push({ where: path, text: value });
+  } else if (Array.isArray(value)) {
+    value.forEach((v, i) => walkCopy(v, `${path}[${i}]`, out));
+  } else if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value))
+      if (!OPERATOR_NOTE_KEYS.has(k)) walkCopy(v, `${path}.${k}`, out);
+  }
+  return out;
+}
+
+/** Everything a CUSTOMER receives as a message: both halves of the 60-day
+ *  nurture workflow, the booking and no-show assets, the review and thank-you
+ *  assets, and every workflow's steps. */
+function messageCopy(pack: AssetPack): CopyString[] {
+  const out: CopyString[] = [];
+  walkCopy(pack.file3?.emails, "file3.emails", out);
+  walkCopy(pack.file4?.messages, "file4.messages", out);
+  walkCopy(pack.file5, "file5", out);
+  walkCopy(pack.supportingAssets, "supportingAssets", out);
+  for (const a of pack.workflowCopy?.assets ?? [])
+    walkCopy(a.messages, `workflowCopy.${a.workflowId}`, out);
+  return out;
+}
+
+/** Message copy plus the conversion surfaces — every string that leaves this
+ *  system and lands in front of a customer. The surfaces are held to the token
+ *  and proof rules but NOT to the bare-figure rule: a price on a booking page is
+ *  a price, whereas the same figure inside a text is a number that goes stale
+ *  the first time the business changes it. */
+function liveCopy(pack: AssetPack): CopyString[] {
+  const out = messageCopy(pack);
+  walkCopy(pack.surfaces, "surfaces", out);
+  return out;
+}
+
+// P0-3 · ONE TOKEN SYNTAX. GoHighLevel resolves `{{contact.first_name}}` and
+// sends `[Client Name]` literally, so a square bracket that reaches a workflow
+// step is a message a customer receives with the placeholder still in it.
+const BRACKET_TOKEN = /\[[^\]]{1,80}\]/g;
+
+// P0-5 · a bare figure in a message is either a value the operator has to set
+// anyway or a number nobody sourced. Both are custom values or they do not ship.
+const BARE_MONEY = /(?:CAD\s*)?\$\s?\d[\d,]*(?:\.\d{1,2})?/;
+const BARE_CLOCK = /\b\d{1,2}(?::\d{2})?\s?(?:a\.?m\.?|p\.?m\.?)\b/i;
+
+// P1-2 · the three shapes fabricated proof takes. A run of quoted prose long
+// enough to be a sentence is a testimonial — either lifted off a Google listing
+// and republished into email marketing, or invented, and both ship. An
+// attribution frame ("here is what a customer wrote") is the same claim without
+// the quotation marks. A bracketed instruction is the exact defect that killed
+// the proposal generator, so it is named separately from the token rule above:
+// the token rule says the syntax is wrong, this one says the CONTENT is a
+// fabrication waiting for somebody to fill it in.
+const QUOTED_PROSE = /["“][^"”]{15,}["”]/;
+const PROOF_INSTRUCTION = /\[\s*(?:insert|paste|add|write|include|your)\b[^\]]*\]/i;
+const TESTIMONIAL_FRAME =
+  /\b(?:what (?:a|one|another) (?:customer|client|patient) (?:wrote|said)|(?:a|one) (?:customer|client|patient) (?:wrote|said|told us)|from a (?:customer|client|patient) in|happy (?:clients|customers|patients)|real results from|\d\s*-?\s*star rating)\b/i;
+
+// P1-1 · the three openings an unmeasured observation uses. Each one asserts
+// that somebody LOOKED, so each one needs a measurement standing behind it.
+const OBSERVATION_OPENERS = ["what we saw", "we noticed", "currently, there is"];
+
+/**
+ * Which of the two measurements that license an observation this pack does NOT
+ * record. Empty means it may say what it saw.
+ *
+ * BOTH, NOT EITHER — and the difference is the whole check. The audit quotes the
+ * document's own methodology note, and it has TWO clauses because they license
+ * two different kinds of sentence: "no website URL on record" covers what the
+ * page SAYS (a booking path, a tappable number, what the hero claims), and "no
+ * live page-speed data" covers how it PERFORMS. The advisory block states both
+ * kinds of thing in one table, so one signal cannot underwrite it. Under the OR
+ * this replaces, a pack with websiteScraped:true and performanceMeasured:false
+ * passed while shipping page-speed observations nobody measured.
+ *
+ * screenshotsCaptured is deliberately not counted. A screenshot corroborates a
+ * scrape; it never substitutes for one, and it says nothing at all about load
+ * time — accepting it as a licence would reopen the same hole one signal over.
+ *
+ * Named individually rather than returned as a boolean so a failure can say
+ * which half is missing: "no page-speed run" reads as wrong to whoever ran the
+ * scrape, and a guard nobody believes is a guard somebody overrides.
+ */
+function missingMeasurements(pack: AssetPack): string[] {
+  const s = pack.meta?.signals;
+  return [s?.websiteScraped ? "" : "no website scrape", s?.performanceMeasured ? "" : "no page-speed run"].filter(
+    Boolean
+  );
+}
+
+// P1-4 · which text OPENS a sequence is the whole question, because that is
+// where CASL and A2P vetting look for the opt-out. A bulk campaign is ALL first
+// contact — every send reaches somebody who has not heard from this business in
+// months — so every message in one counts as an opener.
+const BULK_CAMPAIGN_WORKFLOWS: ReadonlySet<string> = new Set(["database-reactivation"]);
+const SMS_SEGMENT_LIMIT = 160;
+const TEXT_CHANNEL = /text|sms|direct message/i;
+
+interface SmsCopy {
+  where: string;
+  body: string;
+  opensSequence: boolean;
+}
+
+function smsCopy(pack: AssetPack): SmsCopy[] {
+  const out: SmsCopy[] = [];
+  (pack.file4?.messages ?? []).forEach((m, i) => {
+    if (m.message?.trim())
+      out.push({ where: `file4.messages[${i}]`, body: m.message, opensSequence: i === 0 });
+  });
+  const f5 = pack.file5;
+  if (f5) {
+    const push = (where: string, body: string | undefined, opensSequence: boolean) => {
+      if (body?.trim()) out.push({ where, body, opensSequence });
+    };
+    push("file5.dayOfReminderSms", f5.dayOfReminderSms, true);
+    push("file5.noShowRecoverySms1", f5.noShowRecoverySms1, true);
+    push("file5.noShowRecoverySms2", f5.noShowRecoverySms2, false);
+  }
+  const postJob = pack.supportingAssets?.reviewAssets?.postJobRequest;
+  if (postJob?.trim())
+    out.push({ where: "supportingAssets.reviewAssets.postJobRequest", body: postJob, opensSequence: true });
+  for (const a of pack.workflowCopy?.assets ?? []) {
+    const bulk = BULK_CAMPAIGN_WORKFLOWS.has(a.workflowId);
+    let textSeen = false;
+    for (const m of a.messages ?? []) {
+      if (!TEXT_CHANNEL.test(m.channel ?? "")) continue;
+      if (m.body?.trim())
+        out.push({
+          where: `workflowCopy.${a.workflowId} · ${m.step}`,
+          body: m.body,
+          opensSequence: bulk || !textSeen,
+        });
+      textSeen = true;
+    }
+  }
+  return out;
+}
+
+// ── P0-1 / P0-2 / P1-1 · THE RENDERED MARKUP ─────────────────────────────────
+// The laws above read a pack. These read the HTML, because the defect they
+// exist to catch is invisible in the pack and invisible in the visible text: a
+// component renamed in the composer without its stylesheet rule following it
+// still emits perfectly good markup that says all the right words, and renders
+// as "After hoursCAD $1,200–2,400/mo" glued together with no styling at all.
+// That shipped. Nothing in this file could see it, because nothing in this file
+// was looking at the class attributes.
+//
+// Pure and HTML-in/checks-out. It is called from validateRenderedDeliverables
+// (src/lib/exporters/index.ts), which is the boundary that BLOCKS an export, and
+// from scripts/verify-deliverable-ui.ts, which negative-tests it. Running it only
+// from the script would have proved the committed fixture was clean and nothing
+// whatever about the pack an operator is one click from sending.
+
+/** Class names appearing in a `class` attribute anywhere in the document,
+ *  INCLUDING inside the inline `<script>`: markup a script writes as a string
+ *  still reaches the DOM, and a class that arrives at runtime is exactly as
+ *  unstyled as one written into the body. Only `<style>` is removed first, so a
+ *  selector is never mistaken for a use. */
+function classesEmitted(html: string): Set<string> {
+  const body = html.replace(/<style[\s\S]*?<\/style>/g, " ");
+  const out = new Set<string>();
+  for (const m of Array.from(body.matchAll(/\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/g)))
+    for (const name of (m[1] ?? m[2] ?? m[3] ?? "").split(/\s+/)) if (name) out.add(name);
+  return out;
+}
+
+/** Class names a rule in the document's own stylesheet can match. Parsed from
+ *  the SELECTOR side of each rule only — split on `}`, keep what precedes `{` —
+ *  because a declaration value carries dots that are not classes (`13.5px`) and
+ *  a `content:` string can carry anything at all. */
+function classesStyled(html: string): Set<string> {
+  const out = new Set<string>();
+  for (const block of Array.from(html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g))) {
+    const css = block[1].replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const chunk of css.split("}")) {
+      const selector = chunk.slice(0, chunk.indexOf("{") === -1 ? 0 : chunk.indexOf("{"));
+      for (const m of Array.from(selector.matchAll(/\.(-?[A-Za-z_][\w-]*)/g))) out.add(m[1]);
+    }
+  }
+  return out;
+}
+
+/** The document's visible text with every tag replaced by the SAME NUMBER of
+ *  spaces. Two properties matter and both are load-bearing: a phrase split
+ *  across an element boundary still matches (the tag becomes whitespace), and
+ *  every offset still points at the same character of the original HTML — so a
+ *  hit can be traced back to the block it rendered in. */
+function flattenPreservingOffsets(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, (m) => " ".repeat(m.length))
+    .replace(/<[^>]+>/g, (m) => " ".repeat(m.length));
+}
+
+/** The heading or block label immediately above `at`. The composer delimits its
+ *  blocks with `<h2>` and `<div class="label">`, so this names the block the way
+ *  a reader would point at it — "Your own website — advisory only" — instead of
+ *  reporting a character offset nobody can act on. */
+function blockLabelBefore(html: string, at: number): string {
+  const before = html.slice(0, at);
+  const marks = Array.from(
+    before.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>|<div class="label">([\s\S]*?)<\/div>/g)
+  );
+  const last = marks[marks.length - 1];
+  const label = (last?.[1] ?? last?.[2] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return label || "(unlabelled block)";
+}
+
+/** One `<div class="leak-card">…` and everything up to the next one, or to the
+ *  end of its section. Deliberately not a DOM parse: the composer emits these
+ *  as flat siblings, and a regex that assumes that is honest about what it can
+ *  see rather than pretending to understand nesting it never has to. */
+function leakCards(html: string): string[] {
+  const out: string[] = [];
+  const open = /<div class="leak-card">/g;
+  const starts = Array.from(html.matchAll(open), (m) => m.index ?? 0);
+  starts.forEach((start, i) => {
+    const nextCard = starts[i + 1] ?? html.length;
+    const endOfSection = html.indexOf("</section>", start);
+    out.push(html.slice(start, Math.min(nextCard, endOfSection === -1 ? html.length : endOfSection)));
+  });
+  return out;
+}
+
+/**
+ * The markup laws, over the rendered documents keyed by deliverable id.
+ *
+ * P0-1 · every class the document emits has a rule in the document's own
+ *        stylesheet. Hard fail — this is the defect class that shipped.
+ *        The reverse (a rule nothing emits) is only ever a warning: the shell
+ *        styles legacy components that a pack saved last year still renders,
+ *        and dead CSS costs bytes, not correctness.
+ * P0-2 · a leak card that carries a cost carries the reasoning under it. A
+ *        priced claim with no disclosed answer, no consequence and no fix is the
+ *        single most damaging thing the Diagnosis can contain.
+ * P1-1 · a rendered observation names the measurement behind it. Needs `pack`,
+ *        because the licence — did anybody actually look — lives on the pack's
+ *        signals and nowhere in the HTML. Omit `pack` and this law is skipped;
+ *        the export boundary always has one.
+ *
+ * WHY P1-1 IS ALSO HERE, when validatePack already carries a P1-1. That one
+ * judges the PACK: `surfaces.siteAdvisory` carries notes no measurement stands
+ * behind. This one judges the PAGE: the block a client actually reads says "What
+ * we saw" and nothing measured it. They are not the same claim, and the second
+ * is the one that catches a composer that renders an observation from somewhere
+ * other than the field the pack law watches — which is exactly how the "What we
+ * saw" table survived the disclaimer sitting directly above it.
+ */
+export function validateRenderedMarkup(docs: Record<string, string>, pack?: AssetPack): LawCheck[] {
+  const checks: LawCheck[] = [];
+  const add = (law: string, level: CheckLevel, message: string) =>
+    checks.push({ id: checkId(law, message), law, level, message });
+
+  const unstyled: string[] = [];
+  const styledEverywhere = new Set<string>();
+  const emittedEverywhere = new Set<string>();
+
+  for (const [id, html] of Object.entries(docs)) {
+    const styled = classesStyled(html);
+    Array.from(styled).forEach((c) => styledEverywhere.add(c));
+    for (const c of Array.from(classesEmitted(html))) {
+      emittedEverywhere.add(c);
+      if (!styled.has(c)) unstyled.push(`${id}: .${c}`);
+    }
+  }
+
+  if (unstyled.length)
+    add(
+      "P0-1 · every emitted class is styled",
+      "fail",
+      `${unstyled.length} class(es) reach the DOM with no rule in the stylesheet — the component renders unstyled: ${Array.from(
+        new Set(unstyled)
+      )
+        .slice(0, 12)
+        .join(", ")}.`
+    );
+  else add("P0-1 · every emitted class is styled", "pass", "Every emitted class has a rule.");
+
+  const dead = Array.from(styledEverywhere).filter((c) => !emittedEverywhere.has(c));
+  if (dead.length)
+    add(
+      "P0-1 · dead CSS",
+      "warn",
+      `${dead.length} class selector(s) are defined and never emitted: ${dead.slice(0, 12).join(", ")}${
+        dead.length > 12 ? ", …" : ""
+      }.`
+    );
+  else add("P0-1 · dead CSS", "pass", "No unused class selectors.");
+
+  const emptyPriced: string[] = [];
+  for (const [id, html] of Object.entries(docs)) {
+    for (const card of leakCards(html)) {
+      if (!card.includes('class="lc-cost"')) continue;
+      const title = /class="lc-title">([^<]*)/.exec(card)?.[1] ?? "(untitled)";
+      const missing = [
+        card.includes('class="lc-said"') ? "" : "the disclosed answer",
+        // The consequence is the one unclassed paragraph in the card; .lc-said
+        // and .lc-fix are the other two <p>s, so a card with fewer than three is
+        // missing it. Checked by count rather than by class because giving the
+        // consequence a class of its own is a composer change, not a law.
+        (card.match(/<p\b/g) ?? []).length >= 3 ? "" : "the consequence line",
+        card.includes('class="lc-fix"') ? "" : "the fix line",
+      ].filter(Boolean);
+      if (missing.length) emptyPriced.push(`${id}: "${title}" is missing ${missing.join(", ")}`);
+    }
+  }
+  if (emptyPriced.length)
+    add(
+      "P0-2 · a priced leak card carries its reasoning",
+      "fail",
+      `${emptyPriced.length} leak card(s) print a cost with nothing under it: ${emptyPriced.slice(0, 4).join("; ")}.`
+    );
+  else add("P0-2 · a priced leak card carries its reasoning", "pass", "Every priced leak card carries answer, consequence and fix.");
+
+  const P1_1 = "P1-1 · a rendered observation names its measurement";
+  if (pack) {
+    const missing = missingMeasurements(pack);
+    const observed: string[] = [];
+    if (missing.length)
+      for (const [id, html] of Object.entries(docs)) {
+        const flat = flattenPreservingOffsets(html);
+        for (const opener of OBSERVATION_OPENERS) {
+          // Whitespace-tolerant: the flattened text carries a run of spaces where
+          // each tag was, so "What we saw" split across a `<th>` still matches.
+          const re = new RegExp(opener.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), "gi");
+          for (const m of Array.from(flat.matchAll(re)))
+            observed.push(`${id} · "${blockLabelBefore(html, m.index ?? 0)}" says "${m[0].trim()}"`);
+        }
+      }
+    if (observed.length)
+      add(
+        P1_1,
+        "fail",
+        `${observed.length} observation(s) render on a document this pack records ${missing.join(
+          " and "
+        )} behind — the block does not get softened, it gets left out: ${Array.from(new Set(observed))
+          .slice(0, 6)
+          .join("; ")}.`
+      );
+    else if (missing.length)
+      add(P1_1, "pass", `This pack records ${missing.join(" and ")}, and no document claims to have seen anything.`);
+    else add(P1_1, "pass", "Observations rest on a recorded scrape and page-speed run.");
+  }
+
+  return checks;
 }
 
 // ── the validator ─────────────────────────────────────────────────────────────
@@ -1797,6 +2186,177 @@ export function validatePack(
         .join(", ")}.`
     );
   else add("E3 · no all-caps promises", "pass", "No shouted (all-caps) promises.");
+
+  // ── P0-3 · ONE TOKEN SYNTAX ──────────────────────────────────────────────────
+  // The pack shipped three merge-field syntaxes at once: correct GHL in the
+  // workflow copy, `[Client Name]` in the booking assets, `[Insert phone number]`
+  // on the surfaces. Only the first resolves. The other two send literally, so a
+  // customer gets a text addressed to "[Client Name]" — and the operator finds
+  // out from the customer.
+  const bracketHits = liveCopy(pack)
+    .flatMap(({ where, text }) =>
+      (text.split(OFFER_PLACEHOLDER).join(" ").match(BRACKET_TOKEN) ?? []).map((t) => `${where}: ${t}`)
+    );
+  if (bracketHits.length)
+    add(
+      "P0-3 · one token syntax",
+      "fail",
+      `${bracketHits.length} square-bracket token(s) in copy that gets pasted into GoHighLevel — it sends them literally: ${Array.from(
+        new Set(bracketHits)
+      )
+        .slice(0, 6)
+        .join(", ")}.`
+    );
+  else add("P0-3 · one token syntax", "pass", "Every merge field is GoHighLevel syntax.");
+
+  // ── P0-5 · no bare figures inside a message ──────────────────────────────────
+  // "please pay the deposit of $50" and "we open again at 9:00 AM" were both
+  // sourced from nothing and both go stale silently. Every such value is a
+  // custom field or it does not ship.
+  const bareFigures: string[] = [];
+  for (const { where, text } of messageCopy(pack)) {
+    const money = BARE_MONEY.exec(text);
+    const clock = BARE_CLOCK.exec(text);
+    if (money) bareFigures.push(`${where}: "${money[0]}"`);
+    if (clock) bareFigures.push(`${where}: "${clock[0]}"`);
+  }
+  if (bareFigures.length)
+    add(
+      "P0-5 · no bare figures in messages",
+      "fail",
+      `${bareFigures.length} hardcoded amount(s)/time(s) in message copy — each one is a custom value or it does not ship: ${bareFigures
+        .slice(0, 6)
+        .join(", ")}.`
+    );
+  else add("P0-5 · no bare figures in messages", "pass", "No hardcoded amounts or clock times in message copy.");
+
+  // ── P0-4 · every workflow in the build has words, and every block has a home ──
+  // The asset pack covered 9 of 14 and its own header said "every automation's
+  // messages". The five with no block were not missing their copy — it was
+  // scattered elsewhere under a different vocabulary — but nothing asserted the
+  // correspondence, so a workflow could lose its copy entirely and the document
+  // would simply be shorter.
+  const coverage = pack.workflowCopy?.coverage ?? [];
+  const copyAssets = pack.workflowCopy?.assets ?? [];
+  if (pack.workflowCopy) {
+    const assetById = new Map(copyAssets.map((a) => [a.workflowId, a]));
+    const covered = new Set(coverage.map((c) => c.workflowId));
+    const problems: string[] = [];
+
+    for (const w of WORKFLOWS)
+      if (!covered.has(w.id)) problems.push(`"${w.id}" is in the catalogue but absent from coverage`);
+
+    for (const c of coverage) {
+      if (!c.inThisBuild) continue;
+      const messages = assetById.get(c.workflowId)?.messages ?? [];
+      if (!messages.length && !c.copyLivesIn?.trim())
+        problems.push(`"${c.workflowId}" is in the build with no copy and no pointer to where its copy lives`);
+    }
+
+    for (const a of copyAssets) {
+      const c = coverage.find((x) => x.workflowId === a.workflowId);
+      if (!c) problems.push(`copy block "${a.workflowId}" maps to no workflow in coverage`);
+      else if (!c.inThisBuild)
+        problems.push(`copy block "${a.workflowId}" is for a workflow this client's answers took OUT of the build`);
+      if (!(a.messages ?? []).length)
+        problems.push(`copy block "${a.workflowId}" has an empty message table`);
+    }
+
+    if (problems.length)
+      add("P0-4 · workflow copy coverage", "fail", `${problems.length} coverage problem(s): ${problems.slice(0, 6).join("; ")}.`);
+    else
+      add(
+        "P0-4 · workflow copy coverage",
+        "pass",
+        `All ${coverage.length} workflows accounted for; ${copyAssets.length} copy block(s), each mapped to one in the build.`
+      );
+  }
+
+  // ── P1-1 · an observation names the measurement behind it ────────────────────
+  // The Asset Pack said, in its own methodology note, that it had no website URL
+  // and no page-speed data — then rendered a table headed "What we saw" with four
+  // specific observations about that site. The disclaimer sat directly above the
+  // fabrication. So the phrase is only allowed to appear when the pack carries
+  // the measurements that license it — see missingMeasurements for why that is
+  // both signals and not any one of three.
+  //
+  // This is the PACK layer: it catches notes sitting in surfaces.siteAdvisory
+  // whatever the composer chooses to do with them. The same law over the RENDERED
+  // documents lives in validateRenderedMarkup, because a block can reach the page
+  // from somewhere this field never sees.
+  const missing = missingMeasurements(pack);
+  const advisoryNotes = pack.surfaces?.siteAdvisory?.notes ?? [];
+  const observationClaims: string[] = [];
+  if (missing.length) {
+    if (advisoryNotes.some((n) => n.whatWeSaw?.trim()))
+      observationClaims.push(`surfaces.siteAdvisory carries ${advisoryNotes.length} "what we saw" note(s)`);
+    for (const opener of OBSERVATION_OPENERS)
+      if (lcAll.includes(opener)) observationClaims.push(`the documents say "${opener}"`);
+  }
+  if (observationClaims.length)
+    add(
+      "P1-1 · an observation names its measurement",
+      "fail",
+      `${observationClaims.join("; ")} — but this pack records ${missing.join(
+        " and "
+      )}. An observation nobody made is the cold-audit fabrication failure.`
+    );
+  else
+    add(
+      "P1-1 · an observation names its measurement",
+      "pass",
+      missing.length ? "No unmeasured observations claimed." : "Observations rest on a recorded scrape and page-speed run."
+    );
+
+  // ── P1-2 · no fabricated proof ───────────────────────────────────────────────
+  // Two Google reviews were republished into a marketing email 40KB after the
+  // same document's standing rules banned exactly that. A proof slot ships EMPTY
+  // and goes on the needs-from-client list; it never ships with a plausible line
+  // nobody verified, and never with a bracketed instruction to write one.
+  const proofHits: string[] = [];
+  for (const { where, text } of liveCopy(pack)) {
+    if (PROOF_INSTRUCTION.test(text)) proofHits.push(`${where}: a bracketed instruction to insert proof`);
+    else if (QUOTED_PROSE.test(text)) proofHits.push(`${where}: a quoted testimonial`);
+    else if (TESTIMONIAL_FRAME.test(text)) proofHits.push(`${where}: a customer story or star-rating claim`);
+  }
+  if (proofHits.length)
+    add(
+      "P1-2 · no fabricated proof",
+      "fail",
+      `${proofHits.length} proof claim(s) in generated copy — a proof slot ships empty and goes on the needs-from-client list: ${proofHits
+        .slice(0, 5)
+        .join(", ")}.`
+    );
+  else add("P1-2 · no fabricated proof", "pass", "No testimonials, customer stories or proof placeholders in the copy.");
+
+  // ── P1-4 · the SMS opt-out and the segment ceiling ───────────────────────────
+  // STOP appeared three times, all inside one campaign, and was missing from
+  // every first contact — which is precisely where A2P vetting and CASL look for
+  // it. The generator appends it now, so a hit here means the appending stopped
+  // running, which is worth knowing loudly.
+  const texts = smsCopy(pack);
+  const noOptOut = texts.filter((t) => t.opensSequence && !/\bSTOP\b/.test(t.body));
+  if (noOptOut.length)
+    add(
+      "P1-4 · SMS opt-out",
+      "fail",
+      `${noOptOut.length} text(s) open a sequence with no opt-out: ${noOptOut.map((t) => t.where).slice(0, 6).join(", ")}.`
+    );
+  else if (texts.length) add("P1-4 · SMS opt-out", "pass", `All ${texts.length} text(s) checked; every sequence opens with an opt-out.`);
+
+  // Over one segment is a cost and deliverability problem, not a lie — flagged,
+  // never a reason to truncate somebody's message.
+  const oversize = texts.filter((t) => t.body.length > SMS_SEGMENT_LIMIT);
+  if (oversize.length)
+    add(
+      "P1-4 · SMS segment",
+      "warn",
+      `${oversize.length} text(s) exceed ${SMS_SEGMENT_LIMIT} characters and send as two — double cost, worse delivery: ${oversize
+        .map((t) => `${t.where} (${t.body.length})`)
+        .slice(0, 6)
+        .join(", ")}.`
+    );
+  else if (texts.length) add("P1-4 · SMS segment", "pass", `Every text fits one ${SMS_SEGMENT_LIMIT}-character segment.`);
 
   // ── Law 8 · lead with the gut-punch (heuristic) ──────────────────────────────
   const opener = (intel?.executiveSummary?.narrative ?? "").trim();

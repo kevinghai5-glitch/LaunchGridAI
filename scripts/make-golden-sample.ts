@@ -1158,7 +1158,7 @@ const workflowResolutions = resolveWorkflows({
 const supportingAssets: AssetPack["supportingAssets"] = {
   reviewAssets: {
     postJobRequest:
-      "Hi [First name], thanks for having Northvale out today. If the work was up to standard, a short Google review helps other Kelowna homeowners work out who to call when their furnace quits. Here is the link: [Google review link]. If anything was not right, reply to this message and we will sort it out first.",
+      "Hi {{contact.first_name}}, thanks for having Northvale out today. If the work was up to standard, a short Google review helps other Kelowna homeowners work out who to call when their furnace quits. Here is the link: {{custom_values.review_link}}. If anything was not right, reply to this message and we will sort it out first. Reply STOP to opt out.",
   },
   thankYouAssets: {
     thankYouPageCopy:
@@ -1243,9 +1243,14 @@ const surfaces: AssetPack["surfaces"] = stampSurfaceDestinations({
       },
       {
         name: "Proof",
-        purpose: "Let real customers do the persuading.",
+        // The slot ships WITHOUT the reviews, and without a bracketed note asking
+        // somebody to paste some in. A generator that leaves an instruction where
+        // proof should be is the defect that killed the proposal generator; the
+        // reviews are the client's to choose and they go on the needs-from-client
+        // list. What is left is only what is already on the public record.
+        purpose: "State what is already on the record, and leave the reviews to the owner.",
         copy:
-          "Northvale has been working on Okanagan heating systems since 2009, licensed and insured for gas work in British Columbia. The rating is 4.4 across 61 Google reviews, and they consistently mention punctuality, honesty about what does and does not need replacing, and a fair price. [Paste three real Google reviews here, first name and neighbourhood only — never write one that nobody left.]",
+          "Northvale has been working on Okanagan heating systems since 2009, licensed and insured for gas work in British Columbia. The rating is 4.4 across 61 Google reviews, and they consistently mention punctuality, honesty about what does and does not need replacing, and a fair price.",
       },
       {
         name: "Book a time",
@@ -1333,7 +1338,7 @@ const surfaces: AssetPack["surfaces"] = stampSurfaceDestinations({
     detailsAsk:
       "Can I take a name and a mobile number? That way we can carry on by text if you have to close the tab, and nothing gets lost.",
     awayMessage:
-      "The office is closed but this is monitored. Send it through and you will get a real reply first thing. If you have no heat, call 250-555-0164 and it routes straight to the on-call technician. You can also grab a slot now: [booking link]",
+      "The office is closed but this is monitored. Send it through and you will get a real reply first thing. If you have no heat, call 250-555-0164 and it routes straight to the on-call technician. You can also grab a slot now: {{custom_values.booking_link}}",
   },
   siteAdvisory: {
     where: "",
@@ -1527,7 +1532,7 @@ const WORKFLOW_MESSAGES: Record<string, WorkflowMessage[]> = {
       channel: "Text",
       timing: "Immediately, on any call or message that arrives outside opening hours",
       body:
-        "Thanks for reaching {{location.name}}. The office is closed right now and opens again at 8am on the next working day. Send us your address and what the system is doing, and we will call you first thing. The calendar stays open overnight if you would rather hold a time now: {{custom_values.booking_link}}",
+        "Thanks for reaching {{location.name}}. The office is closed right now and opens again at {{custom_values.opening_time}} on the next working day. Send us your address and what the system is doing, and we will call you first thing. The calendar stays open overnight if you would rather hold a time now: {{custom_values.booking_link}}",
       mergeFields: ["{{location.name}}", "{{custom_values.booking_link}}"],
     },
     {
@@ -1536,7 +1541,7 @@ const WORKFLOW_MESSAGES: Record<string, WorkflowMessage[]> = {
       timing: "Sent with the text, on any message that arrives outside opening hours",
       subject: "We are closed right now, but your message is with us",
       body:
-        "Hi {{contact.first_name}},\n\nThanks for writing to {{location.name}}. The office is closed at the moment and opens again at 8am on the next working day. Your message is already in the queue for the morning, so there is nothing you need to send twice.\n\nIf you would rather not wait, you can hold a time yourself here: {{custom_values.booking_link}}\n\nIf you have no heat or no cooling and it will not keep until morning, reply with the word urgent and your address, and the on-call technician is paged instead.\n\n{{location.name}}",
+        "Hi {{contact.first_name}},\n\nThanks for writing to {{location.name}}. The office is closed at the moment and opens again at {{custom_values.opening_time}} on the next working day. Your message is already in the queue for the morning, so there is nothing you need to send twice.\n\nIf you would rather not wait, you can hold a time yourself here: {{custom_values.booking_link}}\n\nIf you have no heat or no cooling and it will not keep until morning, reply with the word urgent and your address, and the on-call technician is paged instead.\n\n{{location.name}}",
       mergeFields: [
         "{{contact.first_name}}",
         "{{location.name}}",
@@ -2199,7 +2204,7 @@ const file3: AssetPack["file3"] = {
       "Your quote from Northvale",
       "The numbers we talked about",
       "Everything in one place, plus what happens next.",
-      "Hi [First name],\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at [booking link] without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nHere is the written quote we discussed, with the price and what it covers on one page.\n\nTwo things worth knowing. The price holds for thirty days. And if you would rather just get it booked, you can pick a slot yourself at {{custom_values.booking_link}} without phoning anybody.\n\nIf anything in it does not make sense, reply to this and I will explain it properly.\n\n— The team at Northvale",
       "See available times"
     ),
     nurtureEmail(
@@ -2207,15 +2212,20 @@ const file3: AssetPack["file3"] = {
       "What the visit actually looks like",
       "How the install day runs",
       "Access, timing, and how long the heat is off.",
-      "Hi [First name],\n\nIn case it helps to picture it: the crew arrives inside a two-hour window, the system is down for most of the working day, and everything is cleared out before we leave.\n\nWe handle the rebate paperwork on heat pump installs, so there is nothing for you to file.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nIn case it helps to picture it: the crew arrives inside a two-hour window, the system is down for most of the working day, and everything is cleared out before we leave.\n\nWe handle the rebate paperwork on heat pump installs, so there is nothing for you to file.\n\n— The team at Northvale",
       "See available times"
     ),
     nurtureEmail(
       3,
-      "From a customer in [Neighbourhood]",
-      "What other homeowners said",
-      "Their words, not ours.",
-      "Hi [First name],\n\nRather than tell you we are good at this, here is what a customer wrote after a job like yours:\n\n[Paste a real Google review verbatim — never write one that nobody left.]\n\nThe quote is still open if you want to move on it.\n\n— The team at Northvale",
+      // WAS a "social proof" email carrying a quoted Google review and, in the
+      // slot where a second one went, a bracketed instruction to paste one in.
+      // Step 6 of NURTURE_SEQUENCE no longer asks for proof — it asks the two
+      // questions a homeowner can check for themselves — so this email answers
+      // that brief instead. Nothing here needs a review nobody wrote.
+      "Two questions worth asking before you book anyone",
+      "What to ask any heating company",
+      "The two that tell you the most.",
+      "Hi {{contact.first_name}},\n\nWhichever company you go with, two questions tell you most of what you need to know.\n\nFirst: is the price in writing before the work starts, or worked out afterwards? Second: who carries the gas ticket on the day, and is the company insured for that work in British Columbia?\n\nOurs are on the quote and on our licence. Worth asking the same of anyone else you are considering.\n\n— The team at Northvale",
       "See available times"
     ),
     nurtureEmail(
@@ -2223,7 +2233,7 @@ const file3: AssetPack["file3"] = {
       "What actually drives the price",
       "Where the money goes on a job like this",
       "No mystery, just the four things that move the number.",
-      "Hi [First name],\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the unit your house actually needs, how much of the existing ductwork can be kept, whether the electrical panel can carry the load, and how long the crew is on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nWorth knowing what sits behind the figure, because it is not one number with a margin on top.\n\nFour things move it: the size of the unit your house actually needs, how much of the existing ductwork can be kept, whether the electrical panel can carry the load, and how long the crew is on site. Nothing else.\n\nIf you want me to walk through which of those applied to yours, reply and I will.\n\n— The team at Northvale",
       "Reply with your questions"
     ),
     nurtureEmail(
@@ -2231,7 +2241,7 @@ const file3: AssetPack["file3"] = {
       "Repair it or replace it?",
       "The question most people are actually stuck on",
       "The honest answer for your system, not the general one.",
-      "Hi [First name],\n\nMost people sitting on a quote like this are stuck on the same question: is it worth repairing this one, or putting the money towards a replacement.\n\nIt depends on the age of the unit and what has already been changed on it, so there is no general answer worth giving. Reply with the model number off the label and I will tell you what I would do if it were my house.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nMost people sitting on a quote like this are stuck on the same question: is it worth repairing this one, or putting the money towards a replacement.\n\nIt depends on the age of the unit and what has already been changed on it, so there is no general answer worth giving. Reply with the model number off the label and I will tell you what I would do if it were my house.\n\n— The team at Northvale",
       "Reply with your model number"
     ),
     nurtureEmail(
@@ -2239,7 +2249,7 @@ const file3: AssetPack["file3"] = {
       "Still worth doing?",
       "The quote is still on file",
       "One line back is enough.",
-      "Hi [First name],\n\nThe quote is still on file and slots are open at [booking link].\n\nIf the timing is wrong, say so and I will park it until it suits you. If the price is the problem, tell me and I will show you what a smaller version of the job looks like.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nThe quote is still on file and slots are open at {{custom_values.booking_link}}.\n\nIf the timing is wrong, say so and I will park it until it suits you. If the price is the problem, tell me and I will show you what a smaller version of the job looks like.\n\n— The team at Northvale",
       "See available times"
     ),
     nurtureEmail(
@@ -2247,7 +2257,7 @@ const file3: AssetPack["file3"] = {
       "I will stop here",
       "Leaving this with you",
       "No more emails from me on this one.",
-      "Hi [First name],\n\nThis is the last one from me on this quote — I do not want to keep landing in your inbox when it has clearly moved down the list.\n\nThe file stays with us, so if you get in touch in a month or in a year we pick up where we left off rather than starting again. And if the heat goes out in the meantime, call [phone] and somebody will answer.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nThis is the last one from me on this quote — I do not want to keep landing in your inbox when it has clearly moved down the list.\n\nThe file stays with us, so if you get in touch in a month or in a year we pick up where we left off rather than starting again. And if the heat goes out in the meantime, call {{location.phone}} and somebody will answer.\n\n— The team at Northvale",
       "See available times"
     ),
   ],
@@ -2297,37 +2307,40 @@ const file4: AssetPack["file4"] = {
   messages: [
     sms(
       1,
-      "Hi [First name], it is Northvale. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: [booking link]",
+      // The opt-out opens the sequence, not because a model wrote it there but
+      // because withOptOut() appends it on a real run — this slot stands in for
+      // the output of that stamp, so it carries what the stamp produces.
+      "Hi {{contact.first_name}}, it is Northvale. Just checking the quote reached you okay. Happy to talk it through, or you can pick a slot yourself here: {{custom_values.booking_link}} Reply STOP to opt out.",
       "Picks the conversation back up the day after, while it is still the thing they were thinking about.",
       "Replies route to the office queue; a booking closes the sequence automatically."
     ),
     sms(
       2,
-      "Quick one [First name] — is the unit still running, or is it out altogether? Changes what I would suggest doing first.",
+      "Quick one {{contact.first_name}} — is the unit still running, or is it out altogether? Changes what I would suggest doing first.",
       "One question that takes four words to answer, which is what restarts a thread that has gone quiet.",
       "Any reply reopens the conversation with the office; the words no heat page the on-call technician."
     ),
     sms(
       3,
-      "Hi [First name], is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
+      "Hi {{contact.first_name}}, is there one thing about the quote holding this up? Tell me which and I will answer it straight rather than guessing.",
       "Names the real blocker instead of asking for a decision they have not made yet.",
       "Replies go to the office; a booking or a reply stops the rest of the sequence."
     ),
     sms(
       4,
-      "Hi [First name], still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
+      "Hi {{contact.first_name}}, still on the list for this season, or has it moved to next year? Either is a fine answer — it just tells me when to check back.",
       "A genuine permission check that also sorts the list into now and later.",
       "Later parks the record until the seasonal run; done stops everything."
     ),
     sms(
       5,
-      "Hi [First name], we have space in the calendar over the next fortnight if you want it done before the cold sets in. Slots are here: [booking link]",
+      "Hi {{contact.first_name}}, we have space in the calendar over the next fortnight if you want it done before the cold sets in. Slots are here: {{custom_values.booking_link}}",
       "Real availability stated plainly, with no invented deadline attached to it.",
       "A booking closes the sequence; anything else leaves the last two steps to run."
     ),
     sms(
       6,
-      "Last one from me [First name] — do you want this booked in? One word back and I will either sort it or leave you to it.",
+      "Last one from me {{contact.first_name}} — do you want this booked in? One word back and I will either sort it or leave you to it.",
       "A direct, warm ask at the point where anything less direct gets ignored.",
       "Yes routes straight to the office to book; anything else lets the final email close it out."
     ),
@@ -2369,27 +2382,31 @@ const file5: AssetPack["file5"] = {
     "Rated 4.4 across 61 Google reviews from Kelowna, West Kelowna and Lake Country.",
     "Licensed and insured for gas work in British Columbia, working in the Okanagan since 2009.",
   ],
+  // THE ARRIVAL WINDOW IS WRITTEN OUT, NOT TOKENISED. `[window]` had no field
+  // behind it in GHL_MERGE_FIELDS and inventing one produces a token that renders
+  // as empty text in a customer's inbox — worse than the bracket, because nobody
+  // notices. The rule for a value with no field is to say it in plain English.
   confirmationEmail: {
-    subject: "Booked: [date] between [window]",
+    subject: "Booked: {{appointment.start_time}}",
     body:
-      "Hi [First name],\n\nThat is confirmed. [Technician] will be with you on [date] between [window].\n\nBefore they arrive, please clear access to the unit — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nThat is confirmed. {{user.first_name}} will be with you at {{appointment.start_time}}, inside the two-hour arrival window shown on this confirmation.\n\nBefore they arrive, please clear access to the unit — that is the single thing that most often turns a visit into a second visit.\n\nNeed to move it? Reply to this email or to the text you just received and we will find another slot.\n\n— The team at Northvale",
   },
   reminderEmail24h: {
-    subject: "Tomorrow between [window]",
+    subject: "Your visit tomorrow — {{appointment.start_time}}",
     body:
-      "Hi [First name],\n\nA quick reminder that [Technician] is booked to visit tomorrow between [window].\n\nTwo things that help: clear access to the unit, and have the model number handy if you can find it on the label.\n\nIf tomorrow no longer works, reply and we will move it.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\nA quick reminder that {{user.first_name}} is booked to visit you at {{appointment.start_time}}, inside the arrival window on your confirmation.\n\nTwo things that help: clear access to the unit, and have the model number handy if you can find it on the label.\n\nIf tomorrow no longer works, reply and we will move it.\n\n— The team at Northvale",
   },
   dayOfReminderSms:
-    "Northvale here — [Technician] is on the way and should reach you inside your [window] slot. Reply if anything has changed.",
+    "Northvale here — {{user.first_name}} is on the way and should reach you inside your arrival window. Reply if anything has changed. Reply STOP to opt out.",
   noShowRecoveryEmail: {
     subject: "We came by today",
     body:
-      "Hi [First name],\n\n[Technician] came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at [booking link], and we will get you back in the calendar.\n\n— The team at Northvale",
+      "Hi {{contact.first_name}},\n\n{{user.first_name}} came out today but could not get access, so the visit did not go ahead.\n\nNo problem at all. Reply with a day that suits you this week, or pick a new slot yourself at {{custom_values.booking_link}}, and we will get you back in the calendar.\n\n— The team at Northvale",
   },
   noShowRecoverySms1:
-    "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week.",
+    "We came by today and could not get access. Reply with a day that works and we will get you booked back in this week. Reply STOP to opt out.",
   noShowRecoverySms2:
-    "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: [booking link]",
+    "Still happy to get this sorted whenever it suits. Pick any slot here and it is confirmed straight away: {{custom_values.booking_link}}",
   rescheduleFraming:
     "Rescheduling is offered as a one-word reply on every message, because a customer who cannot easily move an appointment tends to simply not be home for it.",
   showUpQualityNotes:

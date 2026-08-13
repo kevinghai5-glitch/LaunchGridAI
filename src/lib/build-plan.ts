@@ -63,7 +63,7 @@ export interface BuildDates {
   kickoff: string;
   /** "12–26 August 2026", or "Days 1–14 from kickoff". */
   buildWindow: string;
-  /** "26 August 2026", or "Fourteen days after kickoff". */
+  /** "26 August 2026", or "14 days after kickoff". */
   goLive: string;
   /** "From 26 August 2026", or "From go-live". */
   runningFrom: string;

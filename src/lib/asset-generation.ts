@@ -37,7 +37,7 @@ import { PRODUCT_NAME, SYSTEM_FRAMING } from "./brand";
 import type { AuditIntelligence } from "./audit-intelligence";
 import { intelligenceToPromptBlock } from "./audit-intelligence";
 import type { FiredLeak } from "./leak-detection";
-import { SCORECARD_AREAS, SCORECARD_DISPLAY_NAMES } from "./leak-detection";
+import { SCORECARD_AREAS, SCORECARD_DISPLAY_NAMES, classifyVertical } from "./leak-detection";
 import type { ClientIntake, ScorecardArea } from "./leak-taxonomy";
 import {
   statGuard,
@@ -54,6 +54,7 @@ import {
   PIPELINE,
   PIPELINE_STAGES,
   WORKFLOWS,
+  nounsFor,
   type WorkflowDefinition,
   type WorkflowToggles,
 } from "./workflow-catalogue";
@@ -91,6 +92,7 @@ import type {
   WorkflowCopyAsset,
   WorkflowCopyCoverage,
   WorkflowCopyPack,
+  WorkflowMessage,
 } from "@/types";
 
 export interface BusinessProfile {
@@ -179,7 +181,7 @@ function shapePsi(
 const STYLE_RULES = `You are a senior client-acquisition strategist whose audits command premium fees. You have diagnosed hundreds of local service businesses and you know exactly where they leak revenue. You write like an expensive operator showing the client the receipts — not a marketer, blogger, or AI. The reader is a SKEPTICAL business OWNER who has seen generic "marketing audits" and hates them. The only things that earn their money: specificity they couldn't have written themselves, leaks quantified in dollars, and conclusions they can't argue with.
 
 BUSINESS MODEL (everything you write must fit this):
-- The client ALREADY gets enquiries — however those enquiries reach them (their listing, their site, word of mouth, repeat customers). Where the enquiries come from is NOT your subject and NOT something this engagement touches: we do not run, buy, manage, or advise on ads, SEO, or any other traffic source. The problem you solve is CONVERSION: they lose most enquiries before those become customers — slow response, no qualification, no follow-up, no-shows, weak on-page conversion. The promise: "You are already getting enquiries. We make more of them turn into customers." Never write a sentence that assumes the client runs paid ads or that implies we would touch their ad spend.
+- The client ALREADY gets inquiries — however those inquiries reach them (their listing, their site, word of mouth, repeat customers). Where the inquiries come from is NOT your subject and NOT something this engagement touches: we do not run, buy, manage, or advise on ads, SEO, or any other traffic source. The problem you solve is CONVERSION: they lose most inquiries before those become customers — slow response, no qualification, no follow-up, no-shows, weak on-page conversion. The promise: "You are already getting inquiries. We make more of them turn into customers." Never write a sentence that assumes the client runs paid ads or that implies we would touch their ad spend.
 - The offer has TWO parts: (1) a one-time DONE-FOR-YOU setup where WE implement the fixes — the client builds nothing; (2) a monthly QUALIFICATION RETAINER powered by ${PRODUCT_NAME} — the AI lead-qualification + routing engine that runs continuously. That recurring engine is ${PRODUCT_NAME}; name it.
 - The reader has NO team — solo owner or a couple of staff. Never assign work to a "Marketing Team", "Web Dev Team", "Sales Team", "CRM Specialist", or "IT Team".
 
@@ -190,7 +192,7 @@ NON-NEGOTIABLE LAWS:
 2. CONVERSION-ONLY SCOPE. Diagnose/fix ONLY the lead→customer path: speed-to-lead, lead qualification, follow-up/nurture, booking, no-show recovery, on-page conversion/trust (hero, CTA, form, mobile speed). Do NOT prescribe lead generation — no paid ads, SEO, social growth, content marketing, "local authority", events, or referral programs. Only allowed exception: review-REQUEST automation after a job, framed as a post-sale trust asset, never a ranking campaign. NOT A REDESIGN: any on-page fix (hero, CTA, form, page) is framed as the visible surface of a system fix — the acquisition system is the deliverable, never a cosmetic "redesign", "new look", or "refresh". Never imply the client is buying a prettier website.
 3. DONE-FOR-YOU FRAMING. WE implement everything. Frame fixes as "here's what we deploy for you," not "here's what you should build." Owner is "us" for everything implemented; "you" ONLY for genuine human-judgment steps (showing up to the consult, answering a qualified lead, approving copy). Never assign tasks to roles a small local business does not have.
 4. POSITION THE RETAINER. The lead-qualification + routing layer IS ${PRODUCT_NAME}. Name it. Make clear it RUNS CONTINUOUSLY and is what the monthly retainer pays for — distinct from the one-time setup.
-5. USE ONLY THE PROVIDED FIGURES. Every dollar amount, percentage, and multiplier you print MUST come verbatim from the leak-analysis block supplied to you (its pre-computed math and allowed numbers). NEVER invent, derive, or estimate your own figure. If a leak has no supplied dollar figure, describe the leak qualitatively and anchor it to the cost of an enquiry ("this is leaking a share of what it already costs you to get an enquiry") — do NOT attach a fabricated revenue number. Pre-intake, make ZERO claims about the client's revenue; frame impact against the industry cost-per-lead figure supplied in the block only, and never assert that the client buys ads. When a figure IS supplied, show it with the labeled math beside it.
+5. USE ONLY THE PROVIDED FIGURES. Every dollar amount, percentage, and multiplier you print MUST come verbatim from the leak-analysis block supplied to you (its pre-computed math and allowed numbers). NEVER invent, derive, or estimate your own figure. If a leak has no supplied dollar figure, describe the leak qualitatively and anchor it to the cost of an inquiry ("this is leaking a share of what it already costs you to get an inquiry") — do NOT attach a fabricated revenue number. Pre-intake, make ZERO claims about the client's revenue; frame impact against the industry cost-per-lead figure supplied in the block only, and never assert that the client buys ads. When a figure IS supplied, show it with the labeled math beside it.
 6. DEFENSIBLE SCORES ONLY. Every score shows its rubric and the specific real evidence behind it. Scores must MATCH the narrative — never score 70/100 while describing it as deficient.
 7. ZERO TAUTOLOGIES. Ban sentences true of every business ("CTAs guide users to act", "trust builds credibility", "following up increases conversion", "X is crucial for conversion"). Replace with what's true of THIS business using its real data and a named competitor's real numbers.
 8. LEAD WITH THE GUT-PUNCH. Open with the most damning, dollar-quantified CONVERSION finding — never a compliment ("strong reputation, 5-star rating").
@@ -199,7 +201,7 @@ NON-NEGOTIABLE LAWS:
 11. NEVER PRINT THE SCAFFOLD. The field hints and analysis dimensions in this prompt are instructions for what to ANALYZE — they must NEVER appear verbatim in your output. Strings like "headline clarity / subheadline strength / CTA visibility / above-the-fold trust / local relevance / intent match" or "urgency & specificity — diagnose the intent mismatch" are scaffolding. Convert every checklist into actual prose findings about THIS business. If a slash-delimited list of analysis dimensions ever appears in a value you emit, that is a bug — replace it with real findings written as sentences.
 12. RECONCILE EVERY DOLLAR FIGURE. All dollar figures must be internally consistent across the whole pack. Compute each per-leak figure FIRST in the leak analysis, then make any executive-summary total equal the sum (or a clearly-stated subset) of those itemized leaks. The same leak shows the same number everywhere. Never let one section contradict another (e.g. the exec summary must not state a larger range for a leak than its own itemized analysis). State the rolled-up total explicitly when you give one.
 13. LABEL EVERY ASSUMPTION, INCLUDING VOLUME. Lead volume, visitor counts, and consult counts are usually NOT in the scraped data. Never present an invented volume as a derived fact (do not write "20 leads/mo based on online inquiries" when nothing was measured). If a volume is not from real data, label it an assumption every place it is used: "Assuming ~20 leads/mo — replace with your actual number to make this exact." Same rule for avg customer value (see below).
-14. BANNED VOCABULARY, AND NO UNLABELLED DOLLAR FIGURE. The words "guaranteed", "guarantee", "skyrocket", "secret", and "hack" are forbidden anywhere in your output — including inside an FAQ answer written in the CLIENT's own voice, where they become a fabricated promise made on the client's behalf. Never write a promise in ALL CAPS. Separately: never write a dollar amount that is not either (a) supplied verbatim in the leak-analysis block with its math beside it, or (b) labelled in the SAME sentence as an assumption. That bans illustrative magnitudes too — do not write "a tire-kicker or a $20k job", because no $20k job was measured. Reach for a non-numeric contrast instead ("a tire-kicker or your biggest job of the year"). Each of these is a hard validator failure that blocks the whole pack from being saved or exported, so one slip costs a full regeneration.
+14. BANNED VOCABULARY, AND NO UNLABELLED DOLLAR FIGURE. The words "guaranteed", "guarantee", "skyrocket", "secret", and "hack" are forbidden anywhere in your output — including inside an FAQ answer written in the CLIENT's own voice, where they become a fabricated promise made on the client's behalf. Never write a promise in ALL CAPS. Separately: never write a dollar amount that is not either (a) supplied verbatim in the leak-analysis block with its math beside it, or (b) labeled in the SAME sentence as an assumption. That bans illustrative magnitudes too — do not write "a tire-kicker or a $20k job", because no $20k job was measured. Reach for a non-numeric contrast instead ("a tire-kicker or your biggest job of the year"). Each of these is a hard validator failure that blocks the whole pack from being saved or exported, so one slip costs a full regeneration.
 
 CALCULATION RULES (use ONLY supplied figures — never fabricate):
 - Every percentage, multiplier, and dollar amount MUST come from the leak-analysis block supplied to you. Do NOT bring in remembered industry rules of thumb (conversion-drop percentages, response-time multipliers, no-show rates, etc.). If the block does not supply a number for a leak, keep the finding qualitative.
@@ -245,7 +247,7 @@ export function contextHeader(ctx: GenerationContext): string {
   const parts = [
     profileBlock(ctx.business, ctx.websiteText),
     "",
-    "AUDIT INTELLIGENCE BRIEFING (heuristically extracted — treat as ground truth where marked real, and respect the labelled assumptions):",
+    "AUDIT INTELLIGENCE BRIEFING (heuristically extracted — treat as ground truth where marked real, and respect the labeled assumptions):",
     intelligenceToPromptBlock(ctx.intel),
   ];
   if (ctx.leaks) {
@@ -344,7 +346,7 @@ const BUILD_ALSO_INCLUDED: string[] = [
   "A booking page we build and brand inside your GoHighLevel sub-account — the one page we build.",
   "A booking calendar wired to your real availability, so a time offered is a time you can keep.",
   "A lead-capture form that feeds the same pipeline as your calls, texts and chats.",
-  `Your six-stage pipeline — ${PIPELINE_STAGES.join(" → ")} — so every enquiry sits in exactly one place.`,
+  `Your six-stage pipeline — ${PIPELINE_STAGES.join(" → ")} — so every inquiry sits in exactly one place.`,
   "A dedicated tracked phone number that forwards to the phone you already answer.",
   "Custom values and custom fields, so a change to your booking link or hours updates every message at once.",
   "A reporting dashboard showing what came in, what got booked, and what got won.",
@@ -359,7 +361,7 @@ const BUILD_NOT_INCLUDED: string[] = [
   // validator hard-fails on the phrase "search ranking" wherever it appears,
   // because that phrase belongs to work we do not sell. Saying what we do not do
   // has to be said in words that are themselves in scope.
-  "We do not run or advise on advertising, on getting found in search, or on growing a following. This engagement is about converting the enquiries you already get.",
+  "We do not run or advise on advertising, on getting found in search, or on growing a following. This engagement is about converting the inquiries you already get.",
   "Lead qualification is not part of the one-time build — it runs every day and is tuned every month, so it sits in the monthly service.",
 ];
 
@@ -379,15 +381,421 @@ const GHL_MERGE_FIELDS: { field: string; meaning: string }[] = [
   { field: "{{custom_values.booking_link}}", meaning: "the booking page link" },
   { field: "{{custom_values.review_link}}", meaning: "the Google review link" },
   { field: "{{custom_values.payment_link}}", meaning: "the payment link" },
+  // The four below exist because a message that needed them had no field to
+  // reach for, so the model wrote the value in longhand instead — a $50 deposit
+  // nobody quoted, an opening hour that goes stale the first time they change
+  // it, and an owner alert whose "wants" slot ended up holding a phone number.
+  // A value set once in the sub-account is the only version of these that can
+  // stay true, so the field has to exist before the rule against writing the
+  // value can be obeyed.
+  { field: "{{custom_values.deposit_amount}}", meaning: "the deposit this business asks for" },
+  { field: "{{custom_values.opening_time}}", meaning: "the time they open, so hours never go stale in a message" },
+  { field: "{{contact.service_requested}}", meaning: "what the lead asked for, captured on the form" },
+  { field: "{{contact.hot_reason}}", meaning: `why ${PRODUCT_NAME} scored this lead hot` },
 ];
 
 function mergeFieldBlock(): string {
   return [
     "GOHIGHLEVEL MERGE FIELDS — use ONLY these, exactly as written, and list the ones you used in `mergeFields`:",
     ...GHL_MERGE_FIELDS.map((m) => `  ${m.field} — ${m.meaning}`),
-    "NEVER invent a merge field and never write a placeholder like [Business] or [name] where a merge field exists: an unknown field renders as empty text in front of a customer. Where no merge field fits, write the words out.",
+    // The old rule ended "…where a merge field exists", which read as permission
+    // to invent a bracket for anything the list did not cover. It is not a
+    // lesser fault: an unknown {{token}} renders as empty text, but a bracket
+    // renders as itself, so "[Client Name]" is delivered to the customer with
+    // the brackets on.
+    "THERE IS EXACTLY ONE TOKEN SYNTAX AND IT IS {{double_braces}}. NEVER write a square-bracket placeholder — not [Business], not [Client Name], not [Appointment Time], not [Insert phone number], not any other. GoHighLevel does not read brackets; it sends them to the customer character for character. Never invent a merge field either. Where nothing on the list fits, write the words out in plain English.",
   ].join("\n");
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COPY THAT REACHES A CUSTOMER — the parts that are not the model's to decide
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Everything below guards the same boundary: a string in this pack is pasted
+// into a live workflow and sent to a real person, often by an operator who is
+// reading it for the first time in front of the client. Three failure classes
+// have to be impossible rather than discouraged, because each one ships silently
+// and none of them looks wrong on the page:
+//
+//   a value nobody sourced   — "$50 deposit", "open again at 9:00 AM"
+//   proof nobody gave us     — a quoted review, a named customer, a past result
+//   a claim nobody may make  — an efficacy or safety line written for a clinic
+//
+// A prompt rule catches most of it, and "most" is the problem. So each rule is
+// stated in the prompt AND swept afterwards by a deterministic pass, and where
+// the sweep cannot repair a string it EMPTIES it. An empty slot is a gap the
+// operator sees before the client does; a plausible fabrication is not.
+
+/** What a bracket was reaching for. Order matters — the longer, more specific
+ *  phrases have to match before the bare "[name]" catch-all. */
+const BRACKET_TOKEN_FIXES: { re: RegExp; token: string }[] = [
+  { re: /\[[^\]]*booking[^\]]*\]/gi, token: "{{custom_values.booking_link}}" },
+  { re: /\[[^\]]*review link[^\]]*\]/gi, token: "{{custom_values.review_link}}" },
+  { re: /\[[^\]]*payment[^\]]*\]/gi, token: "{{custom_values.payment_link}}" },
+  { re: /\[[^\]]*deposit[^\]]*\]/gi, token: "{{custom_values.deposit_amount}}" },
+  { re: /\[[^\]]*(?:opening|open)[^\]]*\]/gi, token: "{{custom_values.opening_time}}" },
+  { re: /\[[^\]]*(?:appointment|date|time)[^\]]*\]/gi, token: "{{appointment.start_time}}" },
+  { re: /\[[^\]]*(?:business|company|location)[^\]]*\]/gi, token: "{{location.name}}" },
+  { re: /\[[^\]]*phone[^\]]*\]/gi, token: "{{location.phone}}" },
+  { re: /\[[^\]]*(?:service|job)[^\]]*\]/gi, token: "{{contact.service_requested}}" },
+  { re: /\[[^\]]*name[^\]]*\]/gi, token: "{{contact.first_name}}" },
+];
+
+/** Anything still in brackets after the fixes above is a placeholder for
+ *  something we do not have — most often "[Insert verified customer review]",
+ *  which P1-2 exists to kill. It is DELETED rather than translated: a bracketed
+ *  instruction in a client's document is the defect that killed the proposal
+ *  generator, and there is no token that means "we made this up". */
+const LEFTOVER_BRACKET_RE = /\s*\[[^\]]{1,80}\]/g;
+
+/** A bare figure in a message is a number nobody sourced, and it goes stale the
+ *  first time the business changes it. A clock time becomes the custom value
+ *  that holds the real one — a token an operator has to fill in is visible, an
+ *  invented "9:00 AM" is not. A dollar figure becomes one only in the deposit
+ *  case below; the rest are prices, and renaming a price is its own fabrication. */
+const BARE_MONEY_RE = /(?:CAD\s*)?\$\s?\d[\d,]*(?:\.\d{1,2})?/g;
+const CLOCK_TIME_RE = /\b\d{1,2}(?::\d{2})?\s?(?:a\.?m\.?|p\.?m\.?)\b/gi;
+
+/** Only a figure the copy AROUND it calls a deposit becomes the deposit token.
+ *  The rule used to rewrite every dollar amount, which renamed a trade's call-out
+ *  fee — "Call-out is $99 and comes off the job" — into a deposit that business
+ *  does not charge. It also enforced more than the law it exists to enforce:
+ *  validate-pack.ts holds the surfaces to the token and proof rules but NOT to
+ *  the bare-figure rule, because a price on a booking page is a price. A bare
+ *  figure left inside a MESSAGE is still caught there and named, which is the
+ *  visible failure the silent rewrite was hiding. */
+const DEPOSIT_CONTEXT_RE = /\bdeposits?\b/i;
+
+/** How near a figure the word "deposit" still counts as describing it. "the
+ *  deposit of $50" and "$50 deposit, refundable" both sit well inside this; a
+ *  price a sentence or two away does not. A window keeps the check off the
+ *  sentence splitter, which would flatten the line breaks an email body needs. */
+const DEPOSIT_WINDOW = 60;
+
+/** "[Appointment Date] at [Appointment Time]" is two brackets for one
+ *  GoHighLevel value, and "from 8am to 6pm" is two clock times for a range no
+ *  single custom value holds. Both collapse to one token: the same token printed
+ *  at both ends of a range reads as a bug in the account, not as a value
+ *  somebody still has to set. */
+const APPOINTMENT_PAIR_RE =
+  /\{\{appointment\.start_time\}\}\s+(?:at|,)\s+\{\{appointment\.start_time\}\}/g;
+const OPENING_TIME_RANGE_RE =
+  /\{\{custom_values\.opening_time\}\}\s*(?:to|and|until|til|till|through|thru|[–—-])\s*\{\{custom_values\.opening_time\}\}/gi;
+
+/** A run of quoted prose long enough to be a sentence. On its own it proves
+ *  nothing — `Just say "I need someone out today" and we book it.` is a script
+ *  for the caller, and the old unconditional rule deleted that whole sentence.
+ *  It is fabricated PROOF when something around it says a customer said it, or
+ *  when what is inside it is praise. In a regulated vertical every quote goes:
+ *  a clinic publishing one it cannot source is the clinic answering for it.
+ *
+ *  The frame list is validate-pack.ts's TESTIMONIAL_FRAME verbatim — one rule,
+ *  read from the generation end and from the validation end. */
+const QUOTED_RUN_RE = /["“][^"”]{15,}["”]/;
+const TESTIMONIAL_FRAME_RE =
+  /\b(?:what (?:a|one|another) (?:customer|client|patient) (?:wrote|said)|(?:a|one) (?:customer|client|patient) (?:wrote|said|told us)|from a (?:customer|client|patient) in|happy (?:clients|customers|patients)|real results from|\d\s*-?\s*star rating)\b/i;
+const PRAISE_RE =
+  /\b(?:amazing|awesome|fantastic|wonderful|incredible|excellent|highly recommend|recommend them|so happy|couldn'?t be happier|loved? (?:the|my|every|it)|life[- ]chang\w+|knowledgeable|professional and)\b/i;
+
+/** Banned in every regulated vertical. Not a style preference: an Alberta clinic
+ *  publishing a superlative is an advertising-standards problem, not a weak
+ *  headline. */
+const SUPERLATIVE_CLAIM_RE =
+  /\b(?:best|#\s?1|number one|top[-\s]rated|award[-\s]winning|proven track record|countless|guarantees?|guaranteed|tirelessly)\b/i;
+
+/** Med spa, medical aesthetics, dental. CPSA and AHS both restrict how these
+ *  services may be advertised in Alberta, and an outcome or safety claim written
+ *  by a model and published by the clinic is the clinic's liability. */
+const MEDICAL_CLAIM_RE =
+  /\b(?:results?|transform(?:s|ed|ing|ation)?|side[-\s]effects?|before[-\s]and[-\s]after|painless|pain[-\s]free|safe|safely|effective|effectiveness|clinically proven|cures?|heals?|rejuvenat\w*|no downtime)\b/i;
+
+/** Law. Outcome and fee-structure claims are the regulated ones, and
+ *  "specialist"/"expert" are restricted titles in most Canadian provinces. */
+const LEGAL_CLAIM_RE =
+  /\b(?:contingency|no win,? no fee|specialis\w*|specializ\w*|specialist|experts?|settlements?|compensation|\d(?:\.\d)?[-\s]star)\b/i;
+
+/** A question about risk, safety, side effects or suitability. The generator
+ *  does not answer these — it hands the question back with the note below. */
+const RISK_QUESTION_RE =
+  /\b(?:risks?|risky|safe|safety|side[-\s]effects?|suitab\w*|candidates?|contraindicat\w*|hurt|painful|recovery|downtime|allerg\w*|complications?)\b/i;
+
+/** What sits where the answer would have been. Written to the operator, because
+ *  the asset pack is an internal document and this is an instruction, not copy. */
+const CLINIC_ANSWERS_NOTE =
+  "Your clinic writes this answer. Anything about risk, safety, side effects or who a treatment suits has to come from the practitioner who carries the responsibility for it — we do not write medical guidance on your behalf, and an answer we invented is the one that puts a regulated practice in front of its college.";
+
+/** The line P1-3 puts on the INTERNAL cover for a regulated client. It has one
+ *  consumer today: stampedClientStrings(), so the validator scans it like every
+ *  other string this file types by hand. NOTHING RENDERS IT — the cover is built
+ *  in exporters/deliverables.ts, which does not read this, so the line does not
+ *  reach a document yet. Kept rather than deleted because the string itself is
+ *  the owner's wording and the cover is the only place it belongs. */
+export const REGULATED_COMPLIANCE_NOTE =
+  "Regulated profession — the owner's own compliance review passes on this copy before anything goes live.";
+
+export type RegulatedTier = "medical" | "legal";
+
+/** Which regulated regime this client's copy has to survive, resolved through
+ *  the SAME classifier the leak detector uses. A second industry-matching rule
+ *  here would eventually disagree with the one that decides which leaks fire,
+ *  and the copy rules would relax for a business the detector still treats as a
+ *  clinic. Null = nothing beyond the ordinary house rules applies. */
+export function regulatedTier(ctx: GenerationContext): RegulatedTier | null {
+  const v = classifyVertical(ctx.business.industry, ctx.business.category);
+  if (v === "med_spa" || v === "dental") return "medical";
+  if (v === "law") return "legal";
+  return null;
+}
+
+/** The prompt half of the gate. The deterministic sweep below is the other half,
+ *  and it exists because this half is advice. */
+function regulatedCopyBlock(ctx: GenerationContext): string {
+  const tier = regulatedTier(ctx);
+  if (!tier) return "";
+  const lines = [
+    "════════ REGULATED PROFESSION — ADVERTISING RULES OVERRIDE EVERY COPY INSTINCT ════════",
+    "This business advertises under professional regulation. A line that would merely be weak copy elsewhere is a compliance problem here, and the owner is the one who answers for it.",
+    "BANNED IN EVERY STRING: \"best\", \"#1\", \"top-rated\", \"award-winning\", \"proven track record\", \"countless\", any form of \"guarantee\", \"tirelessly\". No superlatives at all.",
+  ];
+  if (tier === "medical") {
+    lines.push(
+      "BANNED ADDITIONALLY: outcome and efficacy claims of any kind — \"results\", \"transform\", \"side effects\", before-and-after language, \"painless\", \"safe\", \"effective\", \"no downtime\". Do not describe what a treatment achieves, how it feels, or how safe it is.",
+      "ANY QUESTION ABOUT RISK, SAFETY, SIDE EFFECTS OR SUITABILITY IS NOT YOURS TO ANSWER. Write the question and leave the answer empty — the clinic writes it. Never write medical guidance on a practitioner's behalf, however cautiously hedged."
+    );
+  } else {
+    lines.push(
+      "BANNED ADDITIONALLY: \"contingency\", \"no win no fee\", \"specialize\"/\"specialist\", \"expert\", any claim about a settlement, a compensation figure or a case outcome, and any star-rating claim.",
+      "Never imply a result. Describe what happens in the process, not what it will produce."
+    );
+  }
+  lines.push(
+    "Write about what the business DOES and what happens next. That is the whole permitted subject."
+  );
+  return lines.join("\n");
+}
+
+/** The words this industry uses for its own work. Looked up, never asked of the
+ *  model — a model asked "what do they call a job here" reaches for the
+ *  marketing word. */
+function industryLanguageBlock(ctx: GenerationContext): string {
+  const n = nounsFor(ctx.business.industry ?? ctx.business.category);
+  return [
+    "THE WORDS THIS BUSINESS USES FOR ITS OWN WORK. Use these; do not substitute your own:",
+    `  a unit of work is a ${n.job} (plural: ${n.jobPlural}).`,
+    `  the appointment itself is a ${n.visit}.`,
+    `  where you would write "in your trade", write "in your ${n.tradeWord}".`,
+    n.customerComesToUs
+      ? "THE CUSTOMER TRAVELS TO THEM. Never write a line that has anyone going out to the customer — no \"thanks for having us out\", no \"while we were on site\", no \"when we came round\". They arrive at the door, and the copy has to read as though it knows that."
+      : "THE WORK HAPPENS AT THE CUSTOMER'S PLACE, so arriving, being on site and finishing up there are all fair to say.",
+  ].join("\n");
+}
+
+/** Drop whole sentences rather than words. Deleting "best" out of "Get the Best
+ *  Treatments in Edmonton" leaves broken English that still ships; deleting the
+ *  sentence leaves a visible hole. A short string with no sentence break is one
+ *  sentence, so a banned headline empties completely — which is the intent. */
+function dropSentences(text: string, kill: RegExp): string {
+  if (!kill.test(text)) return text;
+  return keepSentences(text, (s) => !kill.test(s));
+}
+
+function keepSentences(text: string, keep: (sentence: string) => boolean): string {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter(keep)
+    .join(" ")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/** Fabricated proof is dropped by the sentence like everything else, but the
+ *  DECISION is made on the whole value. A testimonial runs to two sentences more
+ *  often than not — "Jaide is an awesome aesthetician! Very knowledgeable and
+ *  kind!" — and its two quotation marks then sit in different sentences, so a
+ *  per-sentence test found neither end of it and kept both halves. Once the value
+ *  is known to carry proof, every sentence holding a quotation mark goes. */
+function dropFabricatedProof(text: string, everyQuoteIsProof: boolean): string {
+  const quote = QUOTED_RUN_RE.exec(text);
+  if (!quote) return text;
+  if (!everyQuoteIsProof && !TESTIMONIAL_FRAME_RE.test(text) && !PRAISE_RE.test(quote[0]))
+    return text;
+  return keepSentences(text, (s) => !/["“”]/.test(s));
+}
+
+/** Keys whose values are written to US, not to a customer: the framing block,
+ *  the implementation steps, the "why this message works" notes. A clock time in
+ *  "the reminder sends at 9am" is an instruction to the operator, and turning it
+ *  into a merge field would be nonsense. */
+const OPERATOR_NOTE_KEYS: ReadonlySet<string> = new Set([
+  "framing",
+  "implementation",
+  "showUpQualityNotes",
+  "psychology",
+  "replyStrategy",
+  "purpose",
+  "coverage",
+]);
+
+/** Does this value put any words on the page? Numbers and flags do not — they
+ *  are the reason "is it empty now" is not enough on its own. */
+function carriesText(value: unknown): boolean {
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.some(carriesText);
+  if (value && typeof value === "object") return Object.values(value).some(carriesText);
+  return false;
+}
+
+/** The field name is carried down to the sweep because one rule needs it: a FAQ
+ *  question is the customer's objection, not a claim the page makes, and the
+ *  regulated rules have to be able to tell the two apart. */
+function mapCopyStrings<T>(value: T, fn: (s: string, key?: string) => string, key?: string): T {
+  if (typeof value === "string") return fn(value, key) as unknown as T;
+  if (Array.isArray(value))
+    // AN ENTRY THE SWEEP EMPTIED IS DROPPED, not kept as "". Downstream cannot
+    // tell an emptied headline option from one the model never wrote, so the
+    // renderer emits `<li></li>` for it, and an FAQ whose question and answer
+    // both went is a blank row — an empty option is not an option. This is the
+    // only place that can tell, because it is the only place that saw the entry
+    // before the sweep: an entry that never carried text (a number, a flag) is
+    // kept, an entry that carried text and carries none now goes.
+    return value
+      .map((v) => [v, mapCopyStrings(v, fn, key)] as const)
+      .filter(([before, after]) => !(carriesText(before) && !carriesText(after)))
+      .map(([, after]) => after) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = OPERATOR_NOTE_KEYS.has(k) ? v : mapCopyStrings(v, fn, k);
+    return out as unknown as T;
+  }
+  return value;
+}
+
+/** The one string the regulated claim rules must not touch. "Are there any side
+ *  effects?" carries a banned phrase BECAUSE it is the objection, and dropping
+ *  the sentence dropped the question — which left the risk gate below nothing to
+ *  recognise, so the FAQ shipped an empty question next to an empty answer. A
+ *  question is not a claim; the regulation bites on the answer, and the answer is
+ *  swept like everything else and then replaced by the handback note. */
+function isGatedRiskQuestion(key: string | undefined, text: string, tier: RegulatedTier): boolean {
+  return tier === "medical" && key === "question" && RISK_QUESTION_RE.test(text);
+}
+
+/**
+ * The deterministic half of P0-3, P0-5, P1-2 and P1-3, run over every payload
+ * whose strings a customer eventually reads.
+ *
+ * Each rule is scoped to the thing it is actually about, because an
+ * over-reaching sweep does its own damage and does it silently: it rewrote a
+ * trade's call-out fee into a deposit, printed the same opening-hour token at
+ * both ends of a range, and deleted any sentence with a quotation mark in it.
+ * Nothing downstream can tell copy the sweep mangled from copy the model wrote
+ * badly, so the narrower rule is the safer one — a figure or a claim that slips
+ * past is still caught by name in validate-pack.ts, where an operator sees it.
+ */
+/** Sentences that CLAIM SOMEBODY LOOKED. The three openers the pack validator
+ *  bans when no measurement licenses them (validate-pack: OBSERVATION_OPENERS).
+ *
+ *  Kept in sync by hand rather than imported, because validate-pack imports from
+ *  here and the reverse would be a cycle. verify-deliverable-ui asserts the two
+ *  lists still agree. */
+const OBSERVATION_OPENER_RE =
+  /\b(what we saw|we noticed|currently,\s+there is)\b/i;
+
+export function scrubClientCopy<T>(payload: T, ctx: GenerationContext): T {
+  const tier = regulatedTier(ctx);
+  // Did anybody actually look at this business's site? Same AND the renderer and
+  // the validator use.
+  const siteMeasured = Boolean(
+    ctx.intel.website?.hasWebsite && ctx.intel.performance?.available
+  );
+  return mapCopyStrings(payload, (s, key) => {
+    let out = s;
+    for (const { re, token } of BRACKET_TOKEN_FIXES) out = out.replace(re, token);
+    out = out
+      .replace(LEFTOVER_BRACKET_RE, "")
+      .replace(BARE_MONEY_RE, (money, at: number, whole: string) =>
+        DEPOSIT_CONTEXT_RE.test(whole.slice(Math.max(0, at - DEPOSIT_WINDOW), at + DEPOSIT_WINDOW))
+          ? "{{custom_values.deposit_amount}}"
+          : money
+      )
+      .replace(CLOCK_TIME_RE, "{{custom_values.opening_time}}")
+      .replace(APPOINTMENT_PAIR_RE, "{{appointment.start_time}}")
+      .replace(OPENING_TIME_RANGE_RE, "{{custom_values.opening_time}}");
+    out = dropFabricatedProof(out, Boolean(tier));
+    // AN OBSERVATION NOBODY MADE. The prompt already forbids these three openers
+    // when nothing was measured and the model writes them anyway — three
+    // consecutive generations for a business with no website produced "we
+    // noticed" in copy outside the website section, each one refused by the gate.
+    // A prompt is a request; this is the guarantee.
+    //
+    // The whole sentence goes, not just the opener: "we noticed your number
+    // isn't clickable on mobile" is not salvaged by deleting the first two words,
+    // because the claim after them is the fabrication. Fields that would be
+    // emptied outright are left alone — an empty required string ships as blank
+    // markup, which is its own defect (see the risk-FAQ regression) — and the
+    // validator still fails those loudly rather than letting them through quietly.
+    if (!siteMeasured) {
+      const trimmed = dropSentences(out, OBSERVATION_OPENER_RE);
+      if (trimmed.trim()) out = trimmed;
+    }
+    if (tier && !isGatedRiskQuestion(key, s, tier)) {
+      out = dropSentences(out, SUPERLATIVE_CLAIM_RE);
+      out = dropSentences(out, tier === "medical" ? MEDICAL_CLAIM_RE : LEGAL_CLAIM_RE);
+    }
+    return out.replace(/[ \t]{2,}/g, " ").trim();
+  });
+}
+
+// ── SMS: the opt-out and the segment ceiling ─────────────────────────────────
+// STOP was in exactly one place — the reactivation campaign — and missing from
+// every first contact, which is precisely where A2P vetting and CASL want it.
+// It is APPENDED here rather than asked for, because a compliance string the
+// model forgets on one run out of ten is a string that is not there.
+
+const SMS_OPT_OUT = "Reply STOP to opt out.";
+
+/** One segment. Past it a text splits, which doubles the cost and drops more
+ *  often — worth flagging, never worth truncating a message for. */
+const SMS_SEGMENT_LIMIT = 160;
+
+/** Bulk campaigns carry the opt-out on EVERY message, not just the first: each
+ *  send reaches somebody who has not heard from this business in a long time and
+ *  may not remember the last one. */
+const BULK_CAMPAIGN_WORKFLOW_IDS: ReadonlySet<string> = new Set(["database-reactivation"]);
+
+function isTextChannel(channel: string | undefined): boolean {
+  return /text|sms|direct message/i.test(channel ?? "");
+}
+
+function withOptOut(text: string): string {
+  const t = (text ?? "").trim();
+  if (!t || /\bSTOP\b/.test(t)) return t;
+  return `${t} ${SMS_OPT_OUT}`;
+}
+
+/**
+ * The owner's hot-lead alert, written out rather than generated.
+ *
+ * The model's version was grammatically broken in a way that survived every
+ * lint — "New hot lead: {{contact.name}} wants {{contact.phone}}" put the phone
+ * token in the slot describing what the lead asked for. Nothing about this
+ * message is client-specific: it is four facts and it goes to one phone, so
+ * there is nothing for a model to add and one more thing for it to get wrong.
+ */
+const OWNER_HOT_LEAD_WORKFLOW_ID = "owner-hot-lead-notification";
+
+const OWNER_HOT_LEAD_MESSAGE: WorkflowMessage = {
+  step: "The alert, the moment a lead scores hot",
+  channel: "Owner notification",
+  timing: "Within about a minute of the lead scoring hot",
+  body: "New hot lead — {{contact.name}}, {{contact.phone}}. Wants: {{contact.service_requested}}. Scored hot on {{contact.hot_reason}}.",
+  mergeFields: [
+    "{{contact.name}}",
+    "{{contact.phone}}",
+    "{{contact.service_requested}}",
+    "{{contact.hot_reason}}",
+  ],
+};
 
 // ── The 60-day nurture sequence ──────────────────────────────────────────────
 // This is workflow 8 in the catalogue — "Lead Nurture — No Booking" — and it is
@@ -415,11 +823,19 @@ export const NURTURE_SEQUENCE: readonly NurtureStep[] = [
   { step: 1, channel: "Text", index: 1, day: 1, purpose: "Short nudge — pick the conversation back up and offer a time" },
   { step: 2, channel: "Email", index: 1, day: 2, purpose: "What you do and what happens next, with the booking link" },
   { step: 3, channel: "Text", index: 2, day: 4, purpose: "One question that is easy to answer, to restart the thread" },
-  { step: 4, channel: "Email", index: 2, day: 7, purpose: "How the job actually runs — remove the uncertainty that stalls people" },
+  { step: 4, channel: "Email", index: 2, day: 7, purpose: "How the work actually runs — remove the uncertainty that stalls people" },
   { step: 5, channel: "Text", index: 3, day: 11, purpose: "Offer to answer the one thing holding them up" },
-  { step: 6, channel: "Email", index: 3, day: 16, purpose: "Local proof — real reviews and real work, no invented names" },
+  // WAS "Local proof — real reviews and real work". It shipped two quoted
+  // reviews into email marketing, which is the fabrication risk whichever way
+  // they got there: invented, or lifted off a Google listing and republished. A
+  // slot that asks for proof gets proof, so the slot is gone rather than fenced.
+  { step: 6, channel: "Email", index: 3, day: 16, purpose: "The two questions worth asking anyone before booking work like this" },
   { step: 7, channel: "Text", index: 4, day: 23, purpose: "Timing check — is this still on the list this season?" },
-  { step: 8, channel: "Email", index: 4, day: 30, purpose: "What drives the price, honestly, so cost stops being a mystery" },
+  // The stated job of this one is answering the price question. The version that
+  // shipped answered it with "our prices reflect the quality of products we use",
+  // which is the question restated. Naming what moves the number is answerable
+  // without knowing the number.
+  { step: 8, channel: "Email", index: 4, day: 30, purpose: "What actually moves the price up or down on work like this, named plainly" },
   { step: 9, channel: "Text", index: 5, day: 38, purpose: "Availability nudge, no pressure and no invented deadline" },
   { step: 10, channel: "Email", index: 5, day: 45, purpose: "The usual reason people wait, answered straight" },
   { step: 11, channel: "Text", index: 6, day: 52, purpose: "Last text — a direct, warm ask" },
@@ -476,10 +892,12 @@ function nurtureScheduleBlock(writing: "Email" | "Text"): string {
     ...rows,
     "",
     "RULES FOR THE WHOLE SEQUENCE:",
-    "- These go to somebody who enquired and never booked. They are not a newsletter and not a broadcast. Every message reads like the owner typing on a phone between jobs.",
+    "- These go to somebody who inquired and never booked. They are not a newsletter and not a broadcast. Every message reads like the owner typing on a phone between jobs.",
     "- Each half must know about the other: do not repeat a point the message two days earlier already made.",
     "- Every message carries ONE next step, and it is the booking link.",
     "- No invented deadline, no invented discount, no 'last chance'. If there is a genuine seasonal reason to act, say it plainly; if there is not, do not manufacture one.",
+    "- NO PROOF YOU WERE NOT GIVEN. No quoted review, no customer name, no described past job, no rating claim, no 'one of our customers told us'. If a message would be stronger with proof and no proof was supplied, write it without proof and leave nothing in its place — not a bracket, not a note, not a hint.",
+    "- The PRICING message names the specific things that move the price up or down for this kind of work. 'Our prices reflect our quality' is the question repeated back, not an answer. Name what changes the number; never state a number nobody gave you.",
     "- The sequence stops the moment they reply or book. Never write a line that only makes sense if they have ignored every previous message.",
     "- The final email closes the loop kindly and leaves the door open — the deal moves to Lost, which is an internal state, so never tell the customer they have been marked anything.",
   ].join("\n");
@@ -662,6 +1080,12 @@ export function stampedClientStrings(): string[] {
     REVIEW_REQUEST_WHERE,
     THANK_YOU_WHERE,
     ...NURTURE_SEQUENCE.map((s) => s.purpose),
+    OWNER_HOT_LEAD_MESSAGE.body,
+    OWNER_HOT_LEAD_MESSAGE.step,
+    OWNER_HOT_LEAD_MESSAGE.timing,
+    SMS_OPT_OUT,
+    CLINIC_ANSWERS_NOTE,
+    REGULATED_COMPLIANCE_NOTE,
     nurtureMeta("Email").endsBy,
     nurtureMeta("Email").where,
     nurtureMeta("Text").where,
@@ -1096,7 +1520,7 @@ async function generateFile1(ctx: GenerationContext): Promise<GrowthAuditFile> {
 
 ${contextHeader(ctx)}
 
-TASK: Produce FILE 1 of the acquisition pack — a premium business growth audit for this ONE business. This is the flagship diagnosis; it must feel like a real consulting audit that shows exactly where the business is losing enquiries, bookings and jobs on the way from "someone got in touch" to "the work is booked". You are NOT writing page copy here: the booking page, the lead-capture form, the webchat and the advice about their own website are all written elsewhere in this pack.
+TASK: Produce FILE 1 of the acquisition pack — a premium business growth audit for this ONE business. This is the flagship diagnosis; it must feel like a real consulting audit that shows exactly where the business is losing inquiries, bookings and jobs on the way from "someone got in touch" to "the work is booked". You are NOT writing page copy here: the booking page, the lead-capture form, the webchat and the advice about their own website are all written elsewhere in this pack.
 
 ${hasPsi
   ? "Include a 'Technical UX & Performance' section that translates the REAL measured PageSpeed numbers (provided above) into business consequences — slower mobile = lost calls, layout shifts = lower form completion, etc. The owner does not care about LCP/CLS; they care about money. State the consequence ONLY — do NOT recommend site-speed, image, CSS, or redesign fixes. Site performance is out of scope for this conversion engagement; it gets flagged, not fixed."
@@ -1149,7 +1573,7 @@ Provide EXACTLY 5 items in revenueLeaks. Provide 4-7 findings and 3-5 conversion
 
 SCOPE — WE DO NOT BUILD WEBSITES. Do not describe a page structure, a deployment, a launch, or a tool to build a page with. The one page we build is the booking page inside the client's GoHighLevel sub-account, and its copy is produced elsewhere in this pack. Anything you say about their existing site is ADVICE for whoever looks after it.
 
-NEVER INVENT PROOF. Do not write a testimonial, a customer name, a quote or a result that is not in the data above. Where proof would strengthen a section and none exists, write a labelled placeholder — "[Insert verified customer review]" — and move on. A recognisable fake name in a client's own document is the single fastest way to lose them.`;
+NEVER INVENT PROOF, AND NEVER LEAVE A NOTE WHERE PROOF WOULD GO. Do not write a testimonial, a customer name, a quote, a rating claim or a past result that is not in the data above. Where proof would strengthen a section and none exists, write the section without it and leave NOTHING in its place — no bracketed instruction, no "[Insert …]", no placeholder of any kind. A bracketed instruction ships to the client exactly as typed, and it is the specific defect that killed the proposal generator.`;
 
   const file = await generateJson<GrowthAuditFile>(prompt, file1Assertions, { label: "file1" });
 
@@ -1242,11 +1666,15 @@ async function generateFile3(ctx: GenerationContext): Promise<EmailNurtureFile> 
 
 ${contextHeader(ctx)}
 
-TASK: Produce FILE 3 — the SEVEN EMAILS of the 60-day follow-up sequence we run for a lead who enquired and never booked. Written as if the business owner typed them himself: human, specific to this trade and city, no corporate voice, no newsletter voice, no hype.
+TASK: Produce FILE 3 — the SEVEN EMAILS of the 60-day follow-up sequence we run for a lead who inquired and never booked. Written as if the business owner typed them himself: human, specific to this trade and city, no corporate voice, no newsletter voice, no hype.
 
 ${nurtureScheduleBlock("Email")}
 
 ${mergeFieldBlock()}
+
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
 
 ${framingInstruction("the email half of the 60-day follow-up sequence")}
 
@@ -1261,7 +1689,10 @@ Return JSON in EXACTLY this shape:
 Provide EXACTLY ${NURTURE_EMAIL_STEPS.length} emails, in the order of the Email steps above (days ${NURTURE_EMAIL_STEPS.map(
     (s) => s.day
   ).join(", ")}). Bodies are complete and realistic — roughly 90-180 words — and signed off in the owner's voice. The final email closes the loop kindly; it never tells the customer their deal has been marked anything.`;
-  const file = await generateJson<EmailNurtureFile>(prompt, undefined, { label: "file3" });
+  const file = scrubClientCopy(
+    await generateJson<EmailNurtureFile>(prompt, undefined, { label: "file3" }),
+    ctx
+  );
 
   // STAMPED, NOT TRUSTED. The step number, the day and the timing come from
   // NURTURE_SEQUENCE, so the two halves of the workflow always agree about which
@@ -1269,7 +1700,12 @@ Provide EXACTLY ${NURTURE_EMAIL_STEPS.length} emails, in the order of the Email 
   // operator reconstructing the schedule by reading the copy.
   file.emails = (file.emails ?? []).slice(0, NURTURE_EMAIL_STEPS.length).map((e, i) => {
     const s = NURTURE_EMAIL_STEPS[i];
-    return { ...e, step: s.step, day: s.day, timing: `Day ${s.day}`, purpose: e.purpose || s.purpose };
+    // The purpose is the canvas's, not the model's. It used to prefer whatever
+    // the model wrote, which is how the day-30 email came to be headed "Clarify
+    // pricing to reduce hesitation" while its body clarified no pricing: the
+    // label was a second opinion about the email's job rather than the brief it
+    // was written to. One of them has to be authoritative, and it is this file.
+    return { ...e, step: s.step, day: s.day, timing: `Day ${s.day}`, purpose: s.purpose };
   });
   file.sequence = nurtureMeta("Email");
   return file;
@@ -1286,11 +1722,17 @@ async function generateFile4(ctx: GenerationContext): Promise<SmsFollowUpFile> {
 
 ${contextHeader(ctx)}
 
-TASK: Produce FILE 4 — the SIX TEXTS of the 60-day follow-up sequence we run for a lead who enquired and never booked. Copy-paste ready, human, no corporate phrasing, no invented urgency, one clear next step, written to start a reply. Keep each under 160 characters where you can.
+TASK: Produce FILE 4 — the SIX TEXTS of the 60-day follow-up sequence we run for a lead who inquired and never booked. Copy-paste ready, human, no corporate phrasing, no invented urgency, one clear next step, written to start a reply.
+
+EVERY TEXT MUST FIT IN ${SMS_SEGMENT_LIMIT} CHARACTERS INCLUDING THE MERGE FIELDS AND THE OPT-OUT. Past that a text splits into two segments: it costs double and it drops more often. "${SMS_OPT_OUT}" is appended to the first text automatically — leave room for it and do not type it yourself.
 
 ${nurtureScheduleBlock("Text")}
 
 ${mergeFieldBlock()}
+
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
 
 ${framingInstruction("the text half of the 60-day follow-up sequence")}
 
@@ -1305,18 +1747,26 @@ Return JSON in EXACTLY this shape:
 Set charCount to the actual character count of the message string. Provide EXACTLY ${NURTURE_TEXT_STEPS.length} texts, in the order of the Text steps above (days ${NURTURE_TEXT_STEPS.map(
     (s) => s.day
   ).join(", ")}).`;
-  const file = await generateJson<SmsFollowUpFile>(prompt, undefined, { label: "file4" });
+  const file = scrubClientCopy(
+    await generateJson<SmsFollowUpFile>(prompt, undefined, { label: "file4" }),
+    ctx
+  );
   // Trust our own count over the model's — and our own schedule over its
-  // numbering, for the same reason file 3 does.
+  // numbering, for the same reason file 3 does. The opt-out rides on the same
+  // stamping pass: it is a legal string on a first contact, so it is appended
+  // rather than requested, and charCount is recomputed after it lands so the
+  // number in the document is the number that gets sent.
   file.messages = (file.messages ?? []).slice(0, NURTURE_TEXT_STEPS.length).map((m, i) => {
     const s = NURTURE_TEXT_STEPS[i];
+    const message = i === 0 ? withOptOut(m.message ?? "") : (m.message ?? "");
     return {
       ...m,
+      message,
       step: s.step,
       order: s.index,
       day: s.day,
       timing: `Day ${s.day}`,
-      charCount: (m.message ?? "").length,
+      charCount: message.length,
     };
   });
   file.sequence = nurtureMeta("Text");
@@ -1330,7 +1780,17 @@ async function generateFile5(ctx: GenerationContext): Promise<BookingSystemFile>
 
 ${contextHeader(ctx)}
 
-TASK: Produce FILE 5 — the appointment show-up system: what a customer is told once a time is in the diary, and every message that gets them to turn up. THE BOOKING PAGE'S OWN HERO COPY IS WRITTEN ELSEWHERE IN THIS PACK — do not write it again here. "headline" and "subheadline" are the show-up framing that sits at the top of the confirmation and carries through the reminders, not a page headline. Two sets of booking-page headlines in one document is two sets that contradict each other. Remove uncertainty by explaining what happens during the appointment, how long it takes, what to prepare, the outcome they can expect, why showing up matters, and how to reschedule. Tone: calm, confident, human, low-pressure, professional. No-show recovery must feel curious, human, helpful, open-door — never passive-aggressive.
+TASK: Produce FILE 5 — the appointment show-up system: what a customer is told once a time is in the diary, and every message that gets them to turn up. THE BOOKING PAGE'S OWN HERO COPY IS WRITTEN ELSEWHERE IN THIS PACK — do not write it again here. "headline" and "subheadline" are the show-up framing that sits at the top of the confirmation and carries through the reminders, not a page headline. Two sets of booking-page headlines in one document is two sets that contradict each other. Remove uncertainty by explaining what happens during the appointment, how long it takes, what to prepare, why showing up matters, and how to reschedule. Tone: calm, confident, human, low-pressure, professional. No-show recovery must feel curious, human, helpful, open-door — never passive-aggressive.
+
+${mergeFieldBlock()}
+
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
+
+NO PROOF YOU WERE NOT GIVEN. No quoted review, no customer name, no described past result, no rating claim, and no bracketed note standing in for one.
+
+EVERY TEXT MUST FIT IN ${SMS_SEGMENT_LIMIT} CHARACTERS. "${SMS_OPT_OUT}" is appended to the first text of each sequence automatically — leave room for it and do not type it yourself.
 
 ${framingInstruction("this booking & appointment show-up system")}
 
@@ -1341,8 +1801,7 @@ Return JSON in EXACTLY this shape:
   "subheadline": "...",
   "whatToExpect": ["..."],
   "threeStepBreakdown": [{"step": "Step 1: ...", "description": "..."}],
-  "appointmentPositioning": "how the consultation/appointment is positioned as valuable and low-risk",
-  "microSocialProof": ["short, believable social proof lines"],
+  "appointmentPositioning": "how the appointment is positioned as worth turning up to and low-pressure",
   "confirmationEmail": {"subject": "...", "body": "..."},
   "reminderEmail24h": {"subject": "...", "body": "..."},
   "dayOfReminderSms": "the day-of reminder SMS text",
@@ -1354,12 +1813,27 @@ Return JSON in EXACTLY this shape:
   "implementation": ["step-by-step implementation instructions"]
 }
 
-Provide 3 steps in threeStepBreakdown and 4-6 whatToExpect bullets.`;
-  const file = await generateJson<BookingSystemFile>(prompt, undefined, { label: "file5" });
+Provide 3 steps in threeStepBreakdown and 4-6 whatToExpect bullets. Do not emit a microSocialProof key — proof is not written here.`;
+  const file = scrubClientCopy(
+    await generateJson<BookingSystemFile>(prompt, undefined, { label: "file5" }),
+    ctx
+  );
   // Stamped destination. D3's rule is that no asset reaches the operator without
   // naming the box it goes in, and this group is four messages across two
   // channels — the one most likely to be pasted into the wrong step.
   file.where = BOOKING_ASSETS_WHERE;
+  // THE PROOF SLOT SHIPS EMPTY. "short, believable social proof lines" was an
+  // instruction to fabricate, and it read as one: the model has no customer to
+  // quote, so it wrote plausible ones. The field stays on the type because saved
+  // packs carry it; it is never populated again. Nothing turns the empty slot
+  // into a "needs from client" item yet — the renderer simply omits it.
+  file.microSocialProof = [];
+  // The opt-out opens each of the two text sequences this system runs — the
+  // reminder that lands before the appointment, and the recovery pair after a
+  // no-show. Appended, not asked for: a compliance line the model drops one run
+  // in ten is a line that is not there.
+  file.dayOfReminderSms = withOptOut(file.dayOfReminderSms ?? "");
+  file.noShowRecoverySms1 = withOptOut(file.noShowRecoverySms1 ?? "");
   return file;
 }
 
@@ -1664,7 +2138,7 @@ async function generateIntelligence(ctx: GenerationContext): Promise<GrowthIntel
 
 ${contextHeader(ctx)}
 
-TASK: Produce the GROWTH LEAK INTELLIGENCE layer — the diagnostic core of the report that diagnoses exactly where THIS business loses the enquiries it ALREADY GETS on the way to becoming customers. CONVERSION ONLY (Law 2): never diagnose how to get more traffic/leads.
+TASK: Produce the GROWTH LEAK INTELLIGENCE layer — the diagnostic core of the report that diagnoses exactly where THIS business loses the inquiries it ALREADY GETS on the way to becoming customers. CONVERSION ONLY (Law 2): never diagnose how to get more traffic/leads.
 
 ${gradeVoiceBlock()}
 
@@ -1854,9 +2328,9 @@ THE TWO PRICES BUY DIFFERENT THINGS, AND MIXING THEM UP IN WRITING COSTS REAL MO
 WE DO NOT BUILD WEBSITES. No page structure, no redesign, no rebuild, no hosting, no launch of anything except the booking page inside their GoHighLevel sub-account. Findings about their existing site are advice for whoever looks after it, and that advice lives in another part of this pack.
 
 Part A — the 6-stage conversion path, in this EXACT order:
-1. Capture — turn the enquiries they already get into captured leads (form, click-to-call, chat, social message).
+1. Capture — turn the inquiries they already get into captured leads (form, click-to-call, chat, social message).
 2. Qualify (${PRODUCT_NAME}) — ${PRODUCT_NAME} scores and routes every lead automatically. THIS STAGE IS THE MONTHLY SERVICE, NOT THE ONE-TIME BUILD: it runs every day and is tuned every month, so set isRetainer=true and say plainly in whatWeDeploy that it is included in the monthly, not something switched on once and left.
-3. Speed-to-Lead / Instant Response — every new enquiry gets a first touch inside about a minute.
+3. Speed-to-Lead / Instant Response — every new inquiry gets a first touch inside about a minute.
 4. Nurture — leads who did not book keep hearing from you for 60 days.
 5. Book — a real time on a real calendar, confirmed and reminded.
 6. Show-Up & No-Show Recovery — reminders, and recovery when somebody does not turn up.
@@ -2013,10 +2487,18 @@ ${contextHeader(ctx)}
 
 TASK: Produce net-new customer-facing assets that SUPPORT the acquisition infrastructure for THIS business. These are not standalone — they plug into the systems. Human language, no spam, no "last chance" / "still interested" tactics.
 
+${mergeFieldBlock()}
+
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
+
+"${SMS_OPT_OUT}" is appended to the review request automatically — leave room for it, keep the message inside ${SMS_SEGMENT_LIMIT} characters, and do not type the opt-out yourself.
+
 LAW 2 — FORBIDDEN: do NOT produce a "Review Generation" section, a review strategy, a set of review-request emails, or staff scripts. The ONLY permitted review touch is ONE review-request message that fires AUTOMATICALLY after a completed job.
 
 1. POST-JOB REVIEW REQUEST: exactly ONE short, warm SMS-length message that goes out automatically once a job/appointment is completed. Specific to this business type. Not a campaign — a single automated send.
-2. THANK-YOU ASSETS — AFTER A BOOKING IS CONFIRMED, NOT AFTER A FORM IS SENT. This is the distinction that keeps the pack from carrying two competing thank-you pages: the message somebody sees the moment they submit an enquiry is written elsewhere in this pack, against the lead-capture form. Yours is the next stage — they have a time in the diary. So: the thank-you page copy they land on after booking, the immediate next-step message, and a short post-booking / post-job sequence. Assume the appointment exists; do not restate what happens to an enquiry.
+2. THANK-YOU ASSETS — AFTER A BOOKING IS CONFIRMED, NOT AFTER A FORM IS SENT. This is the distinction that keeps the pack from carrying two competing thank-you pages: the message somebody sees the moment they submit an inquiry is written elsewhere in this pack, against the lead-capture form. Yours is the next stage — they have a time in the diary. So: the thank-you page copy they land on after booking, the immediate next-step message, and a short post-booking / post-job sequence. Assume the appointment exists; do not restate what happens to an inquiry.
 
 Return JSON in EXACTLY this shape:
 {
@@ -2031,10 +2513,17 @@ Return JSON in EXACTLY this shape:
 }
 
 Provide exactly ONE postJobRequest message and 2-4 postPurchaseSequence messages.`;
-  const out = await generateJson<SupportingAssets>(prompt, undefined, { label: "supportingAssets" });
+  const out = scrubClientCopy(
+    await generateJson<SupportingAssets>(prompt, undefined, { label: "supportingAssets" }),
+    ctx
+  );
   return {
     ...out,
-    reviewAssets: { ...out.reviewAssets, where: REVIEW_REQUEST_WHERE },
+    reviewAssets: {
+      ...out.reviewAssets,
+      postJobRequest: withOptOut(out.reviewAssets?.postJobRequest ?? ""),
+      where: REVIEW_REQUEST_WHERE,
+    },
     thankYouAssets: { ...out.thankYouAssets, where: THANK_YOU_WHERE },
   };
 }
@@ -2054,7 +2543,7 @@ Provide exactly ONE postJobRequest message and 2-4 postPurchaseSequence messages
 // "Done" is measurable conversion outcomes, never activities.
 
 /** Which week of the build each workflow lands in. Week one is the spine —
- *  nothing else is worth switching on until an enquiry gets answered, a missed
+ *  nothing else is worth switching on until an inquiry gets answered, a missed
  *  call gets a text back and a booking confirms itself. An id not listed defaults
  *  to week two, so a workflow added to the catalogue still lands somewhere. */
 const WORKFLOW_BUILD_WEEK: Record<string, "week_one" | "week_two"> = {
@@ -2152,7 +2641,9 @@ function buildWeeks(resolutions: ResolvedWorkflow[]): { one: string[]; two: stri
 // REPOINTED rather than deleted:
 //
 //   booking page      ← headlines, subheads, buttons, the reassurance line under
-//                       the button, the proof line, the section order, the FAQ
+//                       the button, the section order, the FAQ. NOT the proof
+//                       line: that slot ships empty and is asked of the client,
+//                       because there is no proof here to write it from.
 //   lead-capture form ← the form's own words and everything after the submit,
 //                       including the emergency route out of the automation
 //   LeadGate          ← the words wrapped around the qualifying questions
@@ -2165,7 +2656,7 @@ function buildWeeks(resolutions: ResolvedWorkflow[]): { one: string[]; two: stri
 // belongs in — that guess is how a reassurance line ends up as a headline.
 //
 // NEVER "a paid-traffic destination". That framing implies an advertising
-// programme we neither run nor sell, and it would turn the booking page into the
+// program we neither run nor sell, and it would turn the booking page into the
 // end of a funnel we do not own.
 
 // Law 13 scopes for the surfaces call: the site ADVISORY prose only. Everything
@@ -2173,6 +2664,17 @@ function buildWeeks(resolutions: ResolvedWorkflow[]): { one: string[]; two: stri
 // advisory notes make claims about a business we have only looked at from the
 // outside, and "your form goes nowhere" is exactly the invisible-internal
 // assertion the lint exists to catch.
+//
+// THIS RUNS INSIDE generateJson, SO IT SEES THE MODEL'S WORDS BEFORE THE SWEEP,
+// AND THAT IS THE RIGHT WAY ROUND. The lint judges what the model claimed and its
+// remedy is to make the model say it again; a sentence scrubClientCopy() deleted
+// is not the model's to rewrite, and asking it to defend one would be asking
+// about a string that never reaches the page. The order is also sound in the
+// direction that matters: the sweep only deletes and tokenises, never adds a
+// claim, so everything it emits was already linted. The cost is a lint firing on
+// a sentence the sweep later removes — one wasted re-ask, against a fabrication
+// that would otherwise ship unlinted. That trade only holds while the sweep stays
+// subtractive; the day it starts writing sentences, this has to move.
 function surfaceAssertions(s: ConversionSurfaces): AssertionScope[] {
   const advisory = s.siteAdvisory;
   if (!advisory) return [];
@@ -2187,6 +2689,22 @@ function surfaceAssertions(s: ConversionSurfaces): AssertionScope[] {
 async function generateConversionSurfaces(ctx: GenerationContext): Promise<ConversionSurfaces> {
   const psi = ctx.intel.performance;
   const hasPsi = Boolean(psi?.available);
+  // ── DO NOT ASK FOR WHAT CANNOT BE GROUNDED ────────────────────────────────
+  // Site advisory is the one section built on looking at a page. When the page
+  // was never fetched, asking for it anyway produced four confident sentences
+  // about a site nobody opened — "there is no direct link to book on the
+  // homepage" for a business with no homepage on record.
+  //
+  // The renderer already refuses to print it and the validator already refuses
+  // to save it, but both are downstream: the model still wrote it, the pack still
+  // carried it, and generation dead-ended on a check the operator could not
+  // clear by regenerating. Not requesting it is the only fix that closes the
+  // loop — a section that is never written cannot be caught, hedged, or leak.
+  //
+  // Same AND the renderer and the validator use: a scrape gives us the markup,
+  // PageSpeed gives us the numbers, and the section makes claims that need both.
+  const siteMeasured = Boolean(ctx.intel.website?.hasWebsite && psi?.available);
+
   const perfLine = hasPsi
     ? `Real PageSpeed data IS available: mobile score ${psi?.mobile?.performanceScore ?? "n/a"}, mobile LCP ${psi?.mobile?.metrics.lcpSeconds ?? "n/a"}s, mobile CLS ${psi?.mobile?.metrics.cls ?? "n/a"}. You may state what those numbers mean for somebody trying to book on a phone. You may NOT prescribe the fix — no image, CSS, hosting or speed work. It is flagged, never fixed.`
     : `No live PageSpeed data was captured. Say so plainly rather than guessing at their site's speed.`;
@@ -2197,9 +2715,15 @@ ${contextHeader(ctx)}
 
 TASK: Write the CONVERSION COPY for the surfaces we actually build and run for THIS business, plus written advice about their own website. Every string you produce goes in a specific box, and the section it lands in NAMES that box — so write each one for its destination, not as generic page copy.
 
+${mergeFieldBlock()}
+
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
+
 THE FIVE DESTINATIONS:
 
-1. THE BOOKING PAGE — ${SURFACE_WHERE.bookingPage}. This is the ONE page we build and brand. It exists to turn an enquiry that already exists into a booked, qualified visit. It is NOT an advertising destination and nothing about it may imply that visits to it are being bought or sent. Write: three headline options and three subheadline options (the owner picks one at build time, so all three must stand on their own), the primary and secondary buttons, the short reassurance line that sits directly UNDER the button, one credible above-the-fold proof line, the FAQ block, and the page section by section IN ORDER — each section with the finished words that go in it, not a description of what it should say. Sections normally run: hero, the problem in the customer's own terms, how the work actually goes, proof, the booking step, and a closing ask. One of the two buttons may be a tap-to-call on the tracked number if that is how this trade's customers prefer to start.
+1. THE BOOKING PAGE — ${SURFACE_WHERE.bookingPage}. This is the ONE page we build and brand. It exists to turn an inquiry that already exists into a booked, qualified visit. It is NOT an advertising destination and nothing about it may imply that visits to it are being bought or sent. Write: three headline options and three subheadline options (the owner picks one at build time, so all three must stand on their own), the primary and secondary buttons, the short reassurance line that sits directly UNDER the button, the FAQ block, and the page section by section IN ORDER — each section with the finished words that go in it, not a description of what it should say. Sections normally run: hero, the problem in the customer's own terms, how the work actually goes, the booking step, and a closing ask. One of the two buttons may be a tap-to-call on the tracked number if that is how this business's customers prefer to start.
 
 2. THE LEAD-CAPTURE FORM — ${SURFACE_WHERE.leadCaptureForm}. The form's own headline and intro, the submit button, and what the person sees the moment they send it: what happens next, by when, and the way out if it is urgent. THE EMERGENCY ROUTE IS NOT OPTIONAL — somebody with a burst pipe or a dead furnace must be told how to reach a human immediately instead of waiting on an automated sequence.
 
@@ -2207,25 +2731,27 @@ THE FIVE DESTINATIONS:
 
 4. THE WEBCHAT — ${SURFACE_WHERE.webchat}. The text on the chat bubble itself, the opening greeting, the way it asks for a name and number so the conversation can carry on as a text, and the away-message for somebody who opens it at 9pm. The away-message says when they will hear back and offers the booking link; it never promises a reply that will not happen.
 
-5. ADVICE ABOUT THEIR OWN WEBSITE — ${SURFACE_WHERE.siteAdvisory}. ADVISORY ONLY. We do not build, rebuild, redesign, host or maintain websites, and nothing here may read as work we are doing. Write a short summary and four to six specific notes: what we saw, what we would change, how much it matters. Say what is measurably true (a booking path that takes four clicks to find, a phone number that is not tappable on a phone, a hero that does not say what they do or where). ${perfLine} The single most valuable note is usually the cheapest one: point the buttons they already have at the booking page and leave the rest of the site alone.
+${siteMeasured ? `5. ADVICE ABOUT THEIR OWN WEBSITE — ${SURFACE_WHERE.siteAdvisory}. ADVISORY ONLY. We do not build, rebuild, redesign, host or maintain websites, and nothing here may read as work we are doing. Write a short summary and four to six specific notes: what we saw, what we would change, how much it matters. Say what is measurably true (a booking path that takes four clicks to find, a phone number that is not tappable on a phone, a hero that does not say what they do or where). ${perfLine} The single most valuable note is usually the cheapest one: point the buttons they already have at the booking page and leave the rest of the site alone.` : `5. THEIR OWN WEBSITE — NOT THIS TIME. We did not fetch their site and have no page-speed run for it, so there is nothing measured to advise on. Do NOT emit a siteAdvisory key at all, and do not compensate by writing about their website anywhere else. An observation about a page nobody opened is a fabrication however carefully it is hedged.
+
+NOTHING IN THIS RESPONSE MAY OPEN WITH AN OBSERVATION. The phrases "what we saw", "we noticed" and "currently, there is" are BANNED in every field, not just the website section — they assert that somebody looked, and on this business nobody did. Write what the copy needs to say without claiming to have seen anything. This is checked and a violation fails the whole generation.`}
 
 RULES THAT APPLY TO EVERY STRING HERE:
-- NEVER INVENT PROOF. No testimonial, no customer name, no quote, no result that is not in the data above. Where proof belongs and none exists, write a labelled placeholder — "[Insert verified customer review]", "[Insert the number of years in business]" — and leave it for the owner to fill in. A recognisable fake name in a client's own document is the fastest way to lose them.
+- NEVER INVENT PROOF, AND NEVER LEAVE A NOTE WHERE PROOF WOULD GO. No testimonial, no customer name, no quote, no rating claim, no past result that is not in the data above. Where proof belongs and none exists, write the copy WITHOUT it and leave nothing in its place. A bracketed instruction is not a safe placeholder — it ships to the client exactly as typed, and it is the specific defect that killed the proposal generator.
 - NO INVENTED URGENCY. No countdown, no "limited spots", no deadline that does not exist. If there is a real seasonal reason to act, say it plainly.
 - NEVER PROMISE A RESPONSE TIME THE AUTOMATION DOES NOT KEEP. Any timing you write on a page or a confirmation has to match what the workflows actually do.
-- PLAIN OWNER LANGUAGE: calls, jobs, quotes, booked work. Not "conversions", not "funnels", not "ROI".
-- Specific to this trade and this city. A headline that would work for any business in any town is a headline nobody reads.
+- NEVER WRITE A CLOCK TIME OR A DOLLAR FIGURE. Their opening hour is {{custom_values.opening_time}} and any deposit is {{custom_values.deposit_amount}}. A typed hour goes stale the first time they change it and a typed price was never quoted by anyone.
+- PLAIN OWNER LANGUAGE: calls, booked work, the words from the industry block above. Not "conversions", not "funnels", not "ROI".
+- Specific to this business and this city. A headline that would work for any business in any town is a headline nobody reads.
 
 Return JSON in EXACTLY this shape:
 {
   "bookingPage": {
     "headlineOptions": ["3 sharp, intent-matched headlines — each one must work on its own"],
     "subheadlineOptions": ["3 subheadlines"],
-    "primaryButton": "the button text, e.g. 'Book a service visit'",
-    "secondaryButton": "the alternative route, e.g. 'Request a written quote'",
-    "reassuranceLine": "the short line directly under the button — real proof or a labelled placeholder",
-    "proofLine": "one credible above-the-fold proof line, or a labelled placeholder",
-    "sectionOrder": [{"name": "Hero", "purpose": "what this section is for", "copy": "the finished words for this section — paste-ready, no brief, no placeholder except a labelled [Insert verified …] one"}],
+    "primaryButton": "the button text — the words this industry's customers would use to start",
+    "secondaryButton": "the alternative route, in the same words",
+    "reassuranceLine": "the short line directly under the button — what happens next, never a proof claim",
+    "sectionOrder": [{"name": "Hero", "purpose": "what this section is for", "copy": "the finished words for this section — paste-ready, no brief, no placeholder of any kind"}],
     "faq": [{"question": "a real objection somebody has before booking", "answer": "..."}]
   },
   "leadCaptureForm": {
@@ -2239,7 +2765,7 @@ Return JSON in EXACTLY this shape:
   "leadGate": {
     "openingLine": "why we are asking these questions, in one line",
     "questionIntros": ["2-4 short framing lines"],
-    "priorityAcknowledgement": "what an urgent, high-value enquiry sees on screen",
+    "priorityAcknowledgement": "what an urgent, high-value inquiry sees on screen",
     "standardAcknowledgement": "what everybody else sees"
   },
   "webchat": {
@@ -2248,15 +2774,51 @@ Return JSON in EXACTLY this shape:
     "detailsAsk": "how it asks for a name and number",
     "awayMessage": "what somebody opening it out of hours sees"
   },
+${siteMeasured ? `,
   "siteAdvisory": {
     "summary": "3-5 sentences of advisory read on their existing site as a way of getting booked — measured facts, no prescription of design or speed work",
     "notes": [{"area": "e.g. Buttons", "whatWeSaw": "...", "recommendation": "...", "priority": "critical|high|medium|low"}]
-  }
+  }` : ""}
 }
 
-Provide EXACTLY 3 headlineOptions and 3 subheadlineOptions, 5-8 booking-page sectionOrder entries, 5-8 FAQ items, 2-4 questionIntros, and 4-6 siteAdvisory notes. Do not emit any other keys — the destination labels and the standing rules are added afterwards and must not be written by you.`;
+Provide EXACTLY 3 headlineOptions and 3 subheadlineOptions, 5-8 booking-page sectionOrder entries, 4-6 FAQ items, 2-4 questionIntros${siteMeasured ? ", and 4-6 siteAdvisory notes" : ""}. Do not emit a proofLine and do not emit any other keys — the destination labels and the standing rules are added afterwards and must not be written by you.`;
 
-  return stampSurfaceDestinations(await generateJson<ConversionSurfaces>(prompt, surfaceAssertions, { label: "conversionSurfaces" }));
+  const out = scrubClientCopy(
+    await generateJson<ConversionSurfaces>(prompt, surfaceAssertions, { label: "conversionSurfaces" }),
+    ctx
+  );
+  return stampSurfaceDestinations(gateProofAndRiskAnswers(out, ctx));
+}
+
+/**
+ * The two things on this surface the generator is not permitted to supply.
+ *
+ * PROOF ships empty, always. The old prompt asked for "one credible
+ * above-the-fold proof line" and there is no credible one to write — we have no
+ * customer to quote and no result to cite — so the model produced "5-star rating
+ * from happy clients" and the standing rule three sections away forbidding
+ * exactly that. An empty slot is a question for the client; a plausible line is
+ * a claim they publish.
+ *
+ * A RISK ANSWER, on a regulated medical surface, is handed back rather than
+ * written. "While most clients experience minimal side effects…" is medical
+ * guidance authored by a model for a clinic to publish under its own name. The
+ * answer has to come from whoever is accountable for it.
+ *
+ * The question survives because scrubClientCopy() spares it by name — see
+ * isGatedRiskQuestion(). It has to: this gate runs AFTER the sweep, and "are
+ * there side effects?" matches the medical claim rule, so without that exemption
+ * the sweep emptied the question first and then this gate found nothing left to
+ * recognise. The row shipped as two empty strings.
+ */
+function gateProofAndRiskAnswers(s: ConversionSurfaces, ctx: GenerationContext): ConversionSurfaces {
+  const faq =
+    regulatedTier(ctx) === "medical"
+      ? (s.bookingPage?.faq ?? []).map((f) =>
+          RISK_QUESTION_RE.test(f.question ?? "") ? { ...f, answer: CLINIC_ANSWERS_NOTE } : f
+        )
+      : s.bookingPage?.faq ?? [];
+  return { ...s, bookingPage: { ...s.bookingPage, proofLine: "", faq } };
 }
 
 /**
@@ -2330,7 +2892,11 @@ TASK: Write the actual messages for the workflows we install in THIS business's 
 
 ${mergeFieldBlock()}
 
-THE WORKFLOWS THAT NEED COPY. Each one already has a name, a trigger and a description of what the customer sees. Match your copy to that description — do not redesign the workflow, do not rename it, do not invent a step it does not have. Those descriptions use square-bracket shorthand like [Business] and [booking link] because they were written for a human reader; YOUR copy uses the real merge field in its place.
+${industryLanguageBlock(ctx)}
+
+${regulatedCopyBlock(ctx)}
+
+THE WORKFLOWS THAT NEED COPY. Each one already has a name, a trigger and a description of what the customer sees. Match your copy to that description — do not redesign the workflow, do not rename it, do not invent a step it does not have. Those descriptions were written for a human reader and carry square-bracket shorthand: NEVER reproduce it. Every one of those brackets becomes the merge field that holds the real value, or plain words if no field fits.
 
 ${workflowBlock(needed, true)}
 
@@ -2338,11 +2904,14 @@ RULES:
 - Write the way the owner talks: short sentences, no marketing voice, no exclamation marks stacked up, no emoji. A customer should not be able to tell it was automated.
 - ONE next step per message, and it is almost always the booking link.
 - No invented discount, no invented deadline, no "last chance", no claim about how busy they are that nobody measured.
-- Texts are short enough to read on a lock screen. Emails are complete but not long.
-- The OWNER notification is internal — it goes to the owner's phone, never to the customer. Write it as facts he can act on in five seconds: who, what they want, why it scored urgent, and the number to tap.
+- Every text fits in ${SMS_SEGMENT_LIMIT} characters, merge fields and opt-out included. Past that it splits into two segments, which costs double and drops more often. Emails are complete but not long.
+- "${SMS_OPT_OUT}" is appended automatically to the first text of every workflow, and to every text of the reactivation campaign. Leave room for it; never type it yourself.
+- NEVER WRITE A CLOCK TIME, A DOLLAR FIGURE, OR ANY OTHER VALUE THIS BUSINESS COULD CHANGE. Their opening hour is {{custom_values.opening_time}}, a deposit is {{custom_values.deposit_amount}}. "We open again at 9:00 AM" is wrong the day they open at eight, and a deposit figure nobody quoted is a price we invented on their behalf.
+- The OWNER notification is written for you already and is stamped in after generation — do not write one.
 - REVIEW REPLIES are posted in public under the review. The good one is specific and warm and never asks for anything. The middling one thanks them and asks what would have made it better. The bad one never argues, never mentions money or a refund, never restates the customer's complaint back at them, and offers to take it to a phone call. All three are signed as the business.
 - The REACTIVATION campaign goes to people who have not heard from this business in a long time. Lead with who it is, why they are hearing from them, and a one-tap way to hear nothing further.
-- The PAYMENT message is sent to somebody who has already said yes. It confirms what they are paying for and what happens once it clears. It never chases, never pressures, and never implies the slot is at risk unless holding the slot really does depend on the deposit.
+- The PAYMENT message is sent to somebody who has already said yes. It confirms what they are paying for and what happens once it clears, and any amount in it is {{custom_values.deposit_amount}} — never a figure you chose. It never chases, never pressures, and never implies the slot is at risk unless holding the slot really does depend on the deposit.
+- NO PROOF YOU WERE NOT GIVEN, anywhere: no quoted review, no customer name, no described past result, no rating claim, and no bracketed note standing in for one.
 - Never write a timing promise the automation does not keep.
 
 Return JSON in EXACTLY this shape:
@@ -2359,7 +2928,10 @@ Return JSON in EXACTLY this shape:
 
 Provide one asset per workflow listed above, using its exact id, with the number of messages that workflow's "write:" line asks for. No other keys.`;
 
-  const out = await generateJson<{ assets: WorkflowCopyAsset[] }>(prompt, undefined, { label: "workflowCopy" });
+  const out = scrubClientCopy(
+    await generateJson<{ assets: WorkflowCopyAsset[] }>(prompt, undefined, { label: "workflowCopy" }),
+    ctx
+  );
   return { assets: stampWorkflowCopy(needed, out.assets ?? []), coverage };
 }
 
@@ -2374,6 +2946,11 @@ Provide one asset per workflow listed above, using its exact id, with the number
  * deliberate: an empty slot is a gap the operator can see and regenerate, and a
  * dropped asset is one he finds out about from the client.
  *
+ * The opt-out is APPENDED here rather than requested in the prompt, for the same
+ * reason the names are stamped: on a first contact it is what A2P vetting and
+ * CASL are looking for, and a compliance line the model drops on one run in ten
+ * is a line that is not there.
+ *
  * Exported for fixture parity, like the other stampers.
  */
 export function stampWorkflowCopy(
@@ -2383,19 +2960,38 @@ export function stampWorkflowCopy(
   const byId = new Map(modelAssets.map((a) => [a.workflowId, a]));
   return needed.map((r) => {
     const w = r.workflow;
+    const bulk = BULK_CAMPAIGN_WORKFLOW_IDS.has(w.id);
+    let textSeen = false;
+    const messages =
+      w.id === OWNER_HOT_LEAD_WORKFLOW_ID
+        ? [OWNER_HOT_LEAD_MESSAGE]
+        : (byId.get(w.id)?.messages ?? []).map((m) => {
+            const isText = isTextChannel(m.channel);
+            const opensSequence = isText && (bulk || !textSeen);
+            if (isText) textSeen = true;
+            return {
+              ...m,
+              body: opensSequence ? withOptOut(m.body ?? "") : m.body,
+              // An email with no subject is a workflow step that cannot be saved.
+              subject: m.channel?.toLowerCase() === "email" ? m.subject ?? "" : m.subject,
+            };
+          });
     return {
       workflowId: w.id,
       workflowName: w.name,
       trigger: w.trigger,
       where: WORKFLOW_WHERE_OVERRIDE[w.id] ?? `${WORKFLOW_WHERE_PREFIX}${w.name}`,
-      messages: (byId.get(w.id)?.messages ?? []).map((m) => ({
-        ...m,
-        // An email with no subject is a workflow step that cannot be saved.
-        subject: m.channel?.toLowerCase() === "email" ? m.subject ?? "" : m.subject,
-      })),
+      messages,
     };
   });
 }
+
+// packCopyProblems() stood here and nothing ever called it. Every check it ran —
+// the missing SMS opt-out, the text over one segment, the square-bracket token —
+// is run at the export boundary by validatePack() in exporters/validate-pack.ts,
+// against the same pack, with a named check and a level an operator can act on.
+// A second copy of those rules in a function with no caller is a second place for
+// them to drift, and its docblock claimed a boundary it was not standing at.
 
 // ── Orchestration ────────────────────────────────────────────────────────────
 

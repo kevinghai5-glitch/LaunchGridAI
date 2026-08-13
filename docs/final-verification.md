@@ -99,11 +99,11 @@ whole mapping, printed:
 | 1 | Text 1 | 1 | Short nudge — pick the conversation back up and offer a time |
 | 2 | Email 1 | 2 | What you do and what happens next, with the booking link |
 | 3 | Text 2 | 4 | One question that is easy to answer, to restart the thread |
-| 4 | Email 2 | 7 | How the job actually runs — remove the uncertainty that stalls people |
+| 4 | Email 2 | 7 | How the work actually runs — remove the uncertainty that stalls people |
 | 5 | Text 3 | 11 | Offer to answer the one thing holding them up |
-| 6 | Email 3 | 16 | Local proof — real reviews and real work, no invented names |
+| 6 | Email 3 | 16 | The two questions worth asking anyone before booking work like this |
 | 7 | Text 4 | 23 | Timing check — is this still on the list this season? |
-| 8 | Email 4 | 30 | What drives the price, honestly, so cost stops being a mystery |
+| 8 | Email 4 | 30 | What actually moves the price up or down on work like this, named plainly |
 | 9 | Text 5 | 38 | Availability nudge, no pressure and no invented deadline |
 | 10 | Email 5 | 45 | The usual reason people wait, answered straight |
 | 11 | Text 6 | 52 | Last text — a direct, warm ask |
