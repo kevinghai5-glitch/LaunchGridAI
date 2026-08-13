@@ -27,6 +27,13 @@ import {
   voiceLint,
 } from "@/lib/leak-narrative";
 import { assertPackValid, type ValidationCheck } from "@/lib/exporters/validate-pack";
+import {
+  DELIVERABLES,
+  deliverableContext,
+  renderDeliverableHtml,
+} from "@/lib/exporters/deliverables";
+import { readComputed } from "@/lib/client-offer";
+import type { ComputedAssessment } from "@/lib/leak-calculator";
 import type { AssetPack } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +46,33 @@ export const maxDuration = 300;
  *  `verdict.report` lists EVERY check, passes included — that is right for a CLI
  *  and unusable in a toast, so it rides along in the payload while this names the
  *  laws that actually broke. Deduped: a single law can fail more than once. */
+/** The visible words of the three RENDERED documents.
+ *
+ *  THE GATE MUST JUDGE WHAT SHIPS. It used to validate the whole pack object,
+ *  which still carries sections no document renders — the generated leak
+ *  analysis chief among them. So generation refused a pack over a sentence in
+ *  `intelligence.leakAnalysis` that no client could ever read, and the dialog's
+ *  own advice ("regenerate") produced the same refusal every time: a loop with
+ *  no exit.
+ *
+ *  The laws are unchanged and still block. They are simply read against the
+ *  documents rather than the JSON around them. */
+function renderedTextFor(
+  pack: AssetPack,
+  input: { assessment: ComputedAssessment | null; workflowToggles: unknown; kickoffAt: Date | null }
+): string {
+  const ctx = deliverableContext(input);
+  return DELIVERABLES.map((d) => renderDeliverableHtml(pack, d.id, ctx))
+    .join("\n")
+    .replace(/<script[\s\S]*?<\/script>/g, " ")
+    .replace(/<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ");
+}
+
 function invalidPackMessage(fails: ValidationCheck[]): string {
   const laws = Array.from(new Set(fails.map((f) => f.law)));
   return `This pack fails ${fails.length} of its own deliverable law${
@@ -75,7 +109,11 @@ export async function POST(req: NextRequest) {
 
     const business = await prisma.business.findFirst({
       where: { id: parsed.data.businessId, userId: session.user.id, deletedAt: null },
-      include: { leakAssessment: { select: { monthlyEnquiries: true, avgJobValue: true } } },
+      // `computed` rides along so the generation gate can render the Diagnosis and
+      // judge the DOCUMENTS rather than the raw pack (see renderedTextFor).
+      include: {
+        leakAssessment: { select: { monthlyEnquiries: true, avgJobValue: true, computed: true } },
+      },
     });
 
     if (!business) {
@@ -433,7 +471,13 @@ export async function POST(req: NextRequest) {
       // allowedNumbers is the fired-leak whitelist computed above, so the
       // dollar-determinism guard runs at full strength (belt (b) — every stamped
       // integer must be a member of the set — not just belt (a)).
-      const verdict = assertPackValid(merged, leaks.allowedNumbers);
+      const verdict = assertPackValid(merged, leaks.allowedNumbers, {
+        renderedText: renderedTextFor(merged, {
+          assessment: readComputed(business.leakAssessment?.computed ?? null),
+          workflowToggles: business.workflowToggles,
+          kickoffAt: business.kickoffAt,
+        }),
+      });
       if (!verdict.ok) {
         return NextResponse.json(
           {
@@ -516,7 +560,13 @@ export async function POST(req: NextRequest) {
           // would have produced. `reason: "invalid"` is the discriminator a client
           // can branch on later to render `checks` as a list; extra keys are
           // ignored by today's parsers, so the contract is widened, not broken.
-          const verdict = assertPackValid(assetPack, leaks.allowedNumbers);
+          const verdict = assertPackValid(assetPack, leaks.allowedNumbers, {
+            renderedText: renderedTextFor(assetPack, {
+              assessment: readComputed(business.leakAssessment?.computed ?? null),
+              workflowToggles: business.workflowToggles,
+              kickoffAt: business.kickoffAt,
+            }),
+          });
           if (!verdict.ok) {
             console.error(
               `[generate/assets] pack BLOCKED for business ${business.id} (${business.name}):\n${verdict.report}`

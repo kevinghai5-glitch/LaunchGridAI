@@ -372,9 +372,21 @@ const clone = (p: AssetPack): AssetPack => JSON.parse(JSON.stringify(p)) as Asse
 // an outcome, so "guaranteed" is a fatal claim. Reused on purpose — the override
 // has to be exercised against a real law failure, not a synthetic one.
 const HYPE_SENTENCE = "Bookings are guaranteed within 30 days.";
+// THE CORRUPTION MUST LAND ON RENDERED COPY (2026-08-13).
+//
+// Both corruptions used to go into intelligence.executiveSummary, which D1
+// rendered. D1 is gone — the Diagnosis renders the saved calculator — and the
+// text laws now judge the RENDERED documents rather than the whole pack blob, so
+// prose buried in an unrendered section is invisible to them. That is correct
+// behaviour (a law about client-facing copy reads the client-facing copy), and
+// it made this fixture stop corrupting anything.
+//
+// surfaces.bookingPage.reassuranceLine is client copy that DOES render, in the
+// Asset Pack — verify-phase3 G1/G2 prove that section reaches a document. Break
+// that and the gate has something real to catch.
 const brokenPack = clone(cleanPack);
-if (brokenPack.intelligence?.executiveSummary)
-  brokenPack.intelligence.executiveSummary.narrative = `${HYPE_SENTENCE} ${brokenPack.intelligence.executiveSummary.narrative}`;
+if (brokenPack.surfaces?.bookingPage)
+  brokenPack.surfaces.bookingPage.reassuranceLine = `${HYPE_SENTENCE} ${brokenPack.surfaces.bookingPage.reassuranceLine}`;
 
 const brokenBoundary = validateRenderedDeliverables(brokenPack);
 const FATALS: ValidationCheck[] = brokenBoundary.fatals;
@@ -387,7 +399,8 @@ const FATALS: ValidationCheck[] = brokenBoundary.fatals;
 // through failure B.
 const LEADGEN_SENTENCE = "We will run paid ads to drive traffic to the new page.";
 const otherBrokenPack = clone(cleanPack);
-otherBrokenPack.intelligence?.executiveSummary?.biggestOpportunities?.push(LEADGEN_SENTENCE);
+if (otherBrokenPack.surfaces?.bookingPage)
+  otherBrokenPack.surfaces.bookingPage.proofLine = `${LEADGEN_SENTENCE} ${otherBrokenPack.surfaces.bookingPage.proofLine}`;
 const OTHER_FATALS: ValidationCheck[] = validateRenderedDeliverables(otherBrokenPack).fatals;
 
 const REAL_REASON =

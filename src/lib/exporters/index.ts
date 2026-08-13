@@ -113,7 +113,21 @@ export function validateRenderedDeliverables(
       renderViolations.push(`${id} HTML contains a fabricated discount amount.`);
   }
 
-  const verdict = assertPackValid(pack);
+  // THE LAWS JUDGE WHAT SHIPS. The visible words of all three rendered
+  // documents, handed to the validator so a text law reads the client-facing
+  // copy rather than the whole pack blob — which still carries sections no
+  // document renders (the old blueprint, the leak analysis, the retired
+  // roadmap) and was blocking exports over prose nobody could ever see.
+  const renderedText = Object.values(html)
+    .join("\n")
+    .replace(/<script[\s\S]*?<\/script>/g, " ")
+    .replace(/<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ");
+  const verdict = assertPackValid(pack, undefined, { renderedText });
   const violations = [...renderViolations];
   if (!verdict.ok)
     violations.push(`Pack validator: ${verdict.fails.length} failure(s).\n${verdict.report}`);
@@ -272,14 +286,20 @@ export async function buildAssetZipChecked(
   // stamp (or the clearing of a stale one) rides on the returned pack.
   const shipped = withGovernance(pack, governance);
 
-  // THE CLIENT BUNDLE IS THE TWO CLIENT DOCUMENTS. The Asset Pack is the copy
-  // that runs the workflows; before the system exists it is a pile of text the
-  // client has no use for, so it goes out at go-live instead of at signing. It
-  // was still rendered and validated above — excluded from the envelope, not
-  // exempted from the laws.
+  // ALL THREE GO IN THE ZIP. The ZIP is the OPERATOR's download, not the
+  // client's envelope — he unzips it and decides what to send.
+  //
+  // This briefly bundled only the two client documents, which got the audience
+  // rule backwards: the Asset Pack is meant to go out at go-live, and leaving it
+  // out of his download is precisely what makes that impossible. "Internal"
+  // describes WHEN it is sent, not whether he receives it.
+  //
+  // So it ships with an INTERNAL- filename prefix instead. It sorts away from
+  // the client files and cannot be forwarded by accident from a folder listing.
   const zip = new JSZip();
-  for (const d of CLIENT_DELIVERABLES) {
-    zip.file(d.filename, html[d.id]);
+  for (const d of DELIVERABLES) {
+    const name = d.audience === "internal" ? `INTERNAL-${d.filename}` : d.filename;
+    zip.file(name, html[d.id]);
   }
   const buffer = await zip.generateAsync({
     type: "nodebuffer",

@@ -236,8 +236,19 @@ check("A1 · the committed golden sample passes the enforcing entry point (ok: t
 // is a fatal claim, not a style warning.
 const hypePack = clone(cleanPack);
 const HYPE_SENTENCE = "Bookings are guaranteed within 30 days.";
-if (hypePack.intelligence?.executiveSummary)
-  hypePack.intelligence.executiveSummary.narrative = `${HYPE_SENTENCE} ${hypePack.intelligence.executiveSummary.narrative}`;
+// THE CORRUPTION HAS TO LAND ON RENDERED COPY (2026-08-13). It used to go into
+// intelligence.executiveSummary, which D1 rendered — and D1 is gone. The text
+// laws now judge the RENDERED documents rather than the whole pack blob, so
+// prose in an unrendered section is invisible to them. Correct behaviour, and it
+// silently made this fixture stop corrupting anything: A2 still passed (it calls
+// assertPackValid with no rendered text, which scans the blob) while A5, which
+// goes through the real ZIP path, stopped blocking.
+//
+// surfaces.bookingPage.reassuranceLine is client copy that DOES reach a document
+// (the Asset Pack — verify-phase3 G1/G2 prove that section renders), so the gate
+// has something real to catch at both boundaries.
+if (hypePack.surfaces?.bookingPage)
+  hypePack.surfaces.bookingPage.reassuranceLine = `${HYPE_SENTENCE} ${hypePack.surfaces.bookingPage.reassuranceLine}`;
 const hypeVerdict = assertPackValid(hypePack);
 
 check("A2 · an injected hype promise is a FATAL block (ok: false, law named)", () => {

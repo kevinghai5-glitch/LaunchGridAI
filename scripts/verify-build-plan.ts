@@ -263,8 +263,14 @@ if (!goldenPack) {
   check("D4 the two client documents are the Diagnosis and the Build Plan",
     CLIENT_DELIVERABLES.map((d) => d.id).join(",") === "diagnosis,build-plan");
   const idx = read("src/lib/exporters/index.ts");
-  check("D5 the ZIP bundles only the client set", /for \(const d of CLIENT_DELIVERABLES\)/.test(idx));
-  check("D6 …but all three are still rendered and validated",
+  // ALL THREE ship in the ZIP. The ZIP is the operator's download; he decides
+  // what to forward. Bundling only the two meant the Asset Pack — which is meant
+  // to go out at go-live — never reached him at all.
+  check("D5 the ZIP bundles every document", /for \(const d of DELIVERABLES\) \{\n\s*const name =/.test(idx),
+    "the operator cannot send at go-live what he was never given");
+  check("D6 the internal one is prefixed so it cannot be forwarded by accident",
+    /INTERNAL-\$\{d\.filename\}/.test(idx));
+  check("D7 all three are rendered and validated",
     /for \(const d of DELIVERABLES\) html\[d\.id\] = renderDeliverableHtml/.test(idx),
     "the Asset Pack reaches the client at go-live, so it is held to the same laws");
 }

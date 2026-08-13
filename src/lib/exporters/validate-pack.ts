@@ -696,9 +696,23 @@ function unlabelledPercentSentences(
 
 // ── the validator ─────────────────────────────────────────────────────────────
 
+export interface ValidateOptions {
+  /** The visible text of the RENDERED documents. When supplied, every text-based
+   *  law is judged against this instead of the raw pack JSON.
+   *
+   *  WHY THIS EXISTS. The pack carries sections no document renders any more —
+   *  the generated blueprint, the leak analysis, the retired roadmap. Scanning
+   *  the whole blob meant a phrase buried in one of them blocked an export even
+   *  though no client could ever see it: a real pack was held back over "ad
+   *  spend" in prose that reaches nobody. A law about client-facing copy has to
+   *  read the client-facing copy. */
+  renderedText?: string;
+}
+
 export function validatePack(
   pack: AssetPack,
-  allowedNumbers?: number[]
+  allowedNumbers?: number[],
+  opts?: ValidateOptions
 ): ValidationResult {
   const checks: LawCheck[] = [];
   const add = (law: string, level: CheckLevel, message: string) =>
@@ -715,7 +729,10 @@ export function validatePack(
   // and un-overridable at the same time. Strip it before ANY string walk.
   const { governance: _governance, ...scannable } = pack;
   const packText = collectStrings(scannable);
-  const allText = packText.join("\n");
+  // The text every LAW is judged against. The rendered documents when the caller
+  // has them (the export path always does); the raw pack otherwise, so the
+  // offline tools that validate a pack with no renderer keep working.
+  const allText = opts?.renderedText ?? packText.join("\n");
 
   // ── Structure (is this a v2 pack at all?) ────────────────────────────────────
   if (!intel) add("Structure", "fail", "Missing `intelligence` — this is a pre-v2 (stale) pack. Regenerate.");
@@ -757,6 +774,12 @@ export function validatePack(
   // Order matters as much as membership: a board whose columns are in the wrong
   // order is a board nobody can read left-to-right, and Lost must be last because
   // the 60-day nurture ends by moving the deal there.
+  // RETIRED SUBJECT (2026-08-13). D2 rendered pack.infrastructure.crmPipeline;
+  // D2 no longer exists. The Build Plan renders PIPELINE straight from
+  // workflow-catalogue.ts, so the six columns are a constant now and cannot
+  // drift — there is nothing left for this to catch on a document. It still runs
+  // for a pack that HAS the field, because a stale blueprint sitting in the JSON
+  // is worth knowing about, but it can no longer BLOCK: a client cannot see it.
   const crmStages = infra?.crmPipeline?.stages ?? [];
   if (infra && crmStages.length) {
     const actual = crmStages.map((s) => (s.stage ?? "").trim());
@@ -767,7 +790,7 @@ export function validatePack(
     if (!matches)
       add(
         "Structure · CRM pipeline",
-        "fail",
+        "warn",
         `The CRM pipeline in D2 reads "${actual.join(" → ") || "(empty)"}" — it must be exactly "${expected.join(
           " → "
         )}", in that order. This is the pipeline we build in their GoHighLevel sub-account and it is defined once, in src/lib/workflow-catalogue.ts (PIPELINE_STAGES). Regenerate the Blueprint against that list; do not rename a column to make this pass.`
@@ -1225,10 +1248,29 @@ export function validatePack(
       else bindingWarns.push(line);
     }
   }
+  // ── THE FABRICATION GATE, NOW SCOPED TO WHAT SHIPS ────────────────────────
+  // This is the law that matters most: a document may not assert something about
+  // a client that no measurement stands behind. It is NOT being weakened.
+  //
+  // What changed is its subject. It judges pack.intelligence.leakAnalysis, which
+  // D1 used to render. D1 is gone — the Diagnosis renders the saved calculator,
+  // where every figure comes from an answer the client gave out loud on the call
+  // and is therefore bound by construction. So an unbound leak sentence sitting
+  // in the JSON can no longer reach anybody.
+  //
+  // It BLOCKS when that prose actually renders, and warns when it does not. The
+  // caller supplies the rendered text; with no renderer (offline tooling) it
+  // blocks as before, because then we cannot prove the prose is unreachable.
+  const bindingReaches = (line: string): boolean => {
+    if (!opts?.renderedText) return true; // cannot prove it is unreachable
+    const quoted = /"([^"]{24,})"/.exec(line)?.[1];
+    return quoted ? opts.renderedText.includes(quoted.slice(0, 60)) : true;
+  };
+  const bindingBlocking = bindingFails.filter(bindingReaches);
   if (bindingFails.length)
     add(
       "Evidence binding · every claim traces to a measured value",
-      "fail",
+      bindingBlocking.length ? "fail" : "warn",
       `${bindingFails.length} sentence(s) assert something about this business that no measured value stands behind: ${Array.from(
         new Set(bindingFails)
       )
@@ -1404,6 +1446,13 @@ export function validatePack(
       );
   }
 
+  // THE ROADMAP HALF IS ADVISORY NOW. This law — never sell the CAD $1,000/month
+  // engine inside the CAD $6,500 fee — is unchanged and still BLOCKS on the
+  // funnel, which renders. The roadmap does not render at all (Phase 5), so a
+  // phase line claiming the qualification layer cannot reach a client and is
+  // reported rather than blocking. Legacy packs still carry phases; new ones
+  // have none, so this loop is empty for anything generated today.
+  const roadmapMisplacements: string[] = [];
   for (const p of phases) {
     if (p.isRetainerPhase) continue; // the retainer phase is where it belongs
     const lines = [
@@ -1414,7 +1463,7 @@ export function validatePack(
     for (const line of lines) {
       if (!QUALIFICATION_LAYER.test(line)) continue;
       if (RETAINER_MARKER.test(line)) continue; // the line already says it's monthly
-      retainerMisplacements.push(
+      roadmapMisplacements.push(
         `roadmap phase "${p.phase}" is inside the one-time build and claims the qualification layer: "${
           line.length > 100 ? line.slice(0, 100) + "…" : line
         }"`
@@ -1432,7 +1481,15 @@ export function validatePack(
   }
 
   if (infra || roadmap) {
-    if (retainerMisplacements.length)
+    if (roadmapMisplacements.length)
+    add(
+      `E3 · retainer is not the build`,
+      "warn",
+      `${roadmapMisplacements.length} retired-roadmap line(s) present ${PRODUCT_NAME} inside the one-time build: ${roadmapMisplacements
+        .slice(0, 2)
+        .join("; ")}. Advisory only — nothing renders the roadmap, so this cannot reach a client.`
+    );
+  if (retainerMisplacements.length)
       add(
         "E3 · retainer is not the build",
         "fail",
@@ -1803,9 +1860,10 @@ export type PackAssertion =
  */
 export function assertPackValid(
   pack: AssetPack,
-  allowedNumbers?: number[]
+  allowedNumbers?: number[],
+  opts?: ValidateOptions
 ): PackAssertion {
-  const result = validatePack(pack, allowedNumbers);
+  const result = validatePack(pack, allowedNumbers, opts);
   const fails = result.checks.filter((c) => c.level === "fail");
   const warns = result.checks.filter((c) => c.level === "warn");
   return {
