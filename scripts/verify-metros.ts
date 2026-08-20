@@ -14,7 +14,15 @@
 // what catches the DST traps (Arizona, Saskatchewan) — a wrong zone that happens
 // to match in winter separates in summer.
 
-import { METRO_TIMEZONES, timezoneForCity, metroCallTier, localHourInMetro } from "../src/lib/call-timing";
+import {
+  METRO_TIMEZONES,
+  timezoneForCity,
+  metroCallTier,
+  localHourInMetro,
+  legalCallHours,
+  isCanadianZone,
+  callWindowForCity,
+} from "../src/lib/call-timing";
 import { NA_METROS } from "../src/lib/crm";
 
 let pass = 0;
@@ -153,16 +161,24 @@ const metros = Object.keys(METRO_TIMEZONES);
   check("E1 at 11:00 ET, Los Angeles is 08:00 local", localHourInMetro("Los Angeles, CA", at11) === 8);
   check("E2 at 11:00 ET, Chicago is 10:00 local", localHourInMetro("Chicago, IL", at11) === 10);
   check("E3 at 11:00 ET, Toronto is 11:00 local", localHourInMetro("Toronto, ON", at11) === 11);
-  // 11:00 ET is the widest window of the day — every metro EXCEPT Halifax, which
-  // is Atlantic and therefore already at noon. The lunch gate correctly holds it
-  // back. Asserted precisely rather than as "all of them": a check written to the
-  // round number would have to be loosened the first time it was right, and a
-  // loosened check is how the gate stops being checked at all.
+  // 11:00 ET holds back FOUR metros, for two different reasons, and the
+  // difference is the whole point of the legal gate:
+  //   · Halifax is Atlantic, already at noon — the SOP's lunch rule.
+  //   · Vancouver/Victoria/Kelowna are at 08:00, which is legal in the US and
+  //     an hour inside the CRTC floor in Canada — the LAW.
+  // This check previously asserted "only Halifax is held back", which is to say
+  // it actively guaranteed the three BC metros stayed dialable at 08:00 local.
+  // Asserted precisely rather than as a count: a loosened check is how the gate
+  // stops being checked at all.
   const out11 = metros.filter((m) => metroCallTier(m, at11) === 0);
-  check("E4 at 11:00 ET only Halifax is held back (it is at lunch, Atlantic time)",
-    out11.length === 1 && out11[0] === "Halifax, NS",
+  const expectOut11 = ["Halifax, NS", "Vancouver, BC", "Victoria, BC", "Kelowna, BC"];
+  check("E4 at 11:00 ET exactly Halifax (lunch) + the three BC metros (CRTC floor) are held back",
+    out11.length === expectOut11.length && expectOut11.every((m) => out11.includes(m)),
     `held back: ${out11.join(", ") || "(none)"}`);
-  check("E4b …which is exactly local noon there", localHourInMetro("Halifax, NS", at11) === 12);
+  check("E4b …Halifax because it is exactly local noon", localHourInMetro("Halifax, NS", at11) === 12);
+  check("E4c …and Vancouver because it is 08:00, legal in the US but not in Canada",
+    localHourInMetro("Vancouver, BC", at11) === 8 && metroCallTier("Los Angeles, CA", at11) === 2,
+    "Vancouver must be barred at the same local hour Los Angeles is peak");
 
   // Nobody is dialled at 3am local, whatever the ET clock says.
   const at3am = at(3);
@@ -174,6 +190,131 @@ const metros = Object.keys(METRO_TIMEZONES);
   check("E6 the lunch gate is local, not Eastern",
     metroCallTier("Los Angeles, CA", noonPacific) === 0 && metroCallTier("New York, NY", noonPacific) > 0,
     "LA should be at lunch while New York is not");
+}
+
+// ── L · THE LAW ──────────────────────────────────────────────────────────────
+// Canada (CRTC UTR): weekdays 09:00-21:30, weekends 10:00-18:00, recipient's
+// local time. US (federal TCPA/TSR): 08:00-21:00 daily, recipient's local time.
+//
+// These sweep every metro at every hour of both a weekday and a weekend rather
+// than sampling clock times, because the failure this catches is one wrong zone
+// or one missing province quietly re-opening an illegal hour.
+{
+  const CA_SUFFIX = /, (ON|BC|AB|SK|MB|QC|NS|NB|NL|PE|YT|NT|NU)$/;
+  const canadian = metros.filter((m) => CA_SUFFIX.test(m));
+  const american = metros.filter((m) => !CA_SUFFIX.test(m));
+
+  check("L0 both countries are actually represented in the rotation",
+    canadian.length > 0 && american.length > 0,
+    `${canadian.length} CA / ${american.length} US`);
+
+  // The zone set that drives the gate must agree with the province suffixes in
+  // the metro map, in BOTH directions — otherwise adding a Canadian metro
+  // without adding its zone ships an illegal window silently.
+  const caMislabelled = canadian.filter((m) => !isCanadianZone(METRO_TIMEZONES[m]));
+  check("L1 every Canadian metro's zone is known to the gate as Canadian",
+    caMislabelled.length === 0, caMislabelled.join(", "));
+  const usMislabelled = american.filter((m) => isCanadianZone(METRO_TIMEZONES[m]));
+  check("L2 no US metro is treated as Canadian",
+    usMislabelled.length === 0, usMislabelled.join(", "));
+
+  // Sweep 48 hours of UTC in 30-minute steps across a known weekday and a known
+  // weekend, and assert no metro is ever callable outside its own legal window.
+  const sweep = (startUtc: Date, hours: number) => {
+    const out: Date[] = [];
+    for (let i = 0; i < hours * 2; i++) out.push(new Date(startUtc.getTime() + i * 30 * 60_000));
+    return out;
+  };
+  // Mon 2026-07-13 and Sat 2026-07-18, both 00:00 UTC.
+  const weekdaySweep = sweep(new Date(Date.UTC(2026, 6, 13)), 24);
+  const weekendSweep = sweep(new Date(Date.UTC(2026, 6, 18)), 24);
+
+  const violations: string[] = [];
+  for (const now of [...weekdaySweep, ...weekendSweep]) {
+    for (const m of metros) {
+      if (metroCallTier(m, now) === 0) continue; // not callable — nothing to check
+      const tz = METRO_TIMEZONES[m];
+      const legal = legalCallHours(tz, now);
+      const h = localHourInMetro(m, now);
+      if (!legal || h == null || h < legal.first || h > legal.last) {
+        violations.push(`${m} callable at ${h}:00 local (legal ${legal?.first}-${legal?.last})`);
+      }
+    }
+  }
+  check("L3 across a full weekday AND weekend, no metro is ever callable outside its legal window",
+    violations.length === 0,
+    `${violations.length} violation(s), first: ${violations[0] ?? "-"}`);
+
+  // The two floors, asserted as the distinct values they are. Kevin's morning
+  // block is exactly the hour where they diverge.
+  const caFloorBreak = canadian.filter((m) => {
+    for (const now of weekdaySweep) {
+      if (localHourInMetro(m, now) === 8 && metroCallTier(m, now) > 0) return true;
+    }
+    return false;
+  });
+  check("L4 no Canadian metro is callable at 08:00 on a weekday (CRTC floor is 09:00)",
+    caFloorBreak.length === 0, caFloorBreak.join(", "));
+
+  const usFloorLost = american.filter((m) => {
+    for (const now of weekdaySweep) {
+      if (localHourInMetro(m, now) === 8) return metroCallTier(m, now) === 0;
+    }
+    return false;
+  });
+  check("L5 every US metro IS still callable at 08:00 — legal there, and the golden hour",
+    usFloorLost.length === 0, usFloorLost.join(", "));
+
+  const caWeekendBreak = canadian.filter((m) => {
+    for (const now of weekendSweep) {
+      const h = localHourInMetro(m, now);
+      if ((h === 8 || h === 9) && metroCallTier(m, now) > 0) return true;
+    }
+    return false;
+  });
+  check("L6 no Canadian metro is callable before 10:00 on a weekend (CRTC weekend floor)",
+    caWeekendBreak.length === 0, caWeekendBreak.join(", "));
+
+  // NO CLOSING-TIME CHECK LIVES HERE, deliberately. One was written and then
+  // deleted: it asserted the SOP's 17:00 stays inside every legal close, and it
+  // could not be made to fail. Setting DAY_END to 22 still barred every late
+  // hour, because zoneCallTier tests the law BEFORE the SOP — so there is no
+  // reachable state where a closing time produces an illegal call. L3's sweep
+  // already covers the closing side for real. A check that cannot fail is worse
+  // than no check: it reads as coverage.
+  //
+  // The exact case from the morning block, stated as a fact rather than a sweep.
+  const mon11et = new Date(Date.UTC(2026, 6, 13, 15)); // 11:00 EDT Monday
+  check("L8 at 11:00 ET Calgary and Edmonton are open (09:00 local) while BC is barred (08:00)",
+    metroCallTier("Calgary, AB", mon11et) > 0 &&
+      metroCallTier("Edmonton, AB", mon11et) > 0 &&
+      metroCallTier("Vancouver, BC", mon11et) === 0 &&
+      callWindowForCity("Vancouver", mon11et).window === "barred",
+    "this is the morning-block case the gate exists for");
+
+  // The afternoon block has no legal exposure in either country — asserted so a
+  // future floor change cannot quietly cost the second block.
+  const mon16et = new Date(Date.UTC(2026, 6, 13, 20)); // 16:00 EDT Monday
+  const blockedAt4 = metros.filter((m) => callWindowForCity(m.split(",")[0], mon16et).window === "barred");
+  check("L9 at 16:00 ET no metro in either country is legally barred",
+    blockedAt4.length === 0, blockedAt4.join(", "));
+
+  // Every state the local-time chip branches on must be REACHABLE, or the chip
+  // carries a dead branch and one of these words never appears in the product.
+  // "barred" and "closed" being distinct is the load-bearing pair: collapsed,
+  // the operator sees one word for two different kinds of no and eventually
+  // overrides the legal one.
+  const states = {
+    barred: callWindowForCity("Vancouver", mon11et).window, // 08:00 local, CRTC floor
+    closed: callWindowForCity("Halifax", mon11et).window, // 12:00 local, SOP lunch
+    peak: callWindowForCity("Winnipeg", mon11et).window, // 10:00 local
+    open: callWindowForCity("Toronto", mon11et).window, // 11:00 local
+    unknown: callWindowForCity("Atlantis", mon11et).window, // not in the rotation
+  };
+  const wrong = Object.entries(states).filter(([want, got]) => want !== got);
+  check("L10 all five window states are reachable and distinct",
+    wrong.length === 0,
+    wrong.map(([want, got]) => `expected ${want}, got ${got}`).join("; "));
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────

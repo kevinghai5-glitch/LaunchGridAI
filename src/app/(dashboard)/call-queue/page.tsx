@@ -6,7 +6,6 @@ import {
   Phone,
   Star,
   Gauge,
-  Clock,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
@@ -32,10 +31,12 @@ import {
   type Urgency,
 } from "@/lib/call-queue";
 import { ObservedFactsRow } from "@/components/businesses/ObservedFactsRow";
+import { LocalWindow } from "@/components/ui/local-window";
 // Type-only: the route computes the four values server-side and ships the small
 // object; importing VALUES from the lib here would drag the detection layer into
 // the client bundle (see ObservedFactsRow.tsx).
 import type { ObservedFacts } from "@/lib/observed-facts";
+import type { CityCallWindow } from "@/lib/call-timing";
 
 // Row shape returned by GET /api/call-queue (dates are ISO strings).
 interface QueueLead {
@@ -55,8 +56,10 @@ interface QueueLead {
    *  Replaced the cold-audit peek (owner ruling, 2026-08-01). */
   observedFacts: ObservedFacts;
   /** What time it is in THEIR city right now, and whether that is a good hour
-   *  to dial. Read-only — nothing is filtered or blocked on it. */
-  callWindow: { localHour: number | null; window: "peak" | "open" | "closed" | "unknown" };
+   *  to dial. The shape is imported rather than restated so a new window state
+   *  cannot be added to the gate and silently miss this surface — which is how
+   *  "barred" would otherwise have arrived here typed as "closed". */
+  callWindow: CityCallWindow;
   enrichment: {
     rating: number | null;
     reviewCount: number | null;
@@ -1386,27 +1389,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
  *
  *  "unknown" renders as nothing at all rather than a guess: a lead labelled
  *  callable on an assumed time zone is worse than one labelled nothing, because
- *  it looks authoritative. */
-function LocalWindow({
-  w,
-}: {
-  w: { localHour: number | null; window: "peak" | "open" | "closed" | "unknown" };
-}) {
-  if (w.window === "unknown" || w.localHour == null) return null;
-  const h12 = w.localHour % 12 === 0 ? 12 : w.localHour % 12;
-  const label = `${h12}${w.localHour < 12 ? "am" : "pm"} local`;
-  const tone =
-    w.window === "peak"
-      ? { color: "var(--money)", weight: 700 }
-      : w.window === "open"
-        ? { color: "var(--text-3)", weight: 500 }
-        : { color: "var(--text-4)", weight: 500 };
-  return (
-    <span className="flex items-center" style={{ gap: 3, color: tone.color, fontWeight: tone.weight }}>
-      <Clock size={11} strokeWidth={1.9} />
-      {label}
-      {w.window === "peak" && " · peak"}
-      {w.window === "closed" && " · closed"}
-    </span>
-  );
-}
+ *  it looks authoritative.
+ *
+ *  The renderer itself now lives in @/components/ui/local-window, because the
+ *  opportunity list shows the same chip and a second copy would drift. */

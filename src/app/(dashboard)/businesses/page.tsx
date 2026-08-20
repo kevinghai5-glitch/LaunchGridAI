@@ -28,6 +28,8 @@ import { TopBar } from "@/components/dashboard/TopBar";
 import { LgButton } from "@/components/ui/lg-button";
 import { Stars } from "@/components/dashboard/os";
 import { SavedBusinessCard } from "@/components/businesses/SavedBusinessCard";
+import { LocalWindow } from "@/components/ui/local-window";
+import { callWindowForCity } from "@/lib/call-timing";
 import {
   opportunityScore,
   gapsFor,
@@ -1373,7 +1375,17 @@ function SuggestionRow({
           </span>
         </button>
       </TdCell>
-      <TdCell style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>{s.city ?? "—"}</TdCell>
+      {/* Location carries the LOCAL time under the city, because the whole point
+          of generating a batch at 11am is knowing which of these you may legally
+          dial right now. Computed at render off the same gate the generator uses
+          — not carried on the response — so leaving the list open past the top of
+          the hour cannot show a window that has since closed. */}
+      <TdCell style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+        <span style={{ display: "block" }}>{s.city ?? "—"}</span>
+        <span style={{ display: "block", fontSize: 11, marginTop: 2 }}>
+          <LocalWindow w={callWindowForCity(s.city, new Date())} />
+        </span>
+      </TdCell>
       <TdCell style={{ textAlign: "right" }}>
         {(s.rating ?? 0) > 0 ? (
           <span className="lg-mono tnum" style={{ color: "var(--text-2)" }}>

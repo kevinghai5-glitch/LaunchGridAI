@@ -204,37 +204,144 @@ const DAY_START = 8; // 8am
 const DAY_END = 17; // 5pm (exclusive)
 const CALLABLE_HOURS = [8, 9, 10, 11, 13, 14, 15, 16];
 
+// ── THE LEGAL WINDOW ─────────────────────────────────────────────────────────
+// The SOP window above is a PREFERENCE. This is the LAW, and it is checked
+// first: an hour outside it is never callable, never peak, never ordered, no
+// matter what the SOP says about answer rates.
+//
+//   Canada — CRTC Unsolicited Telecommunications Rules:
+//     weekdays 09:00-21:30, weekends 10:00-18:00.
+//   United States — federal TCPA / FTC Telemarketing Sales Rule:
+//     08:00-21:00, every day.
+//
+// Both are measured in the LOCAL TIME OF THE PERSON BEING CALLED, which is why
+// this keys off the metro's own zone and never off the operator's clock.
+//
+// WHY THIS EXISTS AS A GATE AND NOT A GUIDELINE: DAY_START used to be 8 for
+// everybody. That made 08:00 in Vancouver — a full hour inside the CRTC floor —
+// not merely callable but PEAK, so the three BC metros sorted to the TOP of an
+// 11:00 ET queue. The rule was wrong in the one direction that costs money.
+//
+// The US floor of 08:00 is deliberately kept: it is legal there, it is the
+// golden hour in the SOP, and California at 08:00 is the whole point of a
+// late-afternoon Eastern block.
+//
+// SCOPE, STATED HONESTLY: this is the FEDERAL US floor. Individual states set
+// stricter closing times and some ban Sunday calls outright; those are not
+// encoded here, and the 17:00 SOP cap is what currently keeps that gap
+// harmless. It is a real gap, not a solved problem.
+const CA_ZONES = new Set([
+  "America/St_Johns",
+  "America/Halifax",
+  "America/Toronto",
+  "America/Winnipeg",
+  "America/Regina",
+  "America/Edmonton",
+  "America/Vancouver",
+  "America/Whitehorse",
+  "America/Yellowknife",
+  "America/Iqaluit",
+]);
+
+// Which country's rules apply to a zone. Listed by zone rather than derived
+// from the metro's province suffix because the SAVED side of the app only ever
+// has the zone to work from. verify-metros.ts checks this set against the
+// province suffixes in METRO_TIMEZONES in BOTH directions, so adding a Canadian
+// metro without adding its zone fails the build instead of shipping an illegal
+// window.
+export function isCanadianZone(tz: string): boolean {
+  return CA_ZONES.has(tz);
+}
+
+// Local hour (0-23) AND whether it is the weekend, both in the TARGET zone.
+// The day is needed because Canada's weekend floor is an hour later, and the
+// day is not the operator's: at 00:30 Monday in Toronto it is still Sunday
+// evening in Vancouver.
+function localHourAndDay(tz: string, now: Date): { hour: number; weekend: boolean } | null {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(now);
+  const rawHour = parts.find((p) => p.type === "hour")?.value;
+  const rawDay = parts.find((p) => p.type === "weekday")?.value;
+  if (!rawHour || !rawDay) return null;
+  const h = parseInt(rawHour, 10);
+  if (Number.isNaN(h)) return null;
+  return {
+    hour: h === 24 ? 0 : h, // some engines emit "24" for midnight
+    weekend: rawDay === "Sat" || rawDay === "Sun",
+  };
+}
+
+// First and last local hour at which a call may legally BEGIN in this zone,
+// for the day `now` falls on there. null when the zone can't be read.
+//
+// `last` is the last whole hour that is safely inside the close: Canada's
+// weekday close is 21:30 so 21:00 is a legal start, its weekend close is 18:00
+// so 17:00 is, and the US close of 21:00 makes 20:00 the last hour that is
+// unambiguously before it rather than exactly on it.
+export function legalCallHours(tz: string, now: Date): { first: number; last: number } | null {
+  const p = localHourAndDay(tz, now);
+  if (!p) return null;
+  if (isCanadianZone(tz)) {
+    return p.weekend ? { first: 10, last: 17 } : { first: 9, last: 21 };
+  }
+  return { first: 8, last: 20 };
+}
+
 // Current local hour (0-23) in a metro, DST-aware. null if metro isn't mapped.
 export function localHourInMetro(metro: string, now: Date): number | null {
   const tz = METRO_TIMEZONES[metro];
   if (!tz) return null;
-  const hh = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "numeric",
-    hour12: false,
-  }).format(now);
-  const h = parseInt(hh, 10);
-  if (Number.isNaN(h)) return null;
-  return h === 24 ? 0 : h; // some engines emit "24" for midnight
+  return localHourAndDay(tz, now)?.hour ?? null;
 }
 
-// Call tier at `now`: 2 = peak window, 1 = good business hour, 0 = don't call
-// (before 8am, the 12-1pm lunch hour, or 5pm and later).
-export function metroCallTier(metro: string, now: Date): number {
-  const h = localHourInMetro(metro, now);
-  if (h == null) return 0;
-  if (h < DAY_START || h >= DAY_END || h === LUNCH_HOUR) return 0;
+// Call tier for a ZONE at `now`. THE one place the two windows combine, so the
+// gate cannot drift between the generator's view and a saved lead's view.
+//
+// 2 = peak window, 1 = good business hour, 0 = don't call — because it is
+// outside the legal window, before 8am, the 12-1pm lunch hour, or 5pm and later.
+function zoneCallTier(tz: string, now: Date): number {
+  const p = localHourAndDay(tz, now);
+  const legal = legalCallHours(tz, now);
+  if (!p || !legal) return 0;
+  const h = p.hour;
+  if (h < legal.first || h > legal.last) return 0; // law first, always
+  if (h < DAY_START || h >= DAY_END || h === LUNCH_HOUR) return 0; // then the SOP
   return PEAK_HOURS.has(h) ? 2 : 1;
+}
+
+// Call tier at `now`: 2 = peak window, 1 = good business hour, 0 = don't call.
+export function metroCallTier(metro: string, now: Date): number {
+  const tz = METRO_TIMEZONES[metro];
+  if (!tz) return 0;
+  return zoneCallTier(tz, now);
 }
 
 // Hours until a metro's next callable window — used only to order the off-hours
 // fallback (soonest-to-open first) when nothing is callable anywhere.
+// Skips hours this zone may not legally be called at, so the late-night
+// fallback doesn't rank a Canadian metro as "opens soonest" on the strength of
+// an 08:00 it can never be dialled at.
+//
+// The legality is read for the day it is CURRENTLY there, not the day the target
+// hour falls on — so a Friday 23:00 read uses the weekday floor for a Saturday
+// morning. That is a one-hour imprecision in ORDERING ONLY: this function never
+// marks anything callable, it just sorts metros nobody may call yet. Fixing it
+// properly means a next-legal-instant calculator, which is the scheduler this
+// deliberately isn't.
 function hoursToCallable(metro: string, now: Date): number {
-  const h = localHourInMetro(metro, now);
-  if (h == null) return 99;
+  const tz = METRO_TIMEZONES[metro];
+  if (!tz) return 99;
+  const p = localHourAndDay(tz, now);
+  const legal = legalCallHours(tz, now);
+  if (!p || !legal) return 99;
   let best = 99;
   for (const c of CALLABLE_HOURS) {
-    let d = c - h;
+    if (c < legal.first || c > legal.last) continue;
+    let d = c - p.hour;
     if (d < 0) d += 24;
     best = Math.min(best, d);
   }
@@ -285,7 +392,11 @@ export function orderMetrosByCallTime(
 // enforced, nothing is hidden, no hour is hardcoded — sit down at 2pm and the
 // queue tells you who is in a good window at 2pm.
 
-export type CallWindow = "peak" | "open" | "closed" | "unknown";
+// "barred" is separate from "closed" on purpose. Both mean don't dial, but
+// "closed" is the SOP's opinion about answer rates and "barred" is the law. Shown
+// identically, the operator would eventually override the wrong one — an 08:00
+// Vancouver row and a 12:00 Toronto row are not the same kind of no.
+export type CallWindow = "peak" | "open" | "closed" | "barred" | "unknown";
 
 export interface CityCallWindow {
   /** Local hour 0–23 in the lead's city, or null when the city is not in the
@@ -300,11 +411,19 @@ export function callWindowForCity(city: string | null | undefined, now: Date): C
   // guessed zone is worse than one shown as unknown: it looks authoritative.
   if (!tz) return { localHour: null, window: "unknown" };
 
-  const localHour = Number(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false }).format(now)
-  );
-  if (localHour < DAY_START || localHour >= DAY_END || localHour === LUNCH_HOUR) {
-    return { localHour, window: "closed" };
+  const p = localHourAndDay(tz, now);
+  if (!p) return { localHour: null, window: "unknown" };
+
+  // The law gets its own answer before the SOP is consulted at all.
+  const legal = legalCallHours(tz, now);
+  if (legal && (p.hour < legal.first || p.hour > legal.last)) {
+    return { localHour: p.hour, window: "barred" };
   }
-  return { localHour, window: PEAK_HOURS.has(localHour) ? "peak" : "open" };
+
+  // Otherwise delegates to the same tier the generator uses rather than
+  // re-deriving the hour rules. This function used to carry its own copy of
+  // them, which is how a lead could read "open" on a surface the generator
+  // considered shut.
+  const tier = zoneCallTier(tz, now);
+  return { localHour: p.hour, window: tier === 2 ? "peak" : tier === 1 ? "open" : "closed" };
 }

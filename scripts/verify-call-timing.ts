@@ -1,15 +1,46 @@
 // EXHAUSTIVE proof of the cold-call time-zone gating — every hour, every metro,
 // both DST states. Run: node_modules/.bin/tsx scripts/verify-call-timing.ts
 //
-// Rule under test: callable = local 8am-5pm minus the 12-1pm lunch hour;
-// peak = 8/10/16 (tier 2), other callable hours = tier 1, else tier 0.
+// Rule under test, in two layers:
+//   THE LAW — Canada (CRTC) weekdays 09:00-21:30, weekends 10:00-18:00; the US
+//     (federal TCPA/TSR) 08:00-21:00 daily. Recipient's local time, both.
+//   THE SOP — callable = local 8am-5pm minus the 12-1pm lunch hour;
+//     peak = 8/10/16 (tier 2), other callable hours = tier 1, else tier 0.
+// The law is checked first: an hour it forbids is tier 0 however good the SOP
+// thinks it is. 08:00 is therefore PEAK in Los Angeles and BARRED in Vancouver.
 
 import { orderMetrosByCallTime, metroCallTier, localHourInMetro, METRO_TIMEZONES } from "../src/lib/call-timing";
 import { NA_METROS } from "../src/lib/crm";
 
 const PEAK = new Set([8, 10, 16]);
 const GOOD = new Set([9, 11, 13, 14, 15]);
-const expectedTier = (h: number) => (PEAK.has(h) ? 2 : GOOD.has(h) ? 1 : 0);
+
+// Country and legal window are REIMPLEMENTED here from the published rules
+// rather than imported from call-timing. A sweep that asks the code under test
+// what it expects agrees with itself no matter how wrong it is.
+const CA_SUFFIX = /, (ON|BC|AB|SK|MB|QC|NS|NB|NL|PE|YT|NT|NU)$/;
+
+// Weekend in the METRO's own zone, not the machine's — Canada's floor moves on
+// Sat/Sun, and at 00:30 Monday in Toronto it is still Sunday in Vancouver.
+function localWeekend(metro: string, now: Date): boolean {
+  const d = new Intl.DateTimeFormat("en-US", {
+    timeZone: METRO_TIMEZONES[metro],
+    weekday: "short",
+  }).format(now);
+  return d === "Sat" || d === "Sun";
+}
+
+// [first, last] local hour a call may legally BEGIN in this metro today.
+function legalBounds(metro: string, now: Date): [number, number] {
+  if (!CA_SUFFIX.test(metro)) return [8, 20];
+  return localWeekend(metro, now) ? [10, 17] : [9, 21];
+}
+
+function expectedTier(metro: string, h: number, now: Date): number {
+  const [first, last] = legalBounds(metro, now);
+  if (h < first || h > last) return 0; // the law, before anything else
+  return PEAK.has(h) ? 2 : GOOD.has(h) ? 1 : 0;
+}
 
 // This file used to COUNT its failures, print them, and exit 0 regardless — a
 // validator that structurally cannot fail is not a validator, it is a report.
@@ -45,7 +76,7 @@ function invariantSweep() {
         checks++;
         if (h == null) { fails++; mismatches.push(`NULL ${m}`); continue; }
         const got = metroCallTier(m, now);
-        const exp = expectedTier(h);
+        const exp = expectedTier(m, h, now);
         if (got !== exp && mismatches.length < 10) mismatches.push(`${m} @${now.toISOString()} h=${h} got=${got} exp=${exp}`);
         if (got !== exp) fails++;
       }
@@ -78,19 +109,33 @@ function hourlyTable(label: string, dayIso: string) {
   }
 }
 
-// 3) Boundary hours for one zone — confirm the window edges (7→8, 11→12→13, 16→17).
+// 3) Boundary hours — confirm the window edges (7→8, 11→12→13, 16→17), and that
+//    the 08:00 edge lands DIFFERENTLY either side of the border. New York and
+//    Toronto are both Eastern: same zone, same local clock, different floor. If
+//    those two ever agree at 08:00, the legal gate has stopped applying.
 function boundaries() {
   console.log("\nBOUNDARY CHECK (Eastern, summer) — expect: 7 no, 8 PEAK, 11 good, 12 no(lunch), 13 good, 16 PEAK, 17 no:");
   for (const h of [7, 8, 11, 12, 13, 16, 17]) {
-    // 2026-07-15, h:00 EDT = (h+4):00 UTC
+    // 2026-07-15 is a WEDNESDAY. h:00 EDT = (h+4):00 UTC
     const now = new Date(Date.UTC(2026, 6, 15, h + 4, 0, 0));
     const got = metroCallTier("New York, NY", now);
-    const exp = expectedTier(h);
+    const exp = expectedTier("New York, NY", h, now);
     console.log(`   local ${String(h).padStart(2)}:00 → tier ${got}`);
     // The header above states the expectation in words; assert it in code so the
     // words cannot drift away from the behaviour unnoticed.
     if (got !== exp) fail(`boundary hour ${h}:00 ET — expected tier ${exp}, got ${got}`);
   }
+
+  console.log("  CROSS-BORDER, SAME CLOCK (Toronto, weekday) — expect: 8 barred, 9 good, 10 PEAK:");
+  for (const [h, want] of [[8, 0], [9, 1], [10, 2]] as const) {
+    const now = new Date(Date.UTC(2026, 6, 15, h + 4, 0, 0));
+    const got = metroCallTier("Toronto, ON", now);
+    console.log(`   local ${String(h).padStart(2)}:00 → tier ${got}`);
+    if (got !== want) fail(`Toronto boundary ${h}:00 — expected tier ${want}, got ${got}`);
+  }
+  const eightAm = new Date(Date.UTC(2026, 6, 15, 12, 0, 0)); // 08:00 EDT
+  if (metroCallTier("New York, NY", eightAm) === metroCallTier("Toronto, ON", eightAm))
+    fail("08:00 Eastern must differ between New York (legal, peak) and Toronto (barred by the CRTC floor)");
 }
 
 // 4) Overnight fallback — nobody callable, still returns soonest-to-open first.
@@ -104,15 +149,32 @@ function fallback() {
   // how the caller ends up with nobody to dial.
   if (metros.length !== NA_METROS.length)
     fail(`fallback: returned ${metros.length} metros, expected all ${NA_METROS.length}`);
-  // The soonest-to-open metro is whichever is FURTHEST into its own day. This
-  // used to hardcode "local hour 4", i.e. Eastern — which stopped being true the
-  // moment Halifax joined the rotation, because Atlantic is an hour ahead of
-  // Eastern. Derived now, so the next zone added cannot silently break it.
-  const latestLocalHour = Math.max(
-    ...NA_METROS.map((m) => localHourInMetro(m, now) ?? -1)
-  );
-  if (localHourInMetro(metros[0], now) !== latestLocalHour)
-    fail(`fallback: first metro "${metros[0]}" is not the soonest to open (local hour ${localHourInMetro(metros[0], now)}, expected ${latestLocalHour})`);
+  // "Soonest to open" is the FEWEST HOURS until this metro's own next LEGALLY
+  // callable hour. It is no longer "whichever is furthest into its own day":
+  // that shortcut held only while every metro shared an 08:00 floor. At 4am ET
+  // Halifax is already at 5am but may not be dialled until 9 — a 4-hour wait —
+  // while New York is at 4am and may be dialled at 8, also 4 hours. The Atlantic
+  // head start is exactly cancelled by the CRTC floor, so the old assertion
+  // failed on an ordering that was correct.
+  //
+  // Derived from the rules restated at the top of this file, and ties are
+  // accepted, because with two different floors in the rotation ties are normal.
+  const hoursToOpen = (m: string): number => {
+    const h = localHourInMetro(m, now);
+    if (h == null) return 99;
+    const [first, last] = legalBounds(m, now);
+    let best = 99;
+    for (const c of [8, 9, 10, 11, 13, 14, 15, 16]) {
+      if (c < first || c > last) continue;
+      let d = c - h;
+      if (d < 0) d += 24;
+      best = Math.min(best, d);
+    }
+    return best;
+  };
+  const minWait = Math.min(...NA_METROS.map(hoursToOpen));
+  if (hoursToOpen(metros[0]) !== minWait)
+    fail(`fallback: first metro "${metros[0]}" waits ${hoursToOpen(metros[0])}h, but the soonest opens in ${minWait}h`);
 }
 
 invariantSweep();
