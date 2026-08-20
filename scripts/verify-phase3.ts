@@ -1399,7 +1399,7 @@ check("F5 · the Build Plan prints every window and both prices, booked or not",
 
   // And with a kickoff date, real dates replace the relative wording everywhere.
   const booked = renderDeliverableHtml(goldenPack, "build-plan", ctxFor(null, new Date("2026-09-01T00:00:00Z")));
-  for (const w of ["1 September 2026", "15 September 2026", "CAD $6,500", "CAD $1,000"]) {
+  for (const w of ["September 1, 2026", "September 15, 2026", "CAD $6,500", "CAD $1,000"]) {
     show(`booked renders "${w}"`, booked.includes(w));
     assert(booked.includes(w), `the Build Plan with a kickoff date never prints "${w}"`);
   }

@@ -159,6 +159,103 @@ report("COPY · the golden pack", auditChecks);
 for (const c of fails(auditChecks)) failures.push(`${c.law}: ${c.message}`);
 if (!fails(auditChecks).length) pass += auditChecks.length;
 
+// ── 2b · LAYOUT INTEGRITY ────────────────────────────────────────────────────
+// Two defects that shipped and were caught by eye rather than by a check. Both
+// are invisible in the markup and appear only once the CSS is applied, so they
+// are asserted against the RENDERED documents.
+{
+  // EVERY context, not renders[0]. The first context has kickoffAt: null, so its
+  // Build Plan renders "Day 1" / "Days 1-14 from kickoff" and carries no absolute
+  // date at all — L2 could not fail against it however wrong the formatters were.
+  // The booked-kickoff context is the one that renders real schedule dates.
+  const docs = allDocs;
+
+  // L1 · A GRID MUST NOT WRAP MIXED INLINE CONTENT.
+  // The labelled rows were once `display: grid` with the label in column one.
+  // That breaks silently the moment a value contains inline markup: every child
+  // element becomes its own grid item, so a merge-field <code> mid-sentence
+  // became item 3, wrapped into the LABEL column, and printed with the rest of
+  // the sentence beside it. These values are generated prose and routinely
+  // carry <code>, <strong> and <a>.
+  const gridOffenders: string[] = [];
+  Object.keys(docs).forEach((name) => {
+    const html = docs[name];
+    const css = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
+    const gridClasses: string[] = [];
+    const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
+    let rule: RegExpExecArray | null;
+    while ((rule = ruleRe.exec(css)) !== null) {
+      if (!/display:\s*grid/.test(rule[2])) continue;
+      const clsRe = /\.([a-z][a-z0-9-]*)/g;
+      let c: RegExpExecArray | null;
+      while ((c = clsRe.exec(rule[1])) !== null) {
+        if (gridClasses.indexOf(c[1]) === -1) gridClasses.push(c[1]);
+      }
+    }
+    const body = html.replace(/<style>[\s\S]*?<\/style>/g, "");
+    gridClasses.forEach((cls) => {
+      const re = new RegExp('<[a-z]+ class="[^"]*\\b' + cls + '\\b[^"]*"[^>]*>([\\s\\S]*?)</', "g");
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(body)) !== null) {
+        const inner = m[1];
+        if (/<(code|strong|em|b|a|span)[ >]/.test(inner) && inner.replace(/<[^>]+>/g, "").trim()) {
+          const tag = name + ": ." + cls;
+          if (gridOffenders.indexOf(tag) === -1) gridOffenders.push(tag);
+          break;
+        }
+      }
+    });
+  });
+  check(
+    "L1 no grid wraps mixed inline content (a <code> would become its own column)",
+    gridOffenders.length === 0,
+    gridOffenders.join(", ")
+  );
+
+  // L2 · ONE DATE FORMAT PER DOCUMENT.
+  // Every formatter was already locale-pinned, so each was deterministic — and
+  // they were pinned to DIFFERENT locales, so one Build Plan carried
+  // "August 13, 2026" on its cover and "1 September 2026" in its schedule.
+  // Deterministic is not the same as consistent.
+  const mixed: string[] = [];
+  Object.keys(docs).forEach((name) => {
+    const body = docs[name].replace(/<style>[\s\S]*?<\/style>/g, "");
+    const dmy = /\b\d{1,2}\s+[A-Z][a-z]+\s+\d{4}\b/.test(body);
+    const mdy = /\b[A-Z][a-z]+\s+\d{1,2},\s+\d{4}\b/.test(body);
+    if (dmy && mdy) mixed.push(name);
+  });
+  check("L2 no document mixes date formats", mixed.length === 0, mixed.join(", "));
+
+  // L3 · AT MOST ONE UNLABELLED PARAGRAPH PER CARD.
+  // Every line in a card sits in the label grid, so a bare paragraph is the one
+  // exception: the what-it-does summary, which the stylesheet labels via
+  // ::before. A SECOND bare paragraph gets the identical generated label — that
+  // is how four cards printed WHAT IT DOES twice — and if the rule is scoped to
+  // dodge that, the second paragraph instead renders full width with its text
+  // hard against the card edge while every neighbour starts in the value column.
+  // Either way it is wrong, so the invariant is the count, not the styling.
+  const overloaded: string[] = [];
+  Object.keys(docs).forEach((name) => {
+    const body = docs[name].replace(/<style>[\s\S]*?<\/style>/g, "");
+    [["wf-card", "wf-name"], ["leak-card", "lc-title"]].forEach((pair) => {
+      body.split('<div class="' + pair[0]).slice(1).forEach((card) => {
+        const chunk = card.split("</section>")[0];
+        // A bare <p> is one with no class at all; classed rows carry their own label.
+        const bare = (chunk.match(/<p>/g) || []).length;
+        if (bare > 1) {
+          const t = new RegExp('class="' + pair[1] + '">([^<]*)').exec(chunk);
+          overloaded.push(name + " / " + (t ? t[1] : "?") + " (" + bare + ")");
+        }
+      });
+    });
+  });
+  check(
+    "L3 no card carries more than one unlabelled paragraph",
+    overloaded.length === 0,
+    overloaded.join(", ")
+  );
+}
+
 // ── 3 · NEGATIVE TESTS · prove every guard can fail ──────────────────────────
 // Each one breaks a copy of the input in exactly the way the audit describes and
 // asserts the guard names it. The `must` helper reads the right way round: the

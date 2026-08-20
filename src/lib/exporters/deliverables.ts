@@ -978,7 +978,7 @@ function renderAssessmentRows(rows: ComputedRow[]): string {
       }</span>${figure ? `<span class="lc-cost">${esc(figure)}</span>` : ""}</div>${
         r.answerText ? `<p class="lc-said">${esc(r.answerText)}</p>` : ""
       }${r.consequence ? `<p>${esc(r.consequence)}</p>` : ""}${
-        r.fix ? `<p class="lc-fix"><strong>What closes it.</strong> ${esc(r.fix)}</p>` : ""
+        r.fix ? `<p class="lc-fix"><strong>What closes it</strong>${esc(r.fix)}</p>` : ""
       }</div>`;
     })
     .join("");
@@ -1434,7 +1434,12 @@ function decisionMarker(item: BuildPlanItem): string {
   // Quoted verbatim rather than reworded into the sentence: the five reasons are
   // written as standalone facts, and bending them mid-clause is how one of them
   // ends up ungrammatical the day a sixth is added.
-  return `<p><strong>Included by decision.</strong> This one is a choice rather than a default — it comes out when this is true: ${esc(
+  // A LABELLED ROW like every other line in the card, not a full-width paragraph.
+  // It was bare prose, which put its text hard against the card's left edge while
+  // FIRES WHEN / WHAT IT DOES / WHAT YOU WILL SEE all started in the value column
+  // — one line breaking the alignment of every card it appeared in. The <strong>
+  // is the label cell, so no wording changed, only where it sits.
+  return `<p class="wf-incl"><strong>Included by decision</strong>This one is a choice rather than a default — it comes out when this is true: ${esc(
     offWhen
   )}. That is not you, so it is in.</p>`;
 }
@@ -1443,7 +1448,7 @@ function workflowCard(item: BuildPlanItem, pack: AssetPack, meta: AssetPackMeta)
   const body = resolveBracketTokens(esc(item.whatItDoes), item.id, meta);
   const tail =
     item.state === "installed"
-      ? `<p class="wf-sees"><strong>What you will see.</strong> ${resolveBracketTokens(
+      ? `<p class="wf-sees"><strong>What you will see</strong>${resolveBracketTokens(
           esc(item.whatTheClientSees),
           item.id,
           meta
@@ -1902,9 +1907,9 @@ function renderConversionSurfaces(
       )}${opts("Headline — pick one", bp.headlineOptions)}${opts(
         "Subheadline — pick one",
         bp.subheadlineOptions
-      )}<p><strong>Primary button:</strong> ${esc(bp.primaryButton)}<br><strong>Secondary button:</strong> ${esc(
+      )}<div class="dest"><span class="dest-k">Primary button</span>${esc(bp.primaryButton)}</div><div class="dest"><span class="dest-k">Secondary button</span>${esc(
         bp.secondaryButton
-      )}</p>${
+      )}</div>${
         // Both of these used to render as floating paragraphs under the buttons —
         // "5-star rating from happy clients." with nothing saying what it was or
         // where it went. They are two different slots on the page and each says so.
@@ -2109,7 +2114,9 @@ function renderDeliverable3(pack: AssetPack, ctx: DeliverableContext): string {
   // The cover above it still comes from shell() and still reads "Prepared for",
   // with a confidentiality footer under it. Replacing those is a _shell.ts
   // change, not one this file can make.
-  const generatedOn = new Date(pack.meta.generatedAt).toLocaleDateString("en-GB", {
+  // en-CA to match the cover. These disagreed: the cover said "August 13, 2026"
+  // and this said "13 August 2026", in the same document.
+  const generatedOn = new Date(pack.meta.generatedAt).toLocaleDateString("en-CA", {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -297,8 +297,8 @@ if (!goldenPack) {
 
   const booked = buildDates(new Date("2026-09-01T00:00:00Z"));
   check("C6 booked is anchored", booked.anchored);
-  eq("C7 kickoff is the given date", booked.kickoff, "1 September 2026");
-  eq("C8 go-live is exactly BUILD_DAYS later", booked.goLive, "15 September 2026");
+  eq("C7 kickoff is the given date", booked.kickoff, "September 1, 2026");
+  eq("C8 go-live is exactly BUILD_DAYS later", booked.goLive, "September 15, 2026");
   eq("C9 …and BUILD_DAYS is the fourteen quoted everywhere", BUILD_DAYS, 14);
   eq("C10 a booked plan shows no note", booked.note, "");
   check("C11 a booked plan carries no relative wording",

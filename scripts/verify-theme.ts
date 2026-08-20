@@ -177,7 +177,7 @@ const PACK_FIXTURES = [
  * supplied, by hand, and section D asserts globals.css agrees with them.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-/** The CLIENT brand. Fourteen values in the paid deliverables. */
+/** The CLIENT brand. Seventeen values in the paid deliverables. */
 const BRAND = {
   paper: "#fbfaf7", //   --bg        the cream page
   surface: "#ffffff", // --surface   the card
@@ -198,6 +198,15 @@ const BRAND = {
   goldText: "#7e6229", // --accent-text  reads where --accent only rules/fills
   warnText: "#8a5a18", //  --warn-text
   goodText: "#356b4c", //  --good-text
+  // The ON-INK trio, added 2026-08-20 when the cover and the finding headers
+  // moved onto --ink. Same justification as the -text twins and held to the
+  // same law by A3c: the light-ground tokens genuinely fail on --ink
+  // (--accent 4.46:1, --ink-muted 3.10:1, both under the 4.5 body floor), so
+  // these three are the accent / muted-copy / hairline roles re-cut for a dark
+  // ground. They are used on --ink and nowhere else.
+  goldOnInk: "#c9a961", //  --on-ink-accent
+  mutedOnInk: "#a5a092", // --on-ink-muted
+  ruleOnInk: "#3a362e", //  --on-ink-rule  (a hairline, never text)
 } as const;
 const BRAND_VALUES = Object.values(BRAND).map((v) => v.toLowerCase());
 

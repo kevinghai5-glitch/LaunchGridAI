@@ -87,11 +87,15 @@ export interface BuildPlan {
 
 // ── Dates ────────────────────────────────────────────────────────────────────
 
-/** "12 August 2026". Pinned locale and explicit parts so the rendered HTML is
+/** "August 12, 2026". Pinned locale and explicit parts so the rendered HTML is
  *  byte-identical wherever it is generated — a document that reads differently
- *  on a different machine is a document we cannot verify. */
+ *  on a different machine is a document we cannot verify.
+ *
+ *  en-CA, matching the cover. It was en-GB, which was pinned but DISAGREED: the
+ *  same Build Plan carried "August 13, 2026" on its cover and "1 September 2026"
+ *  in its schedule. Being deterministic is not the same as being consistent. */
 function longDate(d: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-CA", {
     day: "numeric",
     month: "long",
     year: "numeric",

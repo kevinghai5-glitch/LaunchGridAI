@@ -197,10 +197,16 @@ export function shell(
 ): string {
   const toc = buildToc(body); // built on clean body
   const solo = toc === "";
-  const prettyDate = new Date(meta.generatedAt).toLocaleDateString(undefined, {
+  // en-CA, explicitly. This was `undefined`, meaning "whatever locale the
+  // machine doing the render is set to" — so the same pack rendered on two
+  // machines put two different date formats on the client's cover. The pack's
+  // own Generated line was already pinned, to en-GB, which is why the Asset
+  // Pack showed "August 13, 2026" up top and "13 August 2026" ten lines down.
+  const prettyDate = new Date(meta.generatedAt).toLocaleDateString("en-CA", {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
   const assumptions = meta.assumptions.length
     ? `<div class="assumptions"><span class="ico">&#9432;</span><div><strong>Methodology note.</strong> ${meta.assumptions
@@ -208,7 +214,6 @@ export function shell(
         .join(" ")}</div></div>`
     : "";
 
-  const marketLine = [meta.city, meta.industry].filter(Boolean).join(" \u00B7 ");
 
   // Glossary annotation happens on a copy for rendering; TOC used the clean body.
   const annotatedBody = annotateGlossary(body);
@@ -225,7 +230,6 @@ export function shell(
     ${opts.docIndex ? `<span class="cb-idx">${esc(opts.docIndex)}</span>` : ""}
     <div class="cb-center">
       <span class="cb-biz">${esc(meta.businessName)}</span>
-      ${marketLine ? `<span class="cb-sep">\u00B7</span><span class="cb-meta">${esc(marketLine)}</span>` : ""}
     </div>
     <div class="cb-right">
       <button class="cmd-btn" type="button" data-present aria-pressed="false" aria-label="Presentation mode">
@@ -268,7 +272,7 @@ export function shell(
 <title>${esc(docTitle)} \u2014 ${esc(meta.businessName)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <style>
   :root {
     /* v3 light/consulting palette — single muted-gold accent, hairline borders,
@@ -284,6 +288,23 @@ export function shell(
     --good: #3F7D5A;
     --warn: #B5862F;
     --critical: #A8443B;
+
+    /* ON-INK TRIO — for the cover, which is painted --ink rather than --surface.
+       They exist because the light-ground tokens fail on it: --accent measures
+       4.46:1 on --ink and --ink-muted 3.10:1, both under the 4.5 AA body floor.
+       Same three roles (accent, muted copy, hairline) re-cut for a dark ground,
+       used NOWHERE else — a light ground keeps the light tokens.
+         --on-ink-accent  7.88:1 on --ink
+         --on-ink-muted   6.79:1 on --ink
+         --on-ink-rule    a hairline, never text                                */
+    --on-ink-accent: #C9A961;
+    --on-ink-muted: #A5A092;
+    --on-ink-rule: #3A362E;
+
+    /* The label gutter, as tokens so ONE breakpoint restacks every labelled row
+       in all three documents instead of nine selectors drifting apart. */
+    --label-w: 132px;
+    --label-gutter: 156px;
     --heading: 'Source Serif 4', Georgia, 'Times New Roman', serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -348,24 +369,30 @@ export function shell(
   }
 
   /* ── Command bar ───────────────────────────────────────────────────────── */
+  /* SCREEN ONLY — already hidden in print, so this is the reading view's chrome
+     and never something a client receives on paper. It was a white bar with a
+     bold serif wordmark and two outlined pill buttons sitting directly above an
+     ink cover: two different documents stacked on each other. It now takes the
+     cover's ink, so the page opens as one continuous dark band and the bar
+     reads as the document's own header instead of browser furniture. */
   .cmdbar {
     position: sticky; top: 0; z-index: 50;
-    display: flex; align-items: center; gap: 18px;
-    padding: 0 24px; height: 54px;
-    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 26px; height: 54px;
+    background: var(--ink); border-bottom: none;
   }
-  .cmdbar .cb-brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--heading); font-weight: 700; font-size: 14px; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
-  .cmdbar .cb-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-  .cmdbar .cb-idx { font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--ink-muted); text-transform: uppercase; padding-left: 14px; border-left: 1px solid var(--border); }
+  /* The wordmark is the cover's eyebrow: same mono, same brass, same short rule
+     instead of a dot. One brand mark in the document, not two. */
+  .cmdbar .cb-brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 500; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--on-ink-accent); white-space: nowrap; }
+  .cmdbar .cb-brand .dot { width: 18px; height: 2px; border-radius: 0; background: var(--on-ink-accent); }
+  .cmdbar .cb-idx { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; color: var(--on-ink-muted); text-transform: uppercase; padding-left: 16px; border-left: 1px solid var(--on-ink-rule); }
   .cmdbar .cb-center { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-  .cmdbar .cb-biz { font-weight: 600; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
-  .cmdbar .cb-sep { color: var(--border); }
-  .cmdbar .cb-meta { font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmdbar .cb-biz { font-family: var(--heading); font-weight: 400; font-size: 15px; color: var(--bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
   .cmdbar .cb-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-  .cmd-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
-  .cmd-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .cmd-btn svg { width: 14px; height: 14px; }
-  .cmd-btn.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+  .cmd-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px; border-radius: 3px; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; color: var(--on-ink-muted); background: transparent; border: 1px solid var(--on-ink-rule); cursor: pointer; white-space: nowrap; }
+  .cmd-btn:hover { border-color: var(--on-ink-accent); color: var(--on-ink-accent); }
+  .cmd-btn svg { width: 13px; height: 13px; }
+  .cmd-btn.is-on { color: var(--ink); border-color: var(--on-ink-accent); background: var(--on-ink-accent); }
 
   /* ── Contents rail ─────────────────────────────────────────────────────── */
   .rail { position: sticky; top: calc(var(--sticky) + 24px); align-self: start; max-height: calc(100vh - var(--sticky) - 44px); overflow-y: auto; padding: 2px 2px 8px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; }
@@ -387,18 +414,59 @@ export function shell(
 
   /* ── Cover header ──────────────────────────────────────────────────────── */
   header.doc {
-    position: relative; background: var(--surface); color: var(--ink);
-    border: 1px solid var(--border); border-top: 3px solid var(--accent);
-    border-radius: 4px; padding: 44px 46px 36px; margin-bottom: 30px;
+    position: relative; background: var(--ink); color: var(--bg);
+    border: none; border-radius: 4px;
+    padding: 62px 52px 46px; margin-bottom: 30px;
   }
-  header.doc .eyebrow { font-family: var(--heading); text-transform: uppercase; letter-spacing: .26em; font-size: 11px; color: var(--accent-text); margin-bottom: 16px; font-weight: 700; }
-  header.doc h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.1; letter-spacing: -.015em; font-weight: 700; max-width: 20ch; color: var(--ink); }
-  header.doc .subtitle { font-size: 16px; line-height: 1.55; color: var(--ink-muted); max-width: 60ch; margin: 0 0 28px; }
-  .cover-meta { display: flex; flex-wrap: wrap; gap: 0; border-top: 1px solid var(--border); padding-top: 20px; }
-  .cover-meta .cm { padding-right: 32px; margin-right: 32px; border-right: 1px solid var(--border); }
-  .cover-meta .cm:last-child { border-right: none; margin-right: 0; padding-right: 0; }
-  .cover-meta .cm .k { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-muted); margin-bottom: 5px; font-weight: 600; }
-  .cover-meta .cm .v { font-size: 15px; font-weight: 600; color: var(--ink); }
+  /* The eyebrow leads with a short brass rule rather than sitting alone — it is
+     the one mark that reads as a letterhead at a glance. */
+  header.doc .eyebrow { display: flex; align-items: center; gap: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .2em; font-size: 10px; color: var(--on-ink-accent); margin-bottom: 44px; font-weight: 500; }
+  header.doc .eyebrow::before { content: ""; width: 20px; height: 2px; background: var(--on-ink-accent); flex: none; }
+  /* Serif at 300. That weight is the difference between this reading as a
+     letterhead and reading as a form — it is why the stylesheet loads 300. */
+  header.doc h1 { font-family: var(--heading); margin: 0 0 18px; font-size: 52px; line-height: 1.03; letter-spacing: -.022em; font-weight: 300; max-width: 18ch; color: var(--bg); }
+  header.doc .subtitle { font-size: 15.5px; line-height: 1.6; color: var(--on-ink-muted); max-width: 52ch; margin: 0 0 44px; }
+  .cover-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px; border-top: 1px solid var(--on-ink-rule); padding-top: 30px; }
+  .cover-meta .cm { display: flex; flex-direction: column; gap: 9px; min-width: 0; padding: 0; margin: 0; border: none; }
+  .cover-meta .cm .k { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .18em; color: var(--on-ink-muted); margin-bottom: 0; font-weight: 500; }
+  .cover-meta .cm .v { font-family: var(--heading); font-size: 17px; font-weight: 400; letter-spacing: -.005em; color: var(--bg); }
+
+  /* ── V2 LABEL ROW ────────────────────────────────────────────────────────
+     The one repeating shape in every deliverable: a mono label in a fixed
+     column, its value beside it, a hairline under. It replaced a stack of
+     tinted panels — .wf-fires, .wf-sees, .lc-said and .lc-fix were each their
+     own filled box, so a card carried three competing grounds and the reader
+     could not tell what was subordinate to what.
+     No markup changed: every one of these already emitted a label element
+     followed by its text, so the label is cell one and the text becomes an
+     anonymous grid item in cell two.                                          */
+  /* THE LABEL IS OUT OF FLOW, and that is the whole trick. This was a two-column
+     GRID, which broke the moment a value contained inline markup: every child
+     element becomes its own grid item, so a merge-field <code> in the middle of
+     a sentence became item 3 and wrapped into the LABEL column with the rest of
+     the sentence beside it. Values here are generated prose and routinely carry
+     <code>, <strong> and <a>, so the grid could never hold.
+     Absolutely positioning the label leaves the value as ordinary inline flow —
+     any markup, any length, wraps normally. The rows are short and their cards
+     already carry break-inside: avoid, so the label cannot detach in print. */
+  .row-k,
+  .wf-fires, .wf-sees, .wf-incl, .lc-said, .lc-fix, .dest,
+  .leak-card > p:not(.lc-said):not(.lc-fix),
+  .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl) {
+    display: block; position: relative;
+    padding: 15px 0 15px var(--label-gutter); margin: 0;
+    border-bottom: 1px solid var(--border);
+    background: none; border-radius: 0; border-left: none; border-right: none; border-top: none;
+    font-family: inherit; font-size: 14.5px; line-height: 1.62; color: var(--ink);
+  }
+  .wf-fires > b, .wf-sees > strong, .wf-incl > strong, .lc-fix > strong, .dest > .dest-k,
+  .lc-said::before,
+  .leak-card > p:not(.lc-said):not(.lc-fix)::before,
+  .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl)::before {
+    position: absolute; left: 0; top: 18px; width: var(--label-w);
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; line-height: 1.5;
+    text-transform: uppercase; color: var(--ink-muted); font-weight: 500;
+  }
 
   /* ── Methodology note ──────────────────────────────────────────────────── */
   .assumptions {
@@ -411,11 +479,11 @@ export function shell(
 
   /* ── Sections ──────────────────────────────────────────────────────────── */
   .sec {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
-    padding: 34px 38px; margin-bottom: 20px; position: relative;
+    background: transparent; border: none; border-radius: 0;
+    padding: 0; margin-bottom: 46px; position: relative;
   }
-  .sec-head { display: flex; align-items: center; gap: 16px; margin: 0 0 22px; padding: 0 0 16px; border-bottom: 1px solid var(--border); }
-  .sec-num { font-family: var(--heading); font-size: 13px; font-weight: 700; color: var(--accent-text); background: var(--accent-tint); padding: 5px 11px; border-radius: 6px; line-height: 1; flex: none; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin: 0 0 26px; padding: 0 0 18px; border-bottom: 1px solid var(--border); font-family: var(--heading); font-size: 27px; font-weight: 400; letter-spacing: -.014em; }
+  .sec-num { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--accent-text); background: transparent; padding: 0; border-radius: 0; line-height: 1; flex: none; letter-spacing: .06em; }
   .sec-inner > :first-child { margin-top: 0; }
 
   /* Three deliberate section WEIGHTS. Five identical white cards told the reader
@@ -424,20 +492,22 @@ export function shell(
 
   /* KEY — the anchor. The total, and the money. One or two per document. */
   .sec--key {
-    background: var(--accent-tint);
-    border-color: var(--accent);
-    border-left: 4px solid var(--accent);
-    border-radius: 0 6px 6px 0;
+    background: transparent; border: none; border-radius: 0;
   }
-  .sec--key .sec-head { border-bottom-color: var(--accent); }
-  .sec--key h2 { font-size: 27px; }
-  .sec--key .sec-num { background: var(--surface); }
+  /* Weight now comes from the RULE, not from a fill: the key section's head is
+     drawn in the accent at 2px where an ordinary head is a hairline. The ink
+     figure panel directly beneath it is the real anchor. */
+  .sec--key .sec-head { border-bottom: 2px solid var(--accent); }
+  .sec--key h2 { font-size: 30px; }
+  .sec--key .sec-num { background: transparent; }
 
   /* METHOD — recessed. Basis, assumptions, caveats. Always last. */
+  /* METHOD — the quietest weight. A dashed border round a card said "aside";
+     with no card, indenting it off the accent rule says the same thing. */
   .sec--method {
-    background: transparent;
-    border-style: dashed;
-    padding: 24px 28px;
+    background: transparent; border: none;
+    border-left: 2px solid var(--border); border-radius: 0;
+    padding: 4px 0 4px 28px;
   }
   .sec--method h2 { font-size: 17px; }
   .sec--method .sec-inner { font-size: 13px; color: var(--ink-muted); }
@@ -452,24 +522,54 @@ export function shell(
   li::marker { color: var(--accent); }
   strong { color: var(--ink); font-weight: 600; }
   .muted { color: var(--ink-muted); }
-  .label { font-family: var(--heading); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 700; color: var(--accent-text); margin: 26px 0 10px; display: flex; align-items: center; gap: 10px; }
+  .label {
+    font-family: var(--mono); font-size: 9.5px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .14em; color: var(--ink-muted); margin: 22px 0 10px;
+  }
   .label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
   /* ── Tables ────────────────────────────────────────────────────────────── */
-  table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 14px; }
-  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  thead th { background: var(--surface-2); color: var(--ink); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; border-bottom: 1px solid var(--border); }
+  /* EVERY table takes the banded treatment, not just .msg-table. Five tables
+     render with no class at all — the pipeline stages, the section orders, the
+     advisory notes — and they were coming out with a pale header and no surface
+     while the message tables next to them had an ink band. */
+  table, .msg-table {
+    width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  th {
+    text-align: left; background: var(--ink); color: var(--on-ink-muted);
+    font-family: var(--mono); font-size: 9.5px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .14em; padding: 15px 20px; border-bottom: none; vertical-align: bottom;
+  }
+  td { text-align: left; padding: 16px 20px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+  tr:last-child td { border-bottom: none; }
+  /* This rule is why the classless tables stayed pale after the bare element
+     selector was banded: thead-th outranks a lone th and sat after it, so the
+     five tables with no class kept a --surface-2 header while the .msg-tables
+     beside them carried an ink band. Same treatment now, stated once.
+     (No backticks in here — this stylesheet lives inside a template literal.) */
+  thead th { background: var(--ink); color: var(--on-ink-muted); font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em; font-weight: 500; border-bottom: none; }
   tbody tr:last-child td { border-bottom: none; }
 
   /* Message tables. The 4-column Step/Channel/Timing/Message shape spent three
      columns on one fact and left a 40-word SMS to fight for what remained of an
      860px column. Two columns: WHEN (with the channel as a chip) and MESSAGE. */
-  .msg-table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; }
-  .msg-table th { text-align: left; background: var(--surface-2); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  /* The header row takes the ink bar, so a message table is the same object as a
+     workflow card and a finding: banded head, ruled body, one surface. */
+  .msg-table {
+    width: 100%; border-collapse: collapse; margin: 0 0 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .msg-table th {
+    text-align: left; background: var(--ink); color: var(--on-ink-muted);
+    font-family: var(--mono); font-size: 9.5px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .14em; padding: 15px 24px; border-bottom: none;
+  }
   .msg-table th:first-child { width: 168px; }
-  .msg-table td { padding: 15px 14px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 13.5px; }
+  .msg-table td { padding: 17px 24px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 14px; line-height: 1.62; }
   .msg-table tr:last-child td { border-bottom: none; }
-  .msg-when { font-family: var(--heading); font-size: 12px; font-weight: 700; letter-spacing: -.005em; }
+  .msg-when { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--ink-muted); }
   .msg-when .chan { margin-top: 6px; display: inline-flex; }
   .msg-subj { font-weight: 700; display: block; margin-bottom: 5px; }
   .mf { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--accent-text); white-space: nowrap; }
@@ -491,7 +591,7 @@ export function shell(
 
   /* ── Generic cards / callouts ──────────────────────────────────────────── */
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px; margin: 0 0 12px; }
-  .hero-quote { background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 20px 24px; font-family: var(--heading); font-size: 22px; font-weight: 600; line-height: 1.3; margin: 0 0 16px; letter-spacing: -.01em; color: var(--ink); }
+  .hero-quote { background: transparent; border: none; border-left: 2px solid var(--accent); border-radius: 0; padding: 4px 0 4px 26px; font-family: var(--heading); font-size: 25px; font-weight: 400; line-height: 1.35; margin: 0 0 22px; letter-spacing: -.014em; color: var(--ink); }
 
   /* Structured diagnostic / asset cards. Reached only through the legacy
      landing-assets shape on the pack, which generations predating conversion
@@ -517,70 +617,79 @@ export function shell(
   /* Headline panel — the screenshot-and-forward object. It goes FIRST: the only
      question the reader arrives with is how much, and it used to be answered
      last, after seven cards of working. */
+  /* The figure is the one object in the pack a client screenshots, so it takes
+     the ink ground the cover uses — the two read as the same document rather
+     than a dark cover stapled to a light report. */
   .headline {
-    display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 32px;
-    align-items: start;
+    display: grid; grid-template-columns: minmax(0,1fr) 268px; gap: 36px;
+    align-items: start; background: var(--ink); border-radius: 4px;
+    padding: 34px 36px; margin: 0 0 30px;
   }
   .hl-amount {
-    font-family: var(--heading); font-size: 46px; font-weight: 700;
-    letter-spacing: -.03em; line-height: 1; color: var(--accent-text);
+    font-family: var(--heading); font-size: 44px; font-weight: 400;
+    letter-spacing: -.022em; line-height: 1; color: var(--on-ink-accent);
+    font-variant-numeric: tabular-nums;
   }
   .hl-k {
-    font-family: var(--heading); font-size: 10.5px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .14em;
-    color: var(--ink-muted); margin-bottom: 10px;
+    font-family: var(--mono); font-size: 9.5px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .16em;
+    color: var(--on-ink-muted); margin-bottom: 14px;
   }
-  .hl-annual { margin-top: 10px; font-size: 13.5px; color: var(--ink-muted); }
+  .hl-annual { margin-top: 14px; font-size: 13.5px; color: var(--on-ink-muted); }
   .hl-inputs {
-    border-left: 1px solid var(--border); padding-left: 24px;
-    display: grid; gap: 14px;
+    border-left: 1px solid var(--on-ink-rule); padding-left: 28px;
+    display: grid; gap: 16px;
   }
   .hl-input .k {
-    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 2px;
+    font-family: var(--mono); font-size: 9px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .16em; color: var(--on-ink-muted); margin-bottom: 5px;
   }
   .hl-input .v {
-    font-family: var(--heading); font-size: 19px; font-weight: 700;
-    letter-spacing: -.01em; color: var(--ink);
+    font-family: var(--heading); font-size: 19px; font-weight: 400;
+    letter-spacing: -.008em; color: var(--bg);
   }
 
   /* Top-three ranked bar — each leak's share of the total, drawn with one
      pseudo-element off a --share custom property. No chart library, nothing to
      load, and it still reads on paper. */
-  .rank { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--accent); display: grid; gap: 12px; }
-  .rank-row { display: grid; grid-template-columns: 24px minmax(0,1fr) 150px; gap: 14px; align-items: center; }
-  .rank-n { font-family: var(--heading); font-size: 13px; font-weight: 700; color: var(--accent-text); }
-  .rank-name { font-size: 14.5px; font-weight: 600; }
-  .rank-bar { height: 8px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); position: relative; overflow: hidden; }
+  /* Each row is its own surface now. The section stopped being a white card, so
+     without this the rows would sit loose on the cream page. */
+  .rank { margin: 0; padding: 0; border-top: none; display: grid; gap: 10px; }
+  .rank-row {
+    display: grid; grid-template-columns: 26px minmax(0,1fr) 164px; gap: 18px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 18px 24px;
+  }
+  .rank-n { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--accent-text); }
+  .rank-name { font-size: 15px; font-weight: 500; }
+  .rank-bar { height: 5px; border-radius: 0; background: var(--accent-tint); border: none; position: relative; overflow: hidden; }
   .rank-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--share) * 1%); background: var(--accent); }
-  .rank-cost { font-family: var(--heading); font-size: 14px; font-weight: 700; color: var(--accent-text); text-align: right; white-space: nowrap; }
+  .rank-cost { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--ink); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
   /* Leak cards. .lc-head is a flex row with a gap because the title and the
      price were rendering glued together — "After hoursCAD $1,200–2,400/mo". */
   .leak-card {
-    border: 1px solid var(--border); border-left: 3px solid var(--accent);
-    border-radius: 0 6px 6px 0; background: var(--surface);
-    padding: 20px 24px; margin: 0 0 14px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--surface);
+    padding: 0; margin: 0 0 14px; overflow: hidden;
   }
   .leak-card:last-child { margin-bottom: 0; }
+  /* The header is an INK bar — the cover's ground, carried into the body so the
+     document reads as one piece rather than a dark cover on a light report.
+     .lc-head keeps its flex gap: the title and price rendered glued together
+     once — "After hoursCAD $1,200-2,400/mo" — and the gap is what fixed it. */
   .lc-head {
     display: flex; align-items: baseline; justify-content: space-between;
-    gap: 20px; flex-wrap: wrap; margin-bottom: 14px;
-    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    gap: 20px; flex-wrap: wrap; margin: 0; padding: 18px 24px;
+    background: var(--ink); border-bottom: none;
   }
-  .lc-title { font-family: var(--heading); font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
-  .lc-cost { font-family: var(--heading); font-size: 17px; font-weight: 700; color: var(--accent-text); white-space: nowrap; }
-  .lc-said {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
-    padding: 11px 14px; margin: 0 0 12px; font-size: 14px;
-  }
-  .lc-said::before {
-    content: "In your words"; display: block; font-family: var(--heading);
-    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 4px;
-  }
-  .lc-fix { background: var(--accent-tint); border-radius: 6px; padding: 12px 15px; margin: 12px 0 0; font-size: 14px; }
-  .lc-fix strong { color: var(--accent-text); }
+  .lc-title { font-family: var(--heading); font-size: 20px; font-weight: 400; letter-spacing: -.01em; color: var(--bg); }
+  .lc-cost { font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--on-ink-accent); white-space: nowrap; }
+  /* The card's body is inset from the ink bar above it. The rows themselves are
+     the shared V2 label row; only the gutter and the ::before TEXT live here. */
+  .leak-card > .lc-said, .leak-card > .lc-fix,
+  .leak-card > p:not(.lc-said):not(.lc-fix) { margin-left: 26px; margin-right: 26px; }
+  .leak-card > p:not(.lc-said):not(.lc-fix)::before { content: "Which means"; }
+  .lc-said::before { content: "In your words"; }
+  .lc-fix { border-bottom: none; padding-bottom: 22px; }
 
   /* Total band — kept for the basis section, no longer the headline. */
   .total-band { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-tint); padding: 24px 28px; margin: 0 0 18px; }
@@ -599,20 +708,30 @@ export function shell(
     align-items: baseline; margin: 0 0 6px;
   }
   .wf-stage-n {
-    font-family: var(--heading); font-size: 12px; font-weight: 700;
-    color: var(--accent-text); background: var(--accent-tint);
-    border-radius: 6px; padding: 5px 0; text-align: center;
+    font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+    color: var(--accent-text); background: transparent;
+    border-radius: 0; padding: 0; text-align: left; letter-spacing: .06em;
   }
-  .wf-stage-t { font-family: var(--heading); font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .wf-stage-t { font-family: var(--heading); font-size: 21px; font-weight: 400; letter-spacing: -.012em; }
   .wf-stage-d { grid-column: 2; font-size: 13.5px; color: var(--ink-muted); margin: 0 0 14px; }
 
-  .wf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  /* ONE column, not two. A label row reserves 132px for its label, so a
+     half-width card left the value in a ~180px gutter and every sentence broke
+     across four lines. The two-up grid was affordable only while the card was a
+     stack of tinted panels. */
+  .wf-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .wf-card {
-    border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
-    padding: 18px 20px; display: flex; flex-direction: column;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--surface);
+    padding: 0; display: block; overflow: hidden;
   }
-  .wf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-  .wf-name { font-family: var(--heading); font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  /* The ink bar, same object as the Diagnosis finding header — that is what
+     makes the two documents read as one set. */
+  .wf-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; margin: 0; padding: 17px 26px; background: var(--ink);
+  }
+  .wf-name { font-family: var(--heading); font-size: 20px; font-weight: 400; letter-spacing: -.01em; color: var(--bg); }
+  .wf-head .chan { background: transparent; border-color: var(--on-ink-rule); color: var(--on-ink-accent); }
 
   /* Channel chips — instant scanability across 14 cards. */
   .wf-ch { display: inline-flex; gap: 5px; flex: none; }
@@ -629,20 +748,34 @@ export function shell(
   /* Trigger line — the one line that answers "when does this happen". The
      composer already writes it for the Asset Pack; it belongs here, in the
      document the client actually reads. Mono because it is a condition, not prose. */
-  .wf-fires {
-    font-family: var(--mono); font-size: 11.5px; line-height: 1.45;
-    color: var(--ink-muted); background: var(--surface-2);
-    border-radius: 5px; padding: 7px 10px; margin: 0 0 11px;
-  }
-  .wf-fires b { color: var(--ink); font-weight: 600; }
+  /* Styling lives on the shared V2 label row above. What stays here is the one
+     thing that is specific to a trigger: it is quoted machine behaviour, so the
+     VALUE keeps the mono face even though the row is otherwise prose. */
+  .wf-fires { font-size: 13px; }
 
-  .wf-card p { font-size: 13.5px; margin: 0 0 10px; }
+  /* Body rows are inset from the ink bar. The bare paragraph gets a label like
+     every other row, so a card has no unlabelled block floating in it. */
+  .wf-card > .wf-fires, .wf-card > .wf-sees, .wf-card > .wf-why, .wf-card > .wf-incl,
+  .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl) { margin-left: 26px; margin-right: 26px; }
+  /* Only the FIRST unlabelled paragraph is the what-it-does summary. The four
+     toggled workflows carry a second one — "Included by decision." — which
+     already opens with its own bold lead-in, so labelling every bare paragraph
+     printed WHAT IT DOES twice in the same card. The second runs full width
+     under the first, with no empty label gutter beside it. */
+  .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl)::before { content: "What it does"; }
+  .wf-card > .wf-sees { border-bottom: none; padding-bottom: 22px; }
+  .wf-card > .wf-why { margin-bottom: 22px; }
   /* The auto top margin pins these to the bottom of the flex card, so a row of
      cards with uneven copy still lines its closing statements up. */
-  .wf-sees { margin: auto 0 0; padding: 11px 13px; border-radius: 6px; background: var(--surface-2); font-size: 13px; }
-  .wf-sees strong { color: var(--accent-text); }
-  .wf-card.is-pending { border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0; }
-  .wf-why { margin: auto 0 0; padding: 11px 13px; background: var(--surface-2); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0; font-size: 13px; }
+  .wf-sees { font-size: 14px; }
+  .wf-card.is-pending { border-left: 2px solid var(--warn); border-radius: 0 4px 4px 0; }
+  /* The one place a fill still earns its keep: "confirmed during the build" is
+     a caveat about THIS workflow, not another field of it, so it must not read
+     as one more label row. Amber, and the only tinted block left in a card. */
+  .wf-why {
+    display: block; margin: 4px 0 0; padding: 13px 16px; background: var(--warn-soft, var(--surface-2));
+    border-left: 2px solid var(--warn); border-radius: 0 4px 4px 0; font-size: 13.5px; line-height: 1.6;
+  }
   .wf-why strong { color: var(--warn-text); }
 
   .sub-h {
@@ -655,11 +788,13 @@ export function shell(
 
   /* Lead-flow strip — the one visual that explains the purchase. */
   .flow { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; margin: 4px 0 26px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .flow-node { padding: 16px 14px; background: var(--surface); border-right: 1px solid var(--border); }
+  .flow-node { padding: 20px 18px; background: var(--surface); border-right: 1px solid var(--border); }
   .flow-node:last-child { border-right: none; }
-  .flow-node.is-live { background: var(--accent-tint); }
-  .flow-n { font-family: var(--heading); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); margin-bottom: 6px; }
-  .flow-t { font-family: var(--heading); font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 7px; line-height: 1.25; }
+  /* A live stage is marked by a brass cap, not a wash — a tinted column beside
+     white ones reads as a highlight the reader has to decode. */
+  .flow-node.is-live { background: var(--surface); box-shadow: inset 0 3px 0 0 var(--accent); }
+  .flow-n { font-family: var(--mono); font-size: 9.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-text); margin-bottom: 9px; }
+  .flow-t { font-family: var(--heading); font-size: 16px; font-weight: 400; letter-spacing: -.01em; margin-bottom: 9px; line-height: 1.25; }
   .flow-wf { list-style: none; margin: 0; padding: 0; }
   .flow-wf li { font-size: 11.5px; line-height: 1.4; color: var(--ink-muted); padding-left: 10px; position: relative; margin-bottom: 3px; }
   .flow-wf li::before { content: ""; position: absolute; left: 0; top: 7px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
@@ -676,13 +811,12 @@ export function shell(
   .sched-note strong { color: var(--warn-text); }
 
   /* ── Asset destinations (D3: where each piece of copy actually goes) ────── */
-  .dest { margin: 6px 0 10px; padding: 8px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--ink); }
-  .dest .dest-k { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent-text); margin-bottom: 2px; }
+  .dest { font-size: 14px; }
 
   /* ── Engagement spine (D4: the two windows and what each one costs) ─────── */
   .spine { display: grid; gap: 0; margin: 6px 0 4px; }
-  .spine-band { display: grid; grid-template-columns: 108px minmax(0, 1fr) 176px; gap: 22px; align-items: start; border: 1px solid var(--border); border-radius: 6px; padding: 22px 24px; background: var(--surface); }
-  .spine-band.is-run { border-color: var(--accent); background: var(--accent-tint); }
+  .spine-band { display: grid; grid-template-columns: 108px minmax(0, 1fr) 176px; gap: 22px; align-items: start; border: 1px solid var(--border); border-radius: 4px; padding: 22px 24px; background: var(--surface); }
+  .spine-band.is-run { border-color: var(--accent); background: var(--surface); box-shadow: inset 2px 0 0 0 var(--accent); }
   /* The build window is the one being paid for now, the run window is the one
      that continues — only the second gets the tint, so the two read as
      different commitments rather than as a repeated card. */
@@ -695,7 +829,7 @@ export function shell(
   .spine-band .sb-price { text-align: right; border-left: 1px solid var(--border); padding-left: 20px; }
   .spine-band .sb-amount { font-family: var(--heading); font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
   .spine-band .sb-note { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-top: 4px; }
-  .spine-golive { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 14px 24px; font-size: 13.5px; color: var(--ink); border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--surface-2); }
+  .spine-golive { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 16px 24px; font-size: 13.5px; color: var(--ink); border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--surface); }
   .spine-golive .sg-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--good); margin-top: 6px; }
 
   /* ── Plain-language clarification markers (Law 14) ──────────────────────── */
@@ -729,10 +863,63 @@ export function shell(
      element rather than the @page margin box below, which carries the number. */
   .print-foot { display: none; }
 
+  /* ── RESPONSIVE ──────────────────────────────────────────────────────────
+     Three widths, because a client opens this on whatever is in their hand.
+     TABLET (940) drops the contents rail and stacks the side-by-side grids —
+     that block already existed. What follows is the two ends it was missing. */
+
+  /* LAPTOP / narrow desktop — the label gutter is 156px of a 860px column, which
+     is affordable. Below that it starts squeezing the value into a ~40ch ribbon,
+     so it tightens before it stacks. */
+  @media (max-width: 1100px) {
+    :root { --label-w: 116px; --label-gutter: 136px; }
+  }
+
+  /* PHONE — the gutter goes entirely. A 132px label beside a 200px value is how
+     you get four-word lines; the label sits ABOVE its value instead, which is
+     the same information in the order a narrow screen can actually read. */
+  @media (max-width: 700px) {
+    :root { --label-w: auto; --label-gutter: 0px; }
+    .row-k,
+    .wf-fires, .wf-sees, .wf-incl, .lc-said, .lc-fix, .dest,
+    .leak-card > p:not(.lc-said):not(.lc-fix),
+    .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl) { padding: 34px 0 14px; }
+    .wf-fires > b, .wf-sees > strong, .wf-incl > strong, .lc-fix > strong, .dest > .dest-k,
+    .lc-said::before,
+    .leak-card > p:not(.lc-said):not(.lc-fix)::before,
+    .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl)::before { top: 12px; width: auto; }
+
+    .layout, .layout.solo { padding: 18px 14px 48px; }
+    header.doc { padding: 40px 22px 30px; border-radius: 0; }
+    header.doc h1 { font-size: 34px; }
+    header.doc .subtitle { font-size: 14.5px; margin-bottom: 30px; }
+    /* Three meta columns cannot hold at 360px — one per row, still ruled. */
+    .cover-meta { grid-template-columns: 1fr; gap: 18px; padding-top: 22px; }
+
+    .sec-head { font-size: 21px; gap: 11px; margin-bottom: 20px; }
+    .sec--key h2, .sec-head h2 { font-size: 21px; }
+    .headline { padding: 24px 20px; }
+    .hl-amount { font-size: 28px; }
+    .hl-inputs { grid-template-columns: 1fr; }
+    .leak-card > .lc-said, .leak-card > .lc-fix,
+    .leak-card > p:not(.lc-said):not(.lc-fix),
+    .wf-card > .wf-fires, .wf-card > .wf-sees, .wf-card > .wf-why, .wf-card > .wf-incl,
+    .wf-card > p:not(.wf-sees):not(.wf-why):not(.wf-incl) { margin-left: 18px; margin-right: 18px; }
+    .lc-head, .wf-head { padding: 14px 18px; }
+    .lc-title, .wf-name { font-size: 17px; }
+    /* A merge field is one long unbreakable token; on a phone it must be allowed
+       to break or it pushes the whole card sideways. */
+    .mf { white-space: normal; word-break: break-all; }
+    .msg-table th, .msg-table td { padding: 12px 14px; }
+    .msg-table th:first-child { width: 96px; }
+    .cmdbar { gap: 10px; padding: 0 14px; }
+    .cmdbar .cb-biz { font-size: 13px; }
+  }
+
   @media (max-width: 940px) {
     .layout, .layout.solo { grid-template-columns: 1fr; gap: 0; padding: 26px 18px 64px; max-width: 720px; }
     .rail { display: none; }
-    .cmdbar .cb-meta, .cmdbar .cb-sep, .cmdbar .cb-idx { display: none; }
+    .cmdbar .cb-idx { display: none; }
     .cmd-btn .cb-btxt { display: none; }
     .cmd-btn { padding: 0 9px; }
     .gl-item { grid-template-columns: 1fr; gap: 2px; }
