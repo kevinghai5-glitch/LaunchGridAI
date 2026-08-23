@@ -156,15 +156,82 @@ eq("E10 phone is dialable E.164", at("Phone"), "+14165550123");
 eq("E11 owner first name", at("First Name"), "Dana");
 eq("E12 owner last name", at("Last Name"), "Whitfield");
 eq("E13 business name", at("Business Name"), "Northside Plumbing");
-eq("E14 timezone resolved from the metro", at("Time Zone"), "America/Toronto");
-eq("E15 lead id round-trips", at("Lead ID"), "biz_1");
-check("E16 tags carry the export date", at("Tags").includes("2026-08-05"), at("Tags"));
-eq("E16b dial status is a labelled column", at("Dial Status"), "Fresh");
-check(
-  "E16c a leaked do_not_call is visible in the file",
-  buildCallQueueCsv([lead({ dialStatus: "do_not_call" })], "2026-08-05").csv.includes("Do not call"),
-  "a non-fresh business in an export must show its flag in the Dial Status column"
-);
+// The export was trimmed from twenty columns to eleven, then Tags was restored,
+// so it is twelve. Time Zone, Lead ID and Dial Status are gone for good, and a
+// check asserting their VALUES could now only pass vacuously or fail. What
+// replaces them is the SHAPE check below: exactly these twelve headers, in this
+// order, and nothing else — plus E16, which asserts what Tags actually carries.
+//
+// WORTH KNOWING, because it is the one thing the cut gave up: the retired E16c
+// proved a do_not_call which leaked into an export was VISIBLE in the file. The
+// gate that stops one being generated is elsewhere and still stands — this was
+// the last-line readout, and the operator reads dial status in the app instead.
+const HEADERS = [
+  "First Name",
+  "Last Name",
+  "Business Name",
+  "Phone",
+  "Address",
+  "City",
+  "Website",
+  "Industry",
+  "Rating",
+  "Reviews",
+  "Call Angle",
+  "Tags",
+];
+{
+  // Split on CRLF: the file is written with \r\n so Excel and GHL both read it,
+  // and splitting on \n alone leaves a \r stuck to the last header.
+  const got = buildCallQueueCsv([lead({})], "2026-08-05").csv.split("\r\n")[0].split(",");
+  eq("E14 the file carries exactly the twelve agreed headers, in order", got.join(" | "), HEADERS.join(" | "));
+  check(
+    "E15 none of the eight permanently-dropped columns came back",
+    !["Time Zone", "Status", "Dial Status", "Attempts", "Next Action", "Google Maps", "Lead ID", "Pain Point"]
+      .some((h) => got.indexOf(h) !== -1),
+    got.join(" | ")
+  );
+  // Status is called out on its own because its failure mode is not clutter: GHL
+  // maps it to the Opportunity object, so one stray column would raise an
+  // opportunity for every cold prospect on the list.
+  check("E15b Status specifically stays out — GHL would open an opportunity per row", got.indexOf("Status") === -1, got.join(" | "));
+}
+
+// E16 · WHAT TAGS ACTUALLY CARRIES. The column is only worth having if GHL can
+// segment on it, which means all four parts, in order, comma-separated.
+{
+  const tagCell = (industry: string | null, dateKey: string): string => {
+    const row = buildCallQueueCsv([lead({ industry })], dateKey).csv.split("\r\n")[1];
+    // The angle contains a comma and is therefore quoted; Tags is the last field.
+    const m = /,("?)([^,"]*(?:,\s*[^,"]*)*)\1$/.exec(row);
+    return (m ? m[2] : row.split(",").pop() ?? "").replace(/^"|"$/g, "");
+  };
+  eq(
+    "E16 tags are brand, channel, export date, niche — in that order",
+    tagCell("Plumbing", "2026-08-05"),
+    "reclaimedhq, cold-call, 2026-08-05, plumbing"
+  );
+  // The date is the day the FILE was made, not the day the business was added.
+  // Those differ for every lead sourced before today, which is most of them.
+  check(
+    "E16b the date in the tag is the export date, not the record's",
+    tagCell("Plumbing", "2026-09-30").includes("2026-09-30"),
+    tagCell("Plumbing", "2026-09-30")
+  );
+  // A multi-word niche becomes one hyphenated tag rather than two tags, which is
+  // what a comma-separated list would otherwise make of "Electrical Contractor".
+  eq(
+    "E16c a multi-word niche stays a single tag",
+    tagCell("Electrical Contractor", "2026-08-05"),
+    "reclaimedhq, cold-call, 2026-08-05, electrical-contractor"
+  );
+  // No industry must not leave a dangling separator.
+  eq(
+    "E16d a lead with no niche drops the slot instead of trailing a comma",
+    tagCell(null, "2026-08-05"),
+    "reclaimedhq, cold-call, 2026-08-05"
+  );
+}
 
 // A comma inside the angle must survive the round-trip intact — this is the
 // single most likely way a real file breaks, since every angle is a sentence.

@@ -8,9 +8,6 @@
 // verifiable offline (scripts/verify-export.ts) rather than only observable by
 // downloading a file and squinting at it.
 
-import { STATUS_META, type LeadStatus } from "@/lib/call-queue";
-import { DIAL_STATUS_META, type DialStatus } from "@/lib/dial-status";
-import { timezoneForCity } from "@/lib/call-timing";
 
 // ---------------------------------------------------------------------------
 // Phone normalization
@@ -139,8 +136,25 @@ interface Column {
 }
 
 // Header names match GHL's standard contact fields where one exists, so the
-// import screen auto-maps them instead of making him pair 20 columns by hand.
-// The rest land as custom fields and show up beside the number while he dials.
+// import screen auto-maps them instead of making him pair columns by hand. The
+// rest land as custom fields and show up beside the number while he dials.
+//
+// TWELVE COLUMNS, and the count is the point. This carried twenty. Nine came out
+// because they duplicated state that already lives in this software — status,
+// dial status, attempts, next action — or rode along unread: the maps link, the
+// internal lead id, and a time zone GHL derives from the number itself. Each one
+// was another row to pair by hand on GHL's mapping screen, every morning.
+//
+// Tags came out with them and went back in, deliberately. The plan was to apply
+// tags by hand in GHL instead; the manual version was worse, so the column is
+// back — last, so the saved mapping for the other eleven is untouched.
+//
+// The eight that came out STAY out. Status especially: GHL defaults it to the
+// Opportunity object, so shipping it would raise an opportunity for every cold
+// prospect and flood the pipeline.
+//
+// Pain Point came out for a different reason. It is a GUESS, and a guess does not
+// belong on screen during a live call: the script asks, it never asserts.
 const COLUMNS: Column[] = [
   { header: "First Name", value: (l) => splitOwnerName(l.ownerName).first },
   { header: "Last Name", value: (l) => splitOwnerName(l.ownerName).last },
@@ -150,34 +164,20 @@ const COLUMNS: Column[] = [
   { header: "Phone", untrusted: false, value: (_l, ctx) => ctx.phone },
   { header: "Address", value: (l) => l.address ?? "" },
   { header: "City", value: (l) => l.city ?? "" },
-  // Blank for anything off the metro rotation — never a guessed zone.
-  { header: "Time Zone", untrusted: false, value: (l) => timezoneForCity(l.city) },
   { header: "Website", untrusted: false, value: (l) => l.website ?? "" },
   { header: "Industry", value: (l) => l.industry ?? "" },
   { header: "Rating", untrusted: false, value: (l) => (l.rating ? l.rating.toFixed(1) : "") },
   { header: "Reviews", untrusted: false, value: (l) => l.reviewCount ?? "" },
-  {
-    header: "Status",
-    untrusted: false,
-    value: (l) => STATUS_META[l.status as LeadStatus]?.label ?? l.status,
-  },
-  // The compliance column. Every business the operator actually dials should read
-  // "Dialed" here (the export marks it so). Anything else in this column — a
-  // "Do not call", "Not interested", "Booked" — is a leak he needs to SEE before
-  // he calls, which is the whole reason it rides in the file.
-  {
-    header: "Dial Status",
-    untrusted: false,
-    value: (l) => DIAL_STATUS_META[l.dialStatus as DialStatus]?.label ?? l.dialStatus,
-  },
-  { header: "Attempts", untrusted: false, value: (l) => l.attemptCount ?? 0 },
-  { header: "Next Action", value: (l) => l.nextAction ?? "" },
-  // The two the dialer screen actually earns its keep on.
   { header: "Call Angle", value: (l) => l.outreachAngle ?? "" },
-  { header: "Pain Point", value: (l) => l.painPoint ?? "" },
-  { header: "Google Maps", untrusted: false, value: (l) => l.mapsUrl ?? "" },
-  // Tags are how he segments the import inside GHL — the date tag makes one
-  // day's push selectable as a group after the fact.
+  // TAGS IS LAST, and appending is the point: GHL matches columns by header name
+  // rather than position, so adding one at the end cannot disturb the saved
+  // mapping for the eleven before it.
+  //
+  // GHL imports these straight into the contact, which is the whole reason the
+  // column exists — without it the batch tag gets typed by hand on the import
+  // screen every morning, and a manual step that runs daily is a step that
+  // eventually gets skipped. The date makes one day's push selectable after the
+  // fact; the niche makes verticals comparable without touching the export.
   {
     header: "Tags",
     untrusted: false,
@@ -186,8 +186,6 @@ const COLUMNS: Column[] = [
         .filter(Boolean)
         .join(", "),
   },
-  // Round-trip key: match a dialer outcome back to the row in here.
-  { header: "Lead ID", untrusted: false, value: (l) => l.id },
 ];
 
 /** The header row, exported so verification can assert against it. */
