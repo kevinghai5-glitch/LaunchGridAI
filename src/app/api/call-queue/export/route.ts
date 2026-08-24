@@ -85,8 +85,30 @@ export async function POST(req: Request) {
     ownerName: b.ownerName,
   }));
 
-  const { csv, rowCount, skippedNoPhone } = buildCallQueueCsv(leads, query.dateKey);
+  const { csv, rowCount, skippedNoPhone, writtenIds } = buildCallQueueCsv(leads, query.dateKey);
   const filename = exportFilename(query.dateKey);
+
+  // CLEAR THE QUEUE ON DOWNLOAD. Once a business is in the file it is GoHighLevel's
+  // to track, and leaving it here only builds a list the operator never works from.
+  //
+  // SOFT delete, like every other removal in this app: the row, its dial-status
+  // history and its googlePlaceId all survive. That last one is load-bearing —
+  // resurfacesIntoFreshBatch returns false for any row carrying deletedAt, and the
+  // generator's exclude-set query deliberately does NOT filter deleted rows out, so
+  // a cleared business can never be sourced back into a future batch. Clearing is
+  // what prevents a re-dial, not what risks one.
+  //
+  // Only rows ACTUALLY WRITTEN are cleared. A lead skipped for want of a dialable
+  // phone never reached GoHighLevel, so clearing it would drop it out of both
+  // systems at once and leave nothing pointing at the fact it existed.
+  let cleared = 0;
+  if (writtenIds.length > 0) {
+    const clearedRes = await prisma.business.updateMany({
+      where: { id: { in: writtenIds }, userId: session.user.id, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    cleared = clearedRes.count;
+  }
 
   return new NextResponse(csv, {
     status: 200,
@@ -100,6 +122,7 @@ export async function POST(req: Request) {
       "X-Row-Count": String(rowCount),
       "X-Skipped-No-Phone": String(skippedNoPhone),
       "X-Marked-Dialed": String(markableIds.length),
+      "X-Cleared": String(cleared),
       "Cache-Control": "no-store",
     },
   });

@@ -173,19 +173,15 @@ const COLUMNS: Column[] = [
   // rather than position, so adding one at the end cannot disturb the saved
   // mapping for the eleven before it.
   //
-  // GHL imports these straight into the contact, which is the whole reason the
-  // column exists — without it the batch tag gets typed by hand on the import
-  // screen every morning, and a manual step that runs daily is a step that
-  // eventually gets skipped. The date makes one day's push selectable after the
-  // fact; the niche makes verticals comparable without touching the export.
-  {
-    header: "Tags",
-    untrusted: false,
-    value: (l, ctx) =>
-      ["reclaimedhq", "cold-call", ctx.dateKey, (l.industry ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-")]
-        .filter(Boolean)
-        .join(", "),
-  },
+  // ONE TAG, because exactly one of them does work: the dialer workflow triggers
+  // on "cold-call". The other three were carrying nothing —
+  //   reclaimedhq  every contact in the account is already his
+  //   the date     GHL timestamps contacts and can be filtered on that, and a
+  //                per-day tag MINTED A NEW TAG EVERY MORNING, permanently
+  //                cluttering the account's tag list
+  //   the niche    already lands in the Niche custom field
+  // A tag that only adds a row to a picker is worse than no tag.
+  { header: "Tags", untrusted: false, value: () => "cold-call" },
 ];
 
 /** The header row, exported so verification can assert against it. */
@@ -201,10 +197,23 @@ export interface CsvBuildResult {
   rowCount: number;
   /** Leads dropped because no dialable phone could be resolved. */
   skippedNoPhone: number;
+  /** Ids of the leads ACTUALLY written, in row order.
+   *
+   *  The export clears the queue on download, and this is what it clears. The
+   *  distinction matters: a lead skipped for want of a dialable phone never
+   *  reached GoHighLevel, so clearing it would drop it out of both systems at
+   *  once. Returned from here rather than recomputed by the caller so the skip
+   *  rule lives in exactly one place. */
+  writtenIds: string[];
 }
 
 /**
- * Build the CSV. `dateKey` is YYYY-MM-DD and appears in every row's tags.
+ * Build the CSV.
+ *
+ * `dateKey` is YYYY-MM-DD. It no longer reaches a column — the tag that carried
+ * it was dropped for minting a new GHL tag every day — and is kept on the
+ * signature only so the caller has one date to pass for both this and
+ * exportFilename. Nothing here reads it today.
  *
  * Rows without a dialable phone are SKIPPED and counted, not emitted blank —
  * see normalizePhone. The count comes back so the UI can tell him, rather than
@@ -215,6 +224,7 @@ export function buildCallQueueCsv(
   dateKey: string
 ): CsvBuildResult {
   const lines: string[] = [CSV_HEADERS.map((h) => csvCell(h, false)).join(",")];
+  const writtenIds: string[] = [];
   let skippedNoPhone = 0;
 
   for (const lead of leads) {
@@ -227,6 +237,7 @@ export function buildCallQueueCsv(
     lines.push(
       COLUMNS.map((c) => csvCell(c.value(lead, ctx), c.untrusted ?? true)).join(",")
     );
+    writtenIds.push(lead.id);
   }
 
   return {
@@ -234,6 +245,7 @@ export function buildCallQueueCsv(
     csv: lines.join("\r\n") + "\r\n",
     rowCount: lines.length - 1,
     skippedNoPhone,
+    writtenIds,
   };
 }
 

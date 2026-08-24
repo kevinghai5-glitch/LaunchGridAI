@@ -20,6 +20,7 @@ import { clampBatchSize, MIN_BATCH_SIZE, MAX_BATCH_SIZE, DAILY_BATCH_SIZE } from
 import { QUEUE_LIMIT } from "../src/lib/call-queue";
 import { timezoneForCity, METRO_TIMEZONES, metroCallTier } from "../src/lib/call-timing";
 import { dateKeyOf, parseQueueParams } from "../src/lib/call-queue-query";
+import { resurfacesIntoFreshBatch } from "../src/lib/dial-status";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -197,40 +198,31 @@ const HEADERS = [
   check("E15b Status specifically stays out — GHL would open an opportunity per row", got.indexOf("Status") === -1, got.join(" | "));
 }
 
-// E16 · WHAT TAGS ACTUALLY CARRIES. The column is only worth having if GHL can
-// segment on it, which means all four parts, in order, comma-separated.
+// E16 · WHAT TAGS CARRIES. One tag, "cold-call", and nothing else — it is the
+// trigger the dialer workflow fires on. The brand, date and niche tags were
+// dropped: the first was redundant in a single-operator account, the third is
+// already a custom field, and the second minted a NEW GHL TAG EVERY DAY, which
+// clutters the account's tag list permanently and cannot be undone in bulk.
 {
-  const tagCell = (industry: string | null, dateKey: string): string => {
-    const row = buildCallQueueCsv([lead({ industry })], dateKey).csv.split("\r\n")[1];
-    // The angle contains a comma and is therefore quoted; Tags is the last field.
-    const m = /,("?)([^,"]*(?:,\s*[^,"]*)*)\1$/.exec(row);
-    return (m ? m[2] : row.split(",").pop() ?? "").replace(/^"|"$/g, "");
-  };
-  eq(
-    "E16 tags are brand, channel, export date, niche — in that order",
-    tagCell("Plumbing", "2026-08-05"),
-    "reclaimedhq, cold-call, 2026-08-05, plumbing"
-  );
-  // The date is the day the FILE was made, not the day the business was added.
-  // Those differ for every lead sourced before today, which is most of them.
+  // Parsed with splitCsvLine and indexed by header, NOT by taking the last
+  // comma-separated piece. That shortcut passed for the wrong reason: with an
+  // extra tag the field is quoted, so the naive split returned " cold-call" and
+  // failed on a stray SPACE rather than on the tag that had crept back in.
+  const tagCell = (industry: string | null, dateKey: string): string =>
+    splitCsvLine(buildCallQueueCsv([lead({ industry })], dateKey).csv.split("\r\n")[1])[
+      CSV_HEADERS.indexOf("Tags")
+    ];
+  eq("E16 the tag column is exactly the one workflow trigger", tagCell("Plumbing", "2026-08-05"), "cold-call");
+  // The regression that matters: a date creeping back in is invisible in a
+  // diff-free morning and only shows up as tag rot weeks later.
   check(
-    "E16b the date in the tag is the export date, not the record's",
-    tagCell("Plumbing", "2026-09-30").includes("2026-09-30"),
+    "E16b no date reaches the tag column, on any export date",
+    !/\d{4}-\d{2}-\d{2}/.test(tagCell("Plumbing", "2026-09-30")),
     tagCell("Plumbing", "2026-09-30")
   );
-  // A multi-word niche becomes one hyphenated tag rather than two tags, which is
-  // what a comma-separated list would otherwise make of "Electrical Contractor".
-  eq(
-    "E16c a multi-word niche stays a single tag",
-    tagCell("Electrical Contractor", "2026-08-05"),
-    "reclaimedhq, cold-call, 2026-08-05, electrical-contractor"
-  );
-  // No industry must not leave a dangling separator.
-  eq(
-    "E16d a lead with no niche drops the slot instead of trailing a comma",
-    tagCell(null, "2026-08-05"),
-    "reclaimedhq, cold-call, 2026-08-05"
-  );
+  // Held constant across the two inputs that used to vary it.
+  eq("E16c the niche does not reach the tag column", tagCell("Electrical Contractor", "2026-08-05"), "cold-call");
+  eq("E16d a lead with no niche is unchanged", tagCell(null, "2026-12-31"), "cold-call");
 }
 
 // A comma inside the angle must survive the round-trip intact — this is the
@@ -261,6 +253,42 @@ check(
   "F4 no row carries an empty Phone",
   mixedLines.slice(1).every((l) => splitCsvLine(l)[CSV_HEADERS.indexOf("Phone")].length > 0)
 );
+
+// F5-F7 · WHAT THE QUEUE-CLEAR IS ALLOWED TO TOUCH.
+// Downloading the CSV soft-deletes the businesses it exported — they belong to
+// GoHighLevel from that point and leaving them here builds a list nobody works
+// from. The route clears exactly `writtenIds`, so the danger is a lead that was
+// SKIPPED being cleared anyway: it never reached GHL, so clearing it would drop
+// it out of both systems at once with nothing left pointing at it.
+eq("F5 writtenIds counts the rows actually written", mixed.writtenIds.length, mixed.rowCount);
+eq("F6 writtenIds names the dialable leads, in row order", mixed.writtenIds.join(","), "a,d");
+check(
+  "F7 no phone-less lead is in writtenIds — clearing one would lose it from both systems",
+  !mixed.writtenIds.includes("b") && !mixed.writtenIds.includes("c"),
+  mixed.writtenIds.join(",")
+);
+
+// F8 · A CLEARED BUSINESS MUST NEVER BE SOURCED AGAIN.
+// This is the property that makes clearing safe rather than destructive: the
+// generator's exclude-set query deliberately does not filter deleted rows out,
+// and resurfacesIntoFreshBatch refuses anything carrying deletedAt. Asserted
+// here because the clear is only defensible while both halves hold.
+{
+  const longAgo = new Date("2020-01-01");
+  const cutoff = new Date("2026-08-05");
+  const cleared = { dialStatus: "dialed", deletedAt: new Date("2026-08-05"), status: "QUEUED", declinedAt: null };
+  const clearedButFresh = { dialStatus: "fresh", deletedAt: new Date("2026-08-05"), status: "DECLINED", declinedAt: longAgo };
+  const notCleared = { dialStatus: "fresh", deletedAt: null, status: "DECLINED", declinedAt: longAgo };
+  check("F8 a cleared business never resurfaces into a fresh batch", !resurfacesIntoFreshBatch(cleared, cutoff));
+  check(
+    "F8b even a FRESH, long-declined business stays gone once cleared — deletedAt is the veto",
+    !resurfacesIntoFreshBatch(clearedButFresh, cutoff)
+  );
+  check(
+    "F8c the check is not vacuous — the same business un-cleared DOES resurface",
+    resurfacesIntoFreshBatch(notCleared, cutoff)
+  );
+}
 
 // ── G · Time zone lookup never guesses ───────────────────────────────────────
 
