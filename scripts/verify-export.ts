@@ -20,7 +20,7 @@ import { clampBatchSize, MIN_BATCH_SIZE, MAX_BATCH_SIZE, DAILY_BATCH_SIZE } from
 import { QUEUE_LIMIT } from "../src/lib/call-queue";
 import { timezoneForCity, METRO_TIMEZONES, metroCallTier } from "../src/lib/call-timing";
 import { dateKeyOf, parseQueueParams } from "../src/lib/call-queue-query";
-import { resurfacesIntoFreshBatch } from "../src/lib/dial-status";
+import { resurfacesIntoFreshBatch, isGeneratable } from "../src/lib/dial-status";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -288,6 +288,47 @@ check(
     "F8c the check is not vacuous — the same business un-cleared DOES resurface",
     resurfacesIntoFreshBatch(notCleared, cutoff)
   );
+}
+
+// F9 · THE CLEAR MUST NOT EAT A BOOKED CALL.
+// isInQueue tests the lead status and the due time, never the dial status, so a
+// BOOKED_ZOOM whose next action has slipped into the past is back in the queue
+// and therefore in the file. The export's dial stamp always refused to touch a
+// permanent outcome — "must never be demoted by a re-export" — and the clear,
+// which is far more destructive, has to refuse the same set.
+{
+  const clearable = (d: string) => isGeneratable(d) || d === "dialed";
+  check("F9 a cold lead is still cleared on export", clearable("fresh") && clearable("dialed"));
+  const spared = ["booked", "not_interested", "do_not_call", "disqualified"].filter((d) => clearable(d));
+  check(
+    "F9b booked / not-interested / do-not-call / disqualified survive the clear",
+    spared.length === 0,
+    "would be cleared: " + spared.join(", ")
+  );
+}
+
+// F10 · A PHONE-LESS BUSINESS MUST NEVER BE SOURCED.
+// This is a cold-CALL list. Without a number a business cannot be dialled, cannot
+// go in the CSV, and cannot reach GoHighLevel — and because the export skips it,
+// the export never clears it either, so it would sit in the call queue for good.
+// gatherProspects drops it before it is ever collected. Asserted against the
+// SOURCE rather than behaviour, because reaching the real one needs the Places
+// API: the guard is one line and deleting it is exactly how this regresses.
+{
+  const src = readFileSync(join(process.cwd(), "src/lib/daily-prospects.ts"), "utf8");
+  const guard = /if \(!p\.phone \|\| !p\.phone\.trim\(\)\) continue;/.test(src);
+  check("F10 gatherProspects skips a place with no phone", guard);
+  // It must come BEFORE the collect, or it drops nothing.
+  const beforeCollect =
+    src.indexOf("if (!p.phone || !p.phone.trim()) continue;") <
+    src.indexOf("collected.push({ place: p, metro });");
+  check("F10b the skip runs before the place is collected", guard && beforeCollect);
+  // And AFTER the benchmark push — a competitor with no listed number is still a
+  // competitor, and the review gap is measured against the full local pool.
+  const afterPool =
+    src.indexOf("pool.push({ name: p.name, reviews: p.userRatingsTotal });") <
+    src.indexOf("if (!p.phone || !p.phone.trim()) continue;");
+  check("F10c it still counts toward the metro review benchmark", guard && afterPool);
 }
 
 // ── G · Time zone lookup never guesses ───────────────────────────────────────

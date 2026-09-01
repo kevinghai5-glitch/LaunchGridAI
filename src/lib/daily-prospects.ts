@@ -150,6 +150,19 @@ export async function gatherProspects(
         if (p.name && p.userRatingsTotal > 0) {
           pool.push({ name: p.name, reviews: p.userRatingsTotal });
         }
+        // NO PHONE, NOT A PROSPECT. This is a cold-CALL list; a business with no
+        // number cannot be dialled, cannot go in the CSV, and cannot reach
+        // GoHighLevel. Sourced anyway it would sit in the queue for good — the
+        // export skips it, so the export never clears it either.
+        //
+        // Dropped HERE rather than at export, so it never reaches the database,
+        // never appears in Opportunities, and never costs a triage decision. It
+        // still counts toward the metro's review benchmark above: a competitor
+        // with no listed number is still a competitor.
+        //
+        // Roughly 8% of Places results, so the search simply walks further to
+        // fill the batch — ask for 50 and get 50 callable ones.
+        if (!p.phone || !p.phone.trim()) continue;
         if (!p.placeId || seen.has(p.placeId)) continue;
         seen.add(p.placeId);
         collected.push({ place: p, metro });

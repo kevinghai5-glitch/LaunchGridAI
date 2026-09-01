@@ -101,10 +101,22 @@ export async function POST(req: Request) {
   // Only rows ACTUALLY WRITTEN are cleared. A lead skipped for want of a dialable
   // phone never reached GoHighLevel, so clearing it would drop it out of both
   // systems at once and leave nothing pointing at the fact it existed.
+  // AND it must be safe to touch. `marked` is the set the dial stamp already
+  // filters to — fresh or dialed only, never a permanent outcome — and the
+  // clear reuses it rather than restating the rule.
+  //
+  // Without this, a BOOKED_ZOOM lead whose next action has fallen into the past
+  // is back in the queue (isInQueue tests the lead status and the due time, not
+  // the dial status), so it rides into the file and gets soft-deleted with the
+  // cold ones. That is a booked call disappearing out of the CRM. The stamp was
+  // always careful here — "a permanent status must never be demoted by a
+  // re-export" — and the clear, which is the more destructive of the two, was
+  // not.
+  const clearableIds = writtenIds.filter((id) => marked.has(id));
   let cleared = 0;
-  if (writtenIds.length > 0) {
+  if (clearableIds.length > 0) {
     const clearedRes = await prisma.business.updateMany({
-      where: { id: { in: writtenIds }, userId: session.user.id, deletedAt: null },
+      where: { id: { in: clearableIds }, userId: session.user.id, deletedAt: null },
       data: { deletedAt: new Date() },
     });
     cleared = clearedRes.count;
