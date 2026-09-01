@@ -33,26 +33,48 @@ import {
 } from "@/lib/leak-calculator";
 import type { ObservedFacts } from "@/lib/observed-facts";
 
-// ── Palette — the client-facing brand, declared locally ─────────────────────
+// ── Palette — THE SAME BRAND THE DELIVERABLES USE ───────────────────────────
+//
+// Values transcribed from src/lib/exporters/_shell.ts, not approximated. This
+// screen and the offer page and the three documents are read by ONE person, in
+// sequence, over a few days: the calculator on the Zoom, the offer straight
+// after, the pack once they pay. They were near-misses of each other — #111111
+// against #1A1814, #96794A against #9A7B3F, Charter against Source Serif 4 —
+// which is worse than an obvious difference, because it reads as sloppiness
+// rather than as design.
+//
+// The ON-INK trio is here for the same reason it exists there: the masthead is
+// painted --ink, and the light-ground tokens fail on it (--accent measures
+// 4.46:1, --ink-muted 3.10:1, both under the 4.5 AA floor).
 const C = {
-  ink: "#111111",
+  ink: "#1A1814",
   ink2: "#3A3A36",
-  muted: "#6E6E68",
-  gold: "#96794A",
-  goldSoft: "#F7F2E8",
-  goldLine: "#E3D6BE",
+  muted: "#6B6659",
+  gold: "#9A7B3F",
+  goldText: "#7E6229",
+  goldSoft: "#F2ECDD",
+  goldLine: "#E7E3D8",
   paper: "#FFFFFF",
-  panel: "#F7F5F0",
-  line: "#E4E2DC",
-  loss: "#954B3E",
-  clean: "#41785B",
-  serif: 'Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif',
-  sans: 'ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif',
+  panel: "#F4F2EC",
+  line: "#E7E3D8",
+  bg: "#FBFAF7",
+  loss: "#A8443B",
+  clean: "#3F7D5A",
+  onInkAccent: "#C9A961",
+  onInkMuted: "#A5A092",
+  onInkRule: "#3A362E",
+  // next/font loads this in the root layout; the stack after it is what a
+  // print/PDF path falls back to.
+  serif: "var(--font-serif), 'Source Serif 4', Georgia, 'Times New Roman', serif",
+  sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
+// The deliverables' label voice: mono, not bold sans. Every label across the
+// documents, the offer and this screen is now the same object.
 const microLabel: React.CSSProperties = {
-  fontFamily: C.sans, fontSize: 9.5, letterSpacing: "0.14em",
-  textTransform: "uppercase", fontWeight: 700, color: C.muted,
+  fontFamily: C.mono, fontSize: 9.5, letterSpacing: "0.14em",
+  textTransform: "uppercase", fontWeight: 500, color: C.muted,
   marginBottom: 5, display: "block",
 };
 
@@ -105,10 +127,15 @@ function measuredText(f: ObservedFacts) {
       : `${f.reviews.count}`;
   const presence = (s: string) => (s === "found" ? "found" : s === "none" ? "none found" : "");
   return [
-    { k: "Mobile speed", v: speed },
-    { k: "Google reviews", v: reviews },
-    { k: "Booking link", v: presence(f.bookingLink.state) },
-    { k: "Click-to-call", v: presence(f.clickToCall.state) },
+    { k: "Mobile speed", v: speed, fix: false },
+    { k: "Google reviews", v: reviews, fix: false },
+    // The one the operator can correct. This check infers a booking link by
+    // scanning the homepage HTML for a known booking host, and it is wrong often
+    // enough that he reads it on a live call and knows better. The other three
+    // are a PageSpeed number or a Google count — if one of those is wrong the fix
+    // is to re-measure, not to type over it.
+    { k: "Booking link", v: presence(f.bookingLink.state), fix: true },
+    { k: "Click-to-call", v: presence(f.clickToCall.state), fix: false },
   ];
 }
 
@@ -175,7 +202,11 @@ export default function CalculatorPage() {
       dirty.current = false;
       setSavedAt(data.savedAt ?? new Date().toISOString());
       if (data.publicId) setPublicId(data.publicId);
-      toast.success("Saved");
+      // NO TOAST ON SUCCESS. Saving is automatic and debounced, so this fired on
+      // every pause in typing — during a call, in front of the prospect — to
+      // repeat what the line under the form already states permanently ("Saved
+      // against this business — <time>"). Failures still toast: those are the
+      // ones worth interrupting for.
     } catch {
       toast.error("Could not save");
     } finally {
@@ -191,6 +222,31 @@ export default function CalculatorPage() {
     const t = setTimeout(() => { void save(); }, 1200);
     return () => clearTimeout(t);
   }, [inputs, loading, save]);
+
+  // Correcting the booking link. Sends only that value; the route merges it onto
+  // what the scan wrote rather than replacing the row, so the mobile score and the
+  // click-to-call result — which ARE measured — survive a correction to one field.
+  const [fixingBooking, setFixingBooking] = useState(false);
+  const setBookingLink = async (state: string) => {
+    setFixingBooking(true);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}/measure`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingLink: state }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Could not update the booking link");
+        return;
+      }
+      if (data.observedFacts) setObserved(data.observedFacts as ObservedFacts);
+    } catch {
+      toast.error("Could not update the booking link");
+    } finally {
+      setFixingBooking(false);
+    }
+  };
 
   const runMeasure = async () => {
     setMeasuring(true);
@@ -221,22 +277,30 @@ export default function CalculatorPage() {
   const measured = observed ? measuredText(observed) : [];
 
   return (
-    <div style={{ background: C.panel, minHeight: "100vh", fontFamily: C.serif, color: C.ink2, fontSize: 16, lineHeight: 1.5 }}>
-      {/* masthead */}
-      <header style={{ background: C.paper, borderBottom: `1px solid ${C.line}`, borderTop: `3px solid ${C.gold}`, padding: "22px 0 20px" }}>
+    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: C.serif, color: C.ink2, fontSize: 16, lineHeight: 1.5 }}>
+      {/* MASTHEAD — the deliverable cover. Ink ground, a short brass rule ahead of
+          the eyebrow, display line in the serif at 300. It is the first thing a
+          prospect sees on the shared tab and the first thing they see again on the
+          offer page and in the documents, so it is the SAME object all three
+          times rather than three near-misses of each other. */}
+      <header style={{ background: C.ink, padding: "34px 0 30px" }}>
         <div style={{ maxWidth: 1020, margin: "0 auto", padding: "0 20px" }}>
-          <div style={{ fontFamily: C.sans, fontSize: 10, letterSpacing: "0.26em", textTransform: "uppercase", fontWeight: 700, color: C.gold, marginBottom: 7 }}>
-            ReclaimedHQ · Conversion Recovery
+          <div className="flex items-center" style={{ gap: 10, marginBottom: 22 }}>
+            <span style={{ width: 20, height: 2, background: C.onInkAccent, flex: "none" }} />
+            <span style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 500, color: C.onInkAccent }}>
+              ReclaimedHQ · Conversion Recovery
+            </span>
           </div>
-          <h1 style={{ fontSize: 27, lineHeight: 1.1, margin: 0, color: C.ink, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          <h1 style={{ fontSize: 38, lineHeight: 1.05, margin: 0, color: C.bg, fontWeight: 300, letterSpacing: "-0.022em" }}>
             Where the leads are going
-            <span style={{ display: "block", fontSize: 14, fontWeight: 400, fontStyle: "italic", color: C.muted, marginTop: 6 }}>
+            <span style={{ display: "block", fontFamily: C.sans, fontSize: 14.5, fontWeight: 400, color: C.onInkMuted, marginTop: 12, letterSpacing: 0 }}>
               Built live, from your numbers — not industry averages.
             </span>
           </h1>
           {(businessName || market) && (
-            <div style={{ marginTop: 12, fontSize: 13.5, color: C.muted }}>
-              {businessName}{market ? ` · ${market}` : ""}
+            <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.onInkRule}`, fontSize: 15, color: C.bg }}>
+              {businessName}
+              {market ? <span style={{ color: C.onInkMuted }}>{` · ${market}`}</span> : null}
             </div>
           )}
         </div>
@@ -250,9 +314,36 @@ export default function CalculatorPage() {
               {measured.map((m) => (
                 <div key={m.k}>
                   <span style={microLabel}>{m.k}</span>
-                  <div style={{ ...fieldStyle, background: C.panel, color: m.v ? C.ink : C.muted }}>
-                    {m.v || "not measured yet"}
-                  </div>
+                  {m.fix ? (
+                    // A select, not a text box: the value is one of three states,
+                    // and typing would let a fourth in. Writes through PATCH, which
+                    // corrects this value and leaves the other three — and the
+                    // "last measured" timestamp — exactly as the scan left them.
+                    <select
+                      value={observed?.bookingLink.state ?? "unknown"}
+                      onChange={(e) => void setBookingLink(e.target.value)}
+                      disabled={fixingBooking}
+                      aria-label="Booking link — correct by hand"
+                      style={{
+                        ...fieldStyle, background: C.panel,
+                        color: m.v ? C.ink : C.muted,
+                        cursor: fixingBooking ? "default" : "pointer",
+                        width: "100%", appearance: "none",
+                        backgroundImage:
+                          "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B6659' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>\")",
+                        backgroundRepeat: "no-repeat",
+                        backgroundPosition: "right 11px center",
+                      }}
+                    >
+                      <option value="found">found</option>
+                      <option value="none">none found</option>
+                      <option value="unknown">not measured yet</option>
+                    </select>
+                  ) : (
+                    <div style={{ ...fieldStyle, background: C.panel, color: m.v ? C.ink : C.muted }}>
+                      {m.v || "not measured yet"}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -472,27 +563,33 @@ export default function CalculatorPage() {
       </div>
 
       {/* ── the sticky total ───────────────────────────────────────────────── */}
-      <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: C.paper, borderTop: `3px solid ${C.gold}`, boxShadow: "0 -3px 18px rgba(0,0,0,.07)", zIndex: 20 }}>
+      {/* Fixed to the bottom, so every pixel here is taken from the questions
+          above it for the whole call. Trimmed: figure 36 to 27, rule 3px to 2,
+          padding and gaps in, derivation smaller across a wider measure so it
+          lands in fewer lines. Nothing is removed — the derivation is the
+          sentence that makes the number defensible out loud on a Zoom, and
+          hiding it to save height would cost more than the height is worth. */}
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: C.paper, borderTop: `2px solid ${C.gold}`, boxShadow: "0 -3px 18px rgba(0,0,0,.07)", zIndex: 20 }}>
         <div
           className="flex flex-wrap items-center justify-between"
-          style={{ maxWidth: 1020, margin: "0 auto", padding: "14px 20px", gap: 26 }}
+          style={{ maxWidth: 1020, margin: "0 auto", padding: "10px 20px", gap: 18 }}
         >
           <div>
             <div className="flex flex-wrap items-baseline" style={{ gap: 13 }}>
-              <span style={{ fontSize: 36, fontWeight: 700, color: computed.allClean ? C.clean : C.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+              <span style={{ fontSize: 27, fontWeight: 400, color: computed.allClean ? C.clean : C.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
                 {computed.totalHigh > 0 ? cadRange(computed.totalLow, computed.totalHigh) : cad(0)}
               </span>
-              <span style={{ fontFamily: C.sans, fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: C.muted, fontWeight: 700 }}>
+              <span style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, fontWeight: 500 }}>
                 per month
               </span>
               {computed.totalHigh > 0 && (
-                <span style={{ fontSize: 14, color: C.muted, fontVariantNumeric: "tabular-nums" }}>
+                <span style={{ fontSize: 13, color: C.muted, fontVariantNumeric: "tabular-nums" }}>
                   ≈ {cadRange(computed.annualLow, computed.annualHigh)} a year
                 </span>
               )}
             </div>
             {computed.capped && (
-              <div style={{ fontFamily: C.sans, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, color: "#8A6317", marginTop: 5 }}>
+              <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 500, color: C.goldText, marginTop: 4 }}>
                 Conservatively capped
               </div>
             )}
@@ -504,7 +601,7 @@ export default function CalculatorPage() {
               </div>
             )}
           </div>
-          <p style={{ fontSize: 12.5, color: C.muted, maxWidth: 470, lineHeight: 1.45, margin: 0 }}>
+          <p style={{ fontSize: 11.5, color: C.muted, maxWidth: 560, lineHeight: 1.4, margin: 0 }}>
             {computed.derivation}
           </p>
           <div className="flex flex-wrap" style={{ gap: 8 }}>

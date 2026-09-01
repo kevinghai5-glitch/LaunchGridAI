@@ -1491,7 +1491,14 @@ const OTHER_DEFINITION_SOURCES = {
   /** Re-declared by the component that reads them, inside its own .lgp block. */
   clientDocumentVocabulary: {
     file: PUBLIC_PROPOSAL,
-    tokens: ["--ink", "--ink-muted", "--heading", "--accent-tint", "--good", "--critical"],
+    tokens: [
+      "--ink", "--ink-muted", "--heading", "--accent-tint", "--good", "--critical",
+      // The ON-INK trio and the mono face, added 2026-09-01 when the offer page
+      // took the deliverables' treatment: its cover is painted --ink, and the
+      // light-ground tokens fail on it (--accent 4.46:1, --ink-muted 3.10:1,
+      // both under the 4.5 AA floor). Same three values as _shell.ts.
+      "--on-ink-accent", "--on-ink-muted", "--on-ink-rule", "--mono",
+    ],
     why:
       "the CLIENT-DOCUMENT vocabulary. Declared inside `.lgp` in the component itself so the cream " +
       "proposal carries its own palette and globals.css never has to define a client token — which " +
@@ -1500,7 +1507,11 @@ const OTHER_DEFINITION_SOURCES = {
   /** Injected by next/font as a class on <body> in the root layout. */
   nextFont: {
     file: ROOT_LAYOUT,
-    tokens: ["--font-sans", "--font-mono"],
+    // --font-serif joined them 2026-09-01. Every client-facing surface named
+    // 'Source Serif 4' in its stack and NONE of them loaded it, so the calculator,
+    // the offer page and the deliverable covers were all rendering in the Georgia
+    // fallback. It is loaded by next/font now, which is why it belongs here.
+    tokens: ["--font-sans", "--font-mono", "--font-serif"],
     why: "next/font generates these; the root layout names them via the `variable:` option.",
   },
   /** Supplied by Radix on the element it measures, at runtime. */

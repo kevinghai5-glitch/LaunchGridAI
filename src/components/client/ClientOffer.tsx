@@ -29,7 +29,9 @@ const CSS = `
   --bg:#FBFAF7; --surface:#FFFFFF; --surface-2:#F4F2EC; --ink:#1A1814;
   --ink-muted:#6B6659; --accent:#9A7B3F; --accent-tint:#F2ECDD; --border:#E7E3D8;
   --good:#3F7D5A; --critical:#A8443B;
-  --heading:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --on-ink-accent:#C9A961; --on-ink-muted:#A5A092; --on-ink-rule:#3A362E;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --heading:var(--font-serif),'Source Serif 4',Georgia,'Times New Roman',serif;
   background:var(--bg); color:var(--ink); padding:36px 28px 64px;
   font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   font-size:15.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
@@ -42,20 +44,24 @@ const CSS = `
 .lgp strong { color:var(--ink); font-weight:600; }
 
 .lgp .lgp-head {
-  background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--accent);
-  border-radius:4px; padding:34px 32px 26px; margin-bottom:22px;
+  background:var(--ink); border:none; border-radius:4px;
+  padding:56px 44px 40px; margin-bottom:22px;
 }
 .lgp .lgp-eyebrow {
-  font-family:var(--heading); text-transform:uppercase; letter-spacing:.24em;
-  font-size:11px; color:var(--accent); margin-bottom:12px; font-weight:700;
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--mono); text-transform:uppercase; letter-spacing:.2em;
+  font-size:10px; color:var(--on-ink-accent); margin-bottom:38px; font-weight:500;
 }
-.lgp .lgp-title { font-size:32px; line-height:1.14; letter-spacing:-.015em; font-weight:700; max-width:24ch; }
-.lgp .lgp-sub { font-size:14px; color:var(--ink-muted); margin-top:12px; }
+.lgp .lgp-eyebrow::before { content:""; width:20px; height:2px; background:var(--on-ink-accent); flex:none; }
+.lgp .lgp-title { font-size:46px; line-height:1.04; letter-spacing:-.022em; font-weight:300; max-width:18ch; color:var(--bg); }
+.lgp .lgp-sub { font-size:15px; color:var(--on-ink-muted); margin-top:16px; max-width:52ch; }
 
-.lgp .lgp-sec { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:26px 30px; margin-bottom:16px; }
-.lgp .lgp-sec-head { display:flex; align-items:baseline; gap:12px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-.lgp .lgp-sec-n { font-family:var(--heading); font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-tint); padding:4px 9px; border-radius:6px; line-height:1; }
-.lgp .lgp-sec h2 { font-size:21px; letter-spacing:-.015em; font-weight:700; line-height:1.2; }
+/* Sections stop being cards. Inside them the rows ARE cards, and a card in a
+   card is what made the deliverables read as slop before the same fix. */
+.lgp .lgp-sec { background:transparent; border:none; border-radius:0; padding:0; margin-bottom:40px; }
+.lgp .lgp-sec-head { display:flex; align-items:baseline; gap:16px; margin-bottom:22px; padding-bottom:16px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.lgp .lgp-sec-n { font-family:var(--mono); font-size:11.5px; font-weight:600; color:#7E6229; background:transparent; padding:0; border-radius:0; line-height:1; letter-spacing:.06em; }
+.lgp .lgp-sec h2 { font-size:27px; letter-spacing:-.014em; font-weight:400; line-height:1.2; }
 .lgp .lgp-note { font-size:13px; color:var(--ink-muted); margin-top:10px; }
 
 .lgp .lgp-row { border:1px solid var(--border); border-left:3px solid var(--critical); border-radius:0 6px 6px 0; padding:14px 16px; margin-bottom:10px; background:var(--surface); }

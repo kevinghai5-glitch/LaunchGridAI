@@ -202,7 +202,7 @@ eq("H5 money is CAD-grouped", money(18500), "$18,500");
 // ── I · The page is written for the prospect ─────────────────────────────────
 // Screen-shared live, so a single operator-facing phrase is a real defect.
 {
-  const page = read("src/app/(dashboard)/library/[id]/calculator/page.tsx");
+  const page = read("src/app/(present)/library/[id]/calculator/page.tsx");
   const lib = read("src/lib/leak-calculator.ts");
   // Only the rendered strings matter — comments explain the rule and legitimately
   // name it. Strip them before scanning.

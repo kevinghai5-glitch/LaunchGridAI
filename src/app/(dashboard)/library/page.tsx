@@ -292,7 +292,7 @@ function EmptyRow({ text }: { text: string }) {
 // right here and is dead in a client's inbox, so when no public host is
 // configured the button does not copy a broken URL quietly — it refuses and
 // names the variable to set (see src/lib/share-link.ts).
-function OfferLinkRow({ publicId }: { publicId: string }) {
+function OfferLinkRow({ publicId, businessId }: { publicId: string; businessId: string }) {
   const shareUrl = offerShareUrl(publicId);
   const copy = () => {
     if (!shareUrl) {
@@ -361,6 +361,34 @@ function OfferLinkRow({ publicId }: { publicId: string }) {
         >
           Copy client link
         </button>
+        {/* The way back to the figures. The calculator was always editable and
+            saving always upserted — the offer page reads the frozen `computed`,
+            so a re-save moves it — but once the offer existed nothing on this
+            screen linked to the calculator, so it read as locked when it was only
+            unreachable. publicId is not in the update payload, so the client link
+            survives an edit.
+
+            ITS OWN TAB, and that is not a preference. The calculator is filled in
+            live on a Zoom with the prospect watching a shared tab; opening it in
+            place would put this screen — every other client, the pipeline, the
+            call queue — on their screen on the way there. Every route into the
+            calculator carries target=_blank for the same reason. */}
+        <a
+          href={`/library/${businessId}/calculator`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--text-3)",
+            textDecoration: "none",
+          }}
+        >
+          Edit figures
+        </a>
       </div>
     </div>
   );
@@ -440,16 +468,20 @@ function MiniLink({
   href,
   icon: Icon,
   title,
+  newTab,
 }: {
   href: string;
   icon: typeof Plus;
   title: string;
+  /** Open in its own tab — see the calculator links for why that matters. */
+  newTab?: boolean;
 }) {
   return (
     <Link
       href={href}
       title={title}
       aria-label={title}
+      {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -976,12 +1008,14 @@ function BusinessPanel({
           />
           <div style={COLUMN_BODY}>
             {item.offerPublicId ? (
-              <OfferLinkRow publicId={item.offerPublicId} />
+              <OfferLinkRow publicId={item.offerPublicId} businessId={item.businessId} />
             ) : (
               <div>
                 <EmptyRow text="No calculator saved yet." />
                 <Link
                   href={`/library/${item.businessId}/calculator`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -1019,7 +1053,8 @@ function BusinessPanel({
                 <MiniLink
                   href={`/library/${b.id}/calculator`}
                   icon={Gauge}
-                  title="Leak calculator — their numbers, the six questions, what it costs a month"
+                  title="Leak calculator — their numbers, the six questions, what it costs a month (opens in its own tab)"
+                  newTab
                 />
                 <MiniLink
                   href={`/library/${b.id}/intake`}

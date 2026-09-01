@@ -436,8 +436,13 @@ function NoAssessment({ businessId }: { businessId: string }) {
         The leak figures and the offer are both built from it. Open the calculator, fill it
         in on the call, and both of these screens fill themselves.
       </p>
+      {/* ITS OWN TAB. This link is used mid-Zoom with the prospect watching a
+          shared tab — opening the calculator in place would put the runner, and
+          whatever else is on this screen, in front of them on the way there. */}
       <a
         href={`/library/${businessId}/calculator`}
+        target="_blank"
+        rel="noopener noreferrer"
         style={{
           display: "inline-flex",
           alignItems: "center",

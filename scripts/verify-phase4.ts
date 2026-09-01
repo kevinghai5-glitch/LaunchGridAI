@@ -737,7 +737,13 @@ check("J1 · every rendered dollar figure a prospect can see carries the CAD mar
     // afterwards, so the same person reads both, and money formatted two ways
     // across them is the exact failure this law exists to stop.
     "src/components/client/ClientOffer.tsx",
-    "src/app/(dashboard)/library/[id]/calculator/page.tsx",
+    // (present), not (dashboard): moved 2026-09-01 because this page is
+    // screen-shared on a Zoom, and inside that group it inherited the sidebar
+    // and the motivation popup — so the prospect saw the operator's revenue and
+    // his private notes. The URL is unchanged; a route group adds no path
+    // segment. This scan fails loudly on a moved path rather than skipping it,
+    // which is how the move was caught.
+    "src/app/(present)/library/[id]/calculator/page.tsx",
     // The shared formatter both of them route through. Scanning it closes the
     // hole where the marker is stripped at the source and every caller stays
     // clean-looking.

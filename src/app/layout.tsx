@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "sonner";
@@ -8,6 +8,19 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+// The serif the CLIENT-FACING surfaces are set in — the calculator shown on a
+// Zoom, the offer page, and the three deliverables. Every one of them already
+// named 'Source Serif 4' in its font stack and NONE of them loaded it, so all of
+// them have been rendering in the Georgia fallback. Weight 300 is here because
+// the deliverable covers set their display line in it; without it the browser
+// synthesises a light face and the cover reads thin and uneven.
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  weight: ["300", "400", "600"],
+  variable: "--font-serif",
   display: "swap",
 });
 
@@ -53,7 +66,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} ${sourceSerif.variable} font-sans antialiased`}>
         <Providers>
           {children}
           <Toaster position="bottom-right" />

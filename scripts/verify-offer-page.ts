@@ -215,7 +215,7 @@ for (const p of [
   // the two surfaces drift apart.
   for (const rel of [
     "src/app/(dashboard)/library/page.tsx",
-    "src/app/(dashboard)/library/[id]/calculator/page.tsx",
+    "src/app/(present)/library/[id]/calculator/page.tsx",
   ]) {
     const src = strip(read(rel));
     check(`F5 ${rel} copies via offerShareUrl`, /offerShareUrl\(/.test(src));

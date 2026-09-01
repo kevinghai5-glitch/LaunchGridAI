@@ -137,7 +137,7 @@ check(
 );
 check(
   "E7b the calculator is under /library",
-  existsSync(join(ROOT, "src/app/(dashboard)/library/[id]/calculator/page.tsx"))
+  existsSync(join(ROOT, "src/app/(present)/library/[id]/calculator/page.tsx"))
 );
 check(
   "E7c neither is left under /businesses",
