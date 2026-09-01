@@ -19,8 +19,10 @@ import { TopBar } from "@/components/dashboard/TopBar";
 import { KpiCard } from "@/components/dashboard/os";
 import { LgButton } from "@/components/ui/lg-button";
 import { formatCurrency } from "@/lib/utils";
+import type { BusinessResult } from "@/types";
 import {
   CRM_STAGES,
+  CRM_BOARD_STAGES,
   type CrmStageId,
   opportunityScore,
   gapsFor,
@@ -236,9 +238,9 @@ export default function CrmPage() {
         {!loading && leads.length > 0 && view === "board" && (
           <div
             className="grid items-start"
-            style={{ gridTemplateColumns: `repeat(${CRM_STAGES.length}, minmax(190px, 1fr))`, gap: 12, overflowX: "auto", paddingBottom: 8 }}
+            style={{ gridTemplateColumns: `repeat(${CRM_BOARD_STAGES.length}, minmax(190px, 1fr))`, gap: 12, overflowX: "auto", paddingBottom: 8 }}
           >
-            {CRM_STAGES.map((s) => {
+            {CRM_BOARD_STAGES.map((s) => {
               const stageLeads = leads.filter((l) => l.stage === s.id);
               const mrr = stageLeads.reduce((acc, l) => acc + l.monthlyValue, 0);
               const isOver = overStage === s.id;
@@ -272,6 +274,10 @@ export default function CrmPage() {
                       {s.money && mrr > 0 ? `${formatCurrency(mrr)}/mo` : s.hint}
                     </div>
                   </div>
+
+                  {/* The only way into this board. Booked is where a business
+                      starts existing here, so the box lives on that column. */}
+                  {s.id === "BOOKED" && <AddBookedBar onAdded={load} />}
 
                   {/* cards */}
                   <div
@@ -771,6 +777,12 @@ function DetailRow({
 
 // Inline stage picker — a styled native <select> so a lead can be re-staged from
 // the table without dragging. Writes through moveLead (status mapping + persist).
+//
+// EVERY stage, not just the drawn ones. The board shows two columns, but the
+// table lists every lead including those in hidden stages, and a <select> whose
+// value matches none of its options renders the FIRST one. Narrowed to the board
+// list, four declined leads and a not-interested one all displayed as "Zoom
+// Booked" — and picking from that dropdown would have moved them there for real.
 function StageSelect({
   value,
   onChange,
@@ -967,5 +979,175 @@ function Td({
     >
       {children}
     </td>
+  );
+}
+
+
+/**
+ * "Add whoever booked" — a name box on the Zoom Booked column.
+ *
+ * The pipeline is run in GoHighLevel. Nothing walks this board from cold
+ * prospect to client any more: cold leads are generated, exported and cleared
+ * without ever appearing here, and a business only becomes this software's
+ * business at the moment it books, because that is the gate on generating its
+ * documents.
+ *
+ * So the way in is by name. It runs the same Places lookup that sourced the
+ * lead in the first place, so the row carries a real address, phone, rating and
+ * Place ID rather than something typed. That Place ID matters twice over: it is
+ * what the save path matches on to REVIVE a business you cold-called weeks ago —
+ * bringing its history back with it instead of starting a second row beside it —
+ * and it is what keeps the business excluded from future sourcing.
+ */
+function AddBookedBar({ onAdded }: { onAdded: () => void }) {
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<BusinessResult[] | null>(null);
+
+  const search = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    setResults(null);
+    try {
+      const res = await fetch("/api/businesses/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "name", name: name.trim(), city: city.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Search failed");
+        return;
+      }
+      const hits: BusinessResult[] = data.results ?? [];
+      setResults(hits);
+      if (hits.length === 0) toast.info("No match on Google. Try adding the city.");
+    } catch {
+      toast.error("Search failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async (hit: BusinessResult) => {
+    setBusy(true);
+    try {
+      // Mapped field by field, NOT spread. Places returns placeId /
+      // userRatingsTotal / location{lat,lng}; the save schema wants
+      // googlePlaceId / reviewCount / latitude / longitude, and silently
+      // ignores what it does not recognise. Spreading the hit would have
+      // dropped the Place ID — the one field dedupe and revive key on — and the
+      // business would have come back in a future batch.
+      const res = await fetch("/api/businesses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          googlePlaceId: hit.placeId,
+          name: hit.name,
+          address: hit.address,
+          phone: hit.phone,
+          website: hit.website,
+          rating: hit.rating,
+          reviewCount: hit.userRatingsTotal,
+          latitude: hit.location?.lat,
+          longitude: hit.location?.lng,
+          mapsUrl: hit.mapsUrl,
+          category: hit.category,
+          description: hit.description,
+          photoUrl: hit.photoUrl,
+          industry: hit.category || "",
+          city: city.trim() || (hit.address?.split(",").slice(-2, -1)[0]?.trim() ?? ""),
+          status: "BOOKED_ZOOM",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Could not add");
+        return;
+      }
+      // `revived` means this business was already on record and cleared after an
+      // export — worth saying, because its call history came back with it.
+      toast.success(
+        data.revived
+          ? `${hit.name} — booked. Its earlier call history came back with it.`
+          : `${hit.name} — booked.`
+      );
+      setName("");
+      setCity("");
+      setResults(null);
+      onAdded();
+    } catch {
+      toast.error("Could not add");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+      <div className="flex items-center" style={{ gap: 6 }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") search();
+          }}
+          placeholder="Business that booked"
+          aria-label="Business that booked"
+          style={{
+            flex: 1, minWidth: 0, height: 30, padding: "0 9px", fontSize: 12,
+            background: "var(--bg-deep)", border: "1px solid var(--line)",
+            borderRadius: 7, color: "var(--text)", fontFamily: "inherit",
+          }}
+        />
+        <input
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") search();
+          }}
+          placeholder="City"
+          aria-label="City"
+          style={{
+            width: 74, height: 30, padding: "0 9px", fontSize: 12,
+            background: "var(--bg-deep)", border: "1px solid var(--line)",
+            borderRadius: 7, color: "var(--text)", fontFamily: "inherit",
+          }}
+        />
+        <LgButton variant="secondary" size="sm" onClick={search} disabled={busy || !name.trim()}>
+          {busy ? "…" : "Find"}
+        </LgButton>
+      </div>
+
+      {results !== null && results.length > 0 && (
+        <div
+          style={{
+            display: "flex", flexDirection: "column", gap: 4, padding: 6,
+            border: "1px solid var(--line)", borderRadius: 9, background: "var(--bg-deep)",
+          }}
+        >
+          {results.slice(0, 5).map((r) => (
+            <button
+              key={r.placeId || r.name}
+              type="button"
+              onClick={() => add(r)}
+              disabled={busy}
+              className="text-left"
+              style={{
+                padding: "6px 8px", borderRadius: 6, border: "none",
+                background: "transparent", cursor: busy ? "default" : "pointer",
+                color: "var(--text)", fontFamily: "inherit",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{r.name}</div>
+              <div style={{ fontSize: 10.5, color: "var(--text-4)" }}>
+                {r.address || "No address on file"}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

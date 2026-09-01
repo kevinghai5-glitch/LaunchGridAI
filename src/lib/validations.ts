@@ -48,24 +48,6 @@ export const businessSearchSchema = z
     }
   });
 
-export const saveBusinessSchema = z.object({
-  googlePlaceId: z.string().optional(),
-  name: z.string().min(1, "Name is required"),
-  address: z.string().optional(),
-  phone: z.string().optional(),
-  website: z.string().optional(),
-  rating: z.number().optional(),
-  reviewCount: z.number().optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  mapsUrl: z.string().optional(),
-  industry: z.string().optional(),
-  city: z.string().optional(),
-  category: z.string().optional(),
-  description: z.string().optional(),
-  photoUrl: z.string().optional(),
-});
-
 // Lead lifecycle statuses (mirror LeadStatus in src/lib/call-queue.ts). Kept as a
 // literal enum here to avoid importing runtime code into the validation layer.
 const LEAD_STATUSES = [
@@ -84,6 +66,29 @@ const LEAD_STATUSES = [
   "CLOSED",
   "DEAD",
 ] as const;
+
+export const saveBusinessSchema = z.object({
+  googlePlaceId: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  website: z.string().optional(),
+  rating: z.number().optional(),
+  reviewCount: z.number().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  mapsUrl: z.string().optional(),
+  industry: z.string().optional(),
+  city: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+  photoUrl: z.string().optional(),
+  /** Where to file it. Omitted, the row lands at the schema default and behaves
+   *  exactly as a hand-saved business always has. Supplied, it is how the CRM's
+   *  "add whoever booked" bar puts a business straight into Zoom Booked without
+   *  walking it through a pipeline that is run in GoHighLevel. */
+  status: z.enum(LEAD_STATUSES).optional(),
+});
 
 export const updateBusinessSchema = z.object({
   favorited: z.boolean().optional(),

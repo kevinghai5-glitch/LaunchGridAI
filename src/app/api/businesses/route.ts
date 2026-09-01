@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { saveBusinessSchema } from "@/lib/validations";
 import { checkPlanLimit } from "@/lib/limits";
-import { DELIVERABLE_STATUSES } from "@/lib/crm";
+import { BOARD_STATUSES, DELIVERABLE_STATUSES } from "@/lib/crm";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,20 @@ export async function GET(req: NextRequest) {
     // deliverable production (booked a Zoom or beyond) plus any lead with
     // existing generated work — never raw cold prospects.
     const deliverableOnly = url.searchParams.get("deliverable") === "true";
+    // ?booked=true — the Control Centre's Saved list. STRICTER than
+    // ?deliverable=true: a business belongs here only once it is Zoom Booked or a
+    // Client, matching the two columns the CRM draws. Unlike the deliverable
+    // filter it does NOT admit a lead on the strength of a pack or a leak
+    // assessment alone — a declined lead that once had a sales call is still a
+    // declined lead, and this list is meant to be the short one.
+    const bookedOnly = url.searchParams.get("booked") === "true";
 
     const businesses = await prisma.business.findMany({
       where: {
         userId: session.user.id,
         deletedAt: null,
         ...(favoritedOnly ? { favorited: true } : {}),
+        ...(bookedOnly ? { status: { in: BOARD_STATUSES } } : {}),
         ...(deliverableOnly
           ? {
               OR: [
@@ -94,12 +102,27 @@ export async function POST(req: NextRequest) {
         where: { userId: session.user.id, googlePlaceId: parsed.data.googlePlaceId },
       });
       if (existing) {
+        // A status on the request is a PLACEMENT, so it applies whether the row
+        // is live or being revived — otherwise adding a business you cold-called
+        // last month would bring it back at whatever it was then, which for an
+        // exported lead means straight into the call queue.
+        //
+        // nextActionAt is cleared with it for the same reason: isInQueue tests
+        // the due time as well as the status, so a stale one would put a booked
+        // business back in tomorrow's dial list.
+        const placement = parsed.data.status
+          ? { status: parsed.data.status, nextActionAt: null, lastActivityAt: new Date() }
+          : null;
         if (!existing.deletedAt) {
-          return NextResponse.json({ business: existing, alreadySaved: true }, { status: 200 });
+          if (!placement) {
+            return NextResponse.json({ business: existing, alreadySaved: true }, { status: 200 });
+          }
+          const moved = await prisma.business.update({ where: { id: existing.id }, data: placement });
+          return NextResponse.json({ business: moved, alreadySaved: true, moved: true }, { status: 200 });
         }
         const revived = await prisma.business.update({
           where: { id: existing.id },
-          data: { deletedAt: null },
+          data: { deletedAt: null, ...(placement ?? {}) },
         });
         return NextResponse.json({ business: revived, revived: true }, { status: 200 });
       }

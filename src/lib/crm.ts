@@ -34,20 +34,54 @@ export interface CrmStageDef {
   statuses: LeadStatus[];
   /** When true the column carries deal $ (closing half of the funnel). */
   money?: boolean;
+  /** When true the column is drawn on the board. */
+  board?: boolean;
 }
 
 // Ordered left → right as a lead travels from cold prospect to closed deal.
+//
+// EVERY stage stays in this list, and every status keeps mapping to one. Only
+// the two marked `board: true` are DRAWN — see CRM_BOARD_STAGES below.
 export const CRM_STAGES: CrmStageDef[] = [
   { id: "SUGGESTED", label: "New Leads", hint: "Awaiting your approval", tone: "muted", statuses: ["SUGGESTED"] },
   { id: "QUEUED", label: "To Call", hint: "Cold-call list", tone: "neutral", statuses: ["QUEUED"] },
   { id: "ATTEMPTING", label: "Attempted", hint: "Called · no answer yet", tone: "neutral", statuses: ["CALLED", "NO_ANSWER"] },
   { id: "CALLBACK", label: "Callback", hint: "Scheduled to call back", tone: "accent", statuses: ["CALLBACK"] },
   { id: "INTERESTED", label: "Warm", hint: "Said yes · audit sent", tone: "accent", statuses: ["WAITING"] },
-  { id: "BOOKED", label: "Zoom Booked", hint: "Call scheduled · rebook no-shows", tone: "success", statuses: ["BOOKED_ZOOM", "ZOOM_NO_SHOW"] },
+  { id: "BOOKED", label: "Zoom Booked", hint: "Add whoever booked · rebook no-shows", tone: "success", statuses: ["BOOKED_ZOOM", "ZOOM_NO_SHOW"], board: true },
   { id: "PROPOSAL", label: "Proposal Sent", hint: "Awaiting their yes", tone: "accent", statuses: ["PROPOSAL", "ZOOM_OPEN"], money: true },
-  { id: "WON", label: "Client", hint: "Closed · retainer live", tone: "success", statuses: ["WON", "CLOSED"], money: true },
+  { id: "WON", label: "Client", hint: "Closed · retainer live", tone: "success", statuses: ["WON", "CLOSED"], money: true, board: true },
   { id: "LOST", label: "Lost", hint: "Dead / declined", tone: "muted", statuses: ["DEAD", "DECLINED"] },
 ];
+
+/**
+ * The columns the board actually draws.
+ *
+ * The pipeline is run in GoHighLevel, not here. This software needs one thing
+ * from a lead's status — whether it has booked, because that is the gate on
+ * generating its documents — so drawing seven columns of cold prospects was
+ * showing thousands of businesses that had already said no, in a board nobody
+ * drags cards on.
+ *
+ * The stages are HIDDEN, not deleted. Every LeadStatus is still valid, still
+ * maps through stageForStatus, and still moves through the call queue and the
+ * export untouched; those key off `status` directly and never off this list.
+ * Restoring the full board is a one-line change back.
+ */
+export const CRM_BOARD_STAGES: CrmStageDef[] = CRM_STAGES.filter((s) => s.board);
+
+/**
+ * The statuses those two columns hold — BOOKED_ZOOM, ZOOM_NO_SHOW, WON, CLOSED.
+ *
+ * Derived from the board rather than typed out again, so "what the CRM shows"
+ * and "what counts as this software's business" cannot drift apart: add a column
+ * back and both surfaces widen together.
+ *
+ * This is deliberately TIGHTER than DELIVERABLE_STATUSES, which also admits
+ * ZOOM_OPEN and PROPOSAL. Those are pipeline states, and the pipeline is run in
+ * GoHighLevel.
+ */
+export const BOARD_STATUSES: LeadStatus[] = CRM_BOARD_STAGES.flatMap((s) => s.statuses);
 
 // Statuses at which a lead has entered deliverable production — they've booked a
 // Zoom (or moved past it: proposal sent / won). Only these leads (or any lead

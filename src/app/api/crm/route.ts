@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { stageForStatus } from "@/lib/crm";
+import { BOARD_STATUSES, stageForStatus } from "@/lib/crm";
 import { MONTHLY_RETAINER_CAD } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -21,8 +21,21 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // POST-BOOKING ONLY. The pipeline is run in GoHighLevel; the only thing this
+  // software needs from a lead's status is whether it has booked, because that is
+  // the gate on generating its documents.
+  //
+  // Without this filter the board loaded every live business — so a cold lead you
+  // declined months ago still sat in the table, and at 10,000+ dialled businesses
+  // that is a screen nobody could read. Cold leads are already gone by two other
+  // routes (exported ones are soft-deleted, declined ones just are not shown), and
+  // DECLINED rows deliberately STAY in the database: they are what the 90-day
+  // re-approach window reads. This hides them; it does not touch them.
+  //
+  // BOARD_STATUSES is derived from the two columns the board draws, so the query
+  // and the board cannot disagree about what belongs here.
   const businesses = await prisma.business.findMany({
-    where: { userId: session.user.id, deletedAt: null },
+    where: { userId: session.user.id, deletedAt: null, status: { in: BOARD_STATUSES } },
     include: {
       callLogs: {
         where: { deletedAt: null },

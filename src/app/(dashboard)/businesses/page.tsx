@@ -145,8 +145,17 @@ export default function BusinessesPage() {
   const loadSaved = async () => {
     setLoadingSaved(true);
     try {
+      // ?booked=true — a business reaches this list when it is Zoom Booked or a
+      // Client, and by no other route. Unfiltered it returned every live row, so
+      // leads declined a month ago sat here beside real clients; at 10,000+
+      // dialled that list is unreadable, and none of it is worked from here
+      // anyway because the pipeline runs in GoHighLevel.
+      //
+      // Deliberately not ?deliverable=true, which also admits anything carrying a
+      // pack or a leak assessment — that let a DECLINED lead with a test sales
+      // call behind it back onto the list.
       const [bizRes, libRes] = await Promise.all([
-        fetch("/api/businesses"),
+        fetch("/api/businesses?booked=true"),
         fetch("/api/assets/library", { cache: "no-store" }),
       ]);
       const bizData = await bizRes.json();

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Eye, Sparkles, Check, FileText, Radar, ArrowUpRight, BookOpen, ArrowRight } from "lucide-react";
 import { LgButton } from "@/components/ui/lg-button";
 import { Surface, PanelHeader, Spark, useCountUp } from "@/components/dashboard/os";
-import { CRM_STAGES } from "@/lib/crm";
+import { CRM_BOARD_STAGES } from "@/lib/crm";
 
 interface BusinessRow {
   id: string;
@@ -402,11 +402,11 @@ function EmptyRow({ text }: { text: string }) {
 }
 
 function PipelineFlow({ stageCounts }: { stageCounts: Record<string, number> }) {
-  const counts = CRM_STAGES.map((s) => stageCounts[s.id] || 0);
+  const counts = CRM_BOARD_STAGES.map((s) => stageCounts[s.id] || 0);
   const max = Math.max(...counts, 1);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      {CRM_STAGES.map((s, i) => (
+      {CRM_BOARD_STAGES.map((s, i) => (
         <Link
           key={s.id}
           href="/deals"

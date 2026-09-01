@@ -14,6 +14,8 @@ import {
   FileText,
   Library,
   PhoneCall,
+  // Used only by the commented-out Dial Status row below — kept so restoring
+  // that one line is genuinely one line.
   PhoneOff,
   CalendarDays,
   Settings,
@@ -65,7 +67,16 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     heading: "Sell & Close",
     items: [
       { id: "call-queue", label: "Call Queue", icon: PhoneCall, href: "/call-queue" },
-      { id: "dial-status", label: "Dial Status", icon: PhoneOff, href: "/dial-status" },
+      // Dial Status is HIDDEN, not removed. Exporting the CSV marks a lead
+      // "dialed" and soft-deletes it in the same request, and every query on that
+      // screen filters deletedAt: null — so its "in retry, awaiting outcome" list
+      // is now permanently empty by construction, not merely empty today.
+      //
+      // Outcomes are logged in GoHighLevel, which is where the dialling happens.
+      // The route and the dial-status axis both stay: do_not_call is a real
+      // status and the export's clear reads it to decide what it may not touch.
+      // Only the way in is gone. Restore by uncommenting.
+      // { id: "dial-status", label: "Dial Status", icon: PhoneOff, href: "/dial-status" },
       { id: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
       { id: "crm", label: "CRM", icon: Workflow, href: "/crm", badgeKey: "pipeline" },
     ],
