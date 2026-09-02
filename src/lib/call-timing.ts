@@ -4,8 +4,8 @@
 // those metros by the CURRENT local time in each metro's OWN time zone, so a
 // list generated at 9am ET surfaces Eastern/Central businesses (California is
 // 6am — asleep), and a list generated at 6pm ET flips to Western businesses
-// (still ~3-4pm out there — prime afternoon). "Broad" window: 8am-5pm local,
-// minus the 12-1pm lunch hour; peak windows (8-9, 10-11, 4-5) are ordered first.
+// (still ~3-4pm out there — prime afternoon). Broad window: 8am-6pm local; the
+// gatekeeper-free hours (8, 12, 16, 17) are ordered first.
 
 // Metro → IANA time zone. THE source of the metro rotation: NA_METROS in crm.ts
 // is derived from these keys, so a metro cannot exist without a verified zone.
@@ -196,13 +196,37 @@ export function timezoneForCity(city: string | null | undefined): string {
   return "";
 }
 
-// Peak cold-call windows (local hour), per the cold-call SOP: 8-9am (golden),
-// 10-11am (peak), 4-5pm (strong second window).
-const PEAK_HOURS = new Set([8, 10, 16]);
-const LUNCH_HOUR = 12; // 12-1pm — excluded
+// Peak cold-call windows (local hour). Revised 2026-09-07 around ONE variable —
+// whether a gatekeeper picks up — after a morning of Eastern dials at 11:00 came
+// back almost entirely receptionists.
+//
+//   08  before the front desk arrives. Owners open up and answer their own phone.
+//   16  support staff start leaving; the decision-maker is still there.
+//   17  the same window, an hour deeper, and emptier.
+//
+// NOON IS DELIBERATELY NOT HERE, and it is the one hour the sources disagree on.
+// One reads lunch as "the gatekeeper is away and the owner picks up their own
+// phone"; the other reads it as the lunch lull — the desk is still covered by a
+// shift and the decision-maker is the one who left. Both are plausible and
+// neither is measured, so noon is CALLABLE but not ranked. It was briefly peak
+// here on the strength of the first reading alone; ranking an unproven hour top
+// sends the whole day's batch at it.
+//
+// It is not excluded either. The old rule blocked 12-13 outright on the same
+// unproven reasoning pointed the other way — an hour nobody has measured should
+// be neither promoted nor banned.
+//
+// 09-15 stay callable and stay tier 1. They are gatekeeper hours, not dead
+// hours, and a 77-a-day quota cannot be filled out of three hours a metro.
+//
+// THE SOP'S EARLY WINDOW IS 07:30, AND IT IS NOT REACHABLE. The legal floor is
+// 08:00 in the US and 09:00 in Canada, so hour 7 is barred everywhere and the
+// early window is 08:00-09:00 in the US only — Canada has no pre-gatekeeper hour
+// at all. The law is not negotiable against a better answer rate.
+const PEAK_HOURS = new Set([8, 16, 17]);
 const DAY_START = 8; // 8am
-const DAY_END = 17; // 5pm (exclusive)
-const CALLABLE_HOURS = [8, 9, 10, 11, 13, 14, 15, 16];
+const DAY_END = 18; // 6pm (exclusive) — 17:00 is the second half of the late window
+const CALLABLE_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
 // ── THE LEGAL WINDOW ─────────────────────────────────────────────────────────
 // The SOP window above is a PREFERENCE. This is the LAW, and it is checked
@@ -309,7 +333,7 @@ function zoneCallTier(tz: string, now: Date): number {
   if (!p || !legal) return 0;
   const h = p.hour;
   if (h < legal.first || h > legal.last) return 0; // law first, always
-  if (h < DAY_START || h >= DAY_END || h === LUNCH_HOUR) return 0; // then the SOP
+  if (h < DAY_START || h >= DAY_END) return 0; // then the SOP
   return PEAK_HOURS.has(h) ? 2 : 1;
 }
 

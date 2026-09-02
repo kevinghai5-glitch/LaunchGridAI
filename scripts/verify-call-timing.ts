@@ -4,16 +4,22 @@
 // Rule under test, in two layers:
 //   THE LAW — Canada (CRTC) weekdays 09:00-21:30, weekends 10:00-18:00; the US
 //     (federal TCPA/TSR) 08:00-21:00 daily. Recipient's local time, both.
-//   THE SOP — callable = local 8am-5pm minus the 12-1pm lunch hour;
-//     peak = 8/10/16 (tier 2), other callable hours = tier 1, else tier 0.
+//   THE SOP — callable = local 8am-6pm; peak = 8/16/17, the hours a gatekeeper
+//     is least likely to answer (tier 2); other callable hours are tier 1, else
+//     tier 0. Noon is deliberately NEITHER peak nor excluded: one source reads
+//     lunch as the gatekeeper being away, another as the owner being away, and
+//     nobody has measured it.
 // The law is checked first: an hour it forbids is tier 0 however good the SOP
 // thinks it is. 08:00 is therefore PEAK in Los Angeles and BARRED in Vancouver.
 
 import { orderMetrosByCallTime, metroCallTier, localHourInMetro, METRO_TIMEZONES } from "../src/lib/call-timing";
 import { NA_METROS } from "../src/lib/crm";
 
-const PEAK = new Set([8, 10, 16]);
-const GOOD = new Set([9, 11, 13, 14, 15]);
+// Revised 2026-09-07 with the SOP: peak is the gatekeeper-free hours. Noon is
+// NOT among them — the sources disagree on it, so it is callable and unranked.
+// Reimplemented here from the stated rule, never imported.
+const PEAK = new Set([8, 16, 17]);
+const GOOD = new Set([9, 10, 11, 12, 13, 14, 15]);
 
 // Country and legal window are REIMPLEMENTED here from the published rules
 // rather than imported from call-timing. A sweep that asks the code under test
@@ -114,8 +120,8 @@ function hourlyTable(label: string, dayIso: string) {
 //    Toronto are both Eastern: same zone, same local clock, different floor. If
 //    those two ever agree at 08:00, the legal gate has stopped applying.
 function boundaries() {
-  console.log("\nBOUNDARY CHECK (Eastern, summer) — expect: 7 no, 8 PEAK, 11 good, 12 no(lunch), 13 good, 16 PEAK, 17 no:");
-  for (const h of [7, 8, 11, 12, 13, 16, 17]) {
+  console.log("\nBOUNDARY CHECK (Eastern, summer) — expect: 7 no, 8 PEAK, 11 good, 12 good, 13 good, 16 PEAK, 17 PEAK, 18 no:");
+  for (const h of [7, 8, 11, 12, 13, 16, 17, 18]) {
     // 2026-07-15 is a WEDNESDAY. h:00 EDT = (h+4):00 UTC
     const now = new Date(Date.UTC(2026, 6, 15, h + 4, 0, 0));
     const got = metroCallTier("New York, NY", now);
@@ -126,8 +132,8 @@ function boundaries() {
     if (got !== exp) fail(`boundary hour ${h}:00 ET — expected tier ${exp}, got ${got}`);
   }
 
-  console.log("  CROSS-BORDER, SAME CLOCK (Toronto, weekday) — expect: 8 barred, 9 good, 10 PEAK:");
-  for (const [h, want] of [[8, 0], [9, 1], [10, 2]] as const) {
+  console.log("  CROSS-BORDER, SAME CLOCK (Toronto, weekday) — expect: 8 barred, 9 good, 12 good, 16 PEAK:");
+  for (const [h, want] of [[8, 0], [9, 1], [12, 1], [16, 2]] as const) {
     const now = new Date(Date.UTC(2026, 6, 15, h + 4, 0, 0));
     const got = metroCallTier("Toronto, ON", now);
     console.log(`   local ${String(h).padStart(2)}:00 → tier ${got}`);

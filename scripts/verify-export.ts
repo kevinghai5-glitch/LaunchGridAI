@@ -400,17 +400,25 @@ check(
 
 // ── K · The calling-window gate still holds at any batch size ────────────────
 
-// 6pm ET on a DST date: Eastern (18) and Central (17) are shut; Mountain (16)
-// is peak and Pacific (15) is open. Batch size must not enter into this.
+// 6pm ET on a DST date: Eastern (18) is shut, Central (17) and Mountain (16) are
+// both peak, Pacific (15) is open. Batch size must not enter into this.
+//
+// K2 asserted Central was SHUT at 17:00 until 2026-09-07. The SOP day ended at
+// 17:00 then; it now runs to 18:00 because 16:30-17:30 is the second half of the
+// late gatekeeper-free window — support staff have left and the decision-maker
+// has not.
 const sixPmEt = new Date("2026-08-05T22:00:00Z");
 eq("K1 Eastern shut at 6pm ET", metroCallTier("New York, NY", sixPmEt), 0);
-eq("K2 Central shut at 5pm local", metroCallTier("Chicago, IL", sixPmEt), 0);
+eq("K2 Central at peak at 5pm local", metroCallTier("Chicago, IL", sixPmEt), 2);
 eq("K3 Mountain at peak", metroCallTier("Denver, CO", sixPmEt), 2);
 eq("K4 Pacific open", metroCallTier("Los Angeles, CA", sixPmEt), 1);
 // 10:30am ET: Pacific is 7:30am — before the 8am floor.
 const tenThirtyEt = new Date("2026-08-05T14:30:00Z");
 eq("K5 Pacific shut at 10:30am ET", metroCallTier("Los Angeles, CA", tenThirtyEt), 0);
-eq("K6 Eastern at peak at 10:30am ET", metroCallTier("New York, NY", tenThirtyEt), 2);
+// K6 asserted Eastern was at PEAK here until 2026-09-07. 10:00 was a peak hour
+// under the old SOP; it is now an ordinary callable one. Mid-morning is when the
+// front desk is at its post, which is the whole reason the windows moved.
+eq("K6 Eastern is an ordinary callable hour at 10:30am ET", metroCallTier("New York, NY", tenThirtyEt), 1);
 
 // ── L · Source guarantees the type system can't express ──────────────────────
 

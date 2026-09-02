@@ -161,21 +161,23 @@ const metros = Object.keys(METRO_TIMEZONES);
   check("E1 at 11:00 ET, Los Angeles is 08:00 local", localHourInMetro("Los Angeles, CA", at11) === 8);
   check("E2 at 11:00 ET, Chicago is 10:00 local", localHourInMetro("Chicago, IL", at11) === 10);
   check("E3 at 11:00 ET, Toronto is 11:00 local", localHourInMetro("Toronto, ON", at11) === 11);
-  // 11:00 ET holds back FOUR metros, for two different reasons, and the
-  // difference is the whole point of the legal gate:
-  //   · Halifax is Atlantic, already at noon — the SOP's lunch rule.
-  //   · Vancouver/Victoria/Kelowna are at 08:00, which is legal in the US and
-  //     an hour inside the CRTC floor in Canada — the LAW.
-  // This check previously asserted "only Halifax is held back", which is to say
-  // it actively guaranteed the three BC metros stayed dialable at 08:00 local.
+  // 11:00 ET holds back exactly THREE metros, all for the same reason: BC is at
+  // 08:00, which is legal in the US and an hour inside the CRTC floor in Canada.
+  //
+  // Halifax used to be a fourth. It is Atlantic, so it is at noon — and noon was
+  // an EXCLUDED lunch hour until the SOP was revised on gatekeeper grounds. It is
+  // now a PEAK hour, so Halifax is not merely callable at 11:00 ET, it is the
+  // best-ranked metro in the batch.
+  //
   // Asserted precisely rather than as a count: a loosened check is how the gate
   // stops being checked at all.
   const out11 = metros.filter((m) => metroCallTier(m, at11) === 0);
-  const expectOut11 = ["Halifax, NS", "Vancouver, BC", "Victoria, BC", "Kelowna, BC"];
-  check("E4 at 11:00 ET exactly Halifax (lunch) + the three BC metros (CRTC floor) are held back",
+  const expectOut11 = ["Vancouver, BC", "Victoria, BC", "Kelowna, BC"];
+  check("E4 at 11:00 ET exactly the three BC metros are held back, by the CRTC floor",
     out11.length === expectOut11.length && expectOut11.every((m) => out11.includes(m)),
     `held back: ${out11.join(", ") || "(none)"}`);
-  check("E4b …Halifax because it is exactly local noon", localHourInMetro("Halifax, NS", at11) === 12);
+  check("E4b …and Halifax, at local noon, is callable but NOT ranked peak",
+    localHourInMetro("Halifax, NS", at11) === 12 && metroCallTier("Halifax, NS", at11) === 1);
   check("E4c …and Vancouver because it is 08:00, legal in the US but not in Canada",
     localHourInMetro("Vancouver, BC", at11) === 8 && metroCallTier("Los Angeles, CA", at11) === 2,
     "Vancouver must be barred at the same local hour Los Angeles is peak");
@@ -185,11 +187,13 @@ const metros = Object.keys(METRO_TIMEZONES);
   const asleep = metros.filter((m) => metroCallTier(m, at3am) > 0);
   check("E5 at 03:00 ET nothing is callable", asleep.length === 0, asleep.slice(0, 4).join(", "));
 
-  // And the lunch hour is excluded in each metro's OWN noon, not Toronto's.
-  const noonPacific = at(15); // 15:00 ET = 12:00 PT
-  check("E6 the lunch gate is local, not Eastern",
-    metroCallTier("Los Angeles, CA", noonPacific) === 0 && metroCallTier("New York, NY", noonPacific) > 0,
-    "LA should be at lunch while New York is not");
+  // Peak is judged on each metro's OWN clock, not Toronto's. At 19:00 ET it is
+  // 16:00 in Los Angeles — the late peak there — while New York is at 19:00 and
+  // past the SOP day entirely. Same instant, opposite ends of the rule.
+  const lateWestern = at(19); // 19:00 ET = 16:00 PT
+  check("E6 the peak window is local, not Eastern",
+    metroCallTier("Los Angeles, CA", lateWestern) === 2 && metroCallTier("New York, NY", lateWestern) === 0,
+    "LA is in its late peak while New York's day is over");
 }
 
 // ── L · THE LAW ──────────────────────────────────────────────────────────────
@@ -285,6 +289,7 @@ const metros = Object.keys(METRO_TIMEZONES);
   //
   // The exact case from the morning block, stated as a fact rather than a sweep.
   const mon11et = new Date(Date.UTC(2026, 6, 13, 15)); // 11:00 EDT Monday
+  const mon19et = new Date(Date.UTC(2026, 6, 13, 23)); // 19:00 EDT Monday — legal, past the SOP day
   check("L8 at 11:00 ET Calgary and Edmonton are open (09:00 local) while BC is barred (08:00)",
     metroCallTier("Calgary, AB", mon11et) > 0 &&
       metroCallTier("Edmonton, AB", mon11et) > 0 &&
@@ -306,9 +311,9 @@ const metros = Object.keys(METRO_TIMEZONES);
   // overrides the legal one.
   const states = {
     barred: callWindowForCity("Vancouver", mon11et).window, // 08:00 local, CRTC floor
-    closed: callWindowForCity("Halifax", mon11et).window, // 12:00 local, SOP lunch
-    peak: callWindowForCity("Winnipeg", mon11et).window, // 10:00 local
-    open: callWindowForCity("Toronto", mon11et).window, // 11:00 local
+    closed: callWindowForCity("Toronto", mon19et).window, // 19:00 local, past the SOP day
+    peak: callWindowForCity("Toronto", mon16et).window, // 16:00 local — the late window
+    open: callWindowForCity("Winnipeg", mon11et).window, // 10:00 local
     unknown: callWindowForCity("Atlantis", mon11et).window, // not in the rotation
   };
   const wrong = Object.entries(states).filter(([want, got]) => want !== got);
